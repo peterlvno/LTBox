@@ -34,11 +34,25 @@ def _extract_zip_member(
         shutil.copyfileobj(source, target)
 
 
-def download_resource(url: str, dest_path: Path, show_progress: bool = True) -> None:
+def download_resource(
+    url: str,
+    dest_path: Path,
+    show_progress: bool = True,
+    timeout: int = 30,
+    retries: int = 3,
+    backoff: float = 5,
+) -> None:
     msg = get_string("dl_downloading").format(filename=dest_path.name)
     utils.ui.echo(msg)
     try:
-        with net.request_with_retries("GET", url, stream=True) as response:
+        with net.request_with_retries(
+            "GET",
+            url,
+            stream=True,
+            timeout=timeout,
+            retries=retries,
+            backoff=backoff,
+        ) as response:
             total_size = int(response.headers.get("content-length", 0))
             downloaded = 0
 
@@ -429,19 +443,49 @@ def ensure_avb_tools() -> None:
     utils.ui.echo(get_string("dl_avb_not_found"))
     const.DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
     temp_tar_path = const.DOWNLOAD_DIR / "avb.tar.gz"
+    temp_zip_path = const.DOWNLOAD_DIR / "avb.zip"
 
     settings = const.load_settings_raw()
-    url = settings.get("tools", {}).get("avb_archive_url")
-    download_resource(url, temp_tar_path)
-
     files_to_extract = {
         "avbtool.py": const.AVBTOOL_PY,
         "test/data/testkey_rsa4096.pem": key1,
         "test/data/testkey_rsa2048.pem": key2,
     }
 
-    extract_archive_files(temp_tar_path, files_to_extract)
-    temp_tar_path.unlink()
+    url = settings.get("tools", {}).get("avb_archive_url")
+    fallback_archive_url = settings.get("tools", {}).get(
+        "avb_fallback_archive_url",
+        "https://github.com/LineageOS/android_external_avb/archive/refs/heads/lineage-23.2.zip",
+    )
+
+    try:
+        download_resource(
+            url,
+            temp_tar_path,
+            timeout=10,
+            retries=0,
+            backoff=0,
+        )
+        extract_archive_files(temp_tar_path, files_to_extract)
+    except ToolError:
+        utils.ui.echo("[*] AVB archive download failed. Trying fallback archive...")
+        try:
+            download_resource(
+                fallback_archive_url,
+                temp_zip_path,
+                timeout=10,
+                retries=0,
+                backoff=0,
+            )
+            extract_archive_files(temp_zip_path, files_to_extract)
+        except (ToolError, OSError) as e:
+            raise ToolError(get_string("dl_err_extract_tool").format(name="avb")) from e
+    finally:
+        if temp_tar_path.exists():
+            temp_tar_path.unlink()
+        if temp_zip_path.exists():
+            temp_zip_path.unlink()
+
     utils.ui.echo(get_string("dl_avb_ready"))
 
 
