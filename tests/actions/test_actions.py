@@ -1,9 +1,9 @@
-import os
 import re
 import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,7 +14,7 @@ from ltbox.actions import xml as xml_action
 from ltbox.actions.root import GkiRootStrategy, LkmRootStrategy, MagiskRootStrategy
 from ltbox.patch.avb import vbmeta_has_chain_partition
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../bin")))
+sys.path.append(str(Path(__file__).resolve().parents[2] / "bin"))
 
 pytestmark = pytest.mark.integration
 

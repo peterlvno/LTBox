@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-BASE = Path(__file__).parent.parent
+BASE = Path(__file__).resolve().parents[2]
 SRC = BASE / "bin" / "ltbox"
 LANG = SRC / "lang"
 

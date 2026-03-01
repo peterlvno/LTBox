@@ -1,15 +1,14 @@
-import os
 import sys
+import pytest
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 from ltbox import downloader, i18n
 
 from tests.scripts import cache_fw
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../bin")))
-sys.path.append(str(Path(__file__).parent))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bin"))
+sys.path.insert(0, str(ROOT))
 
 
 @pytest.fixture(scope="session", autouse=True)

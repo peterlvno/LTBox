@@ -1,5 +1,4 @@
 import json
-import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -7,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from ltbox import main, menu_router
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../bin")))
+sys.path.append(str(Path(__file__).resolve().parents[2] / "bin"))
 
 
 class TestApp:
@@ -27,7 +26,7 @@ class TestApp:
         assert c["func"]() == "ok"
 
     def test_json_validity(self):
-        d = Path(__file__).parent.parent / "bin/ltbox"
+        d = Path(__file__).resolve().parents[2] / "bin" / "ltbox"
         files = list(d.rglob("*.json"))
         if not files:
             pytest.skip("No JSON")
@@ -37,7 +36,7 @@ class TestApp:
                 json.load(fp)
 
     def test_config_keys(self):
-        p = Path(__file__).parent.parent / "bin/ltbox/config.json"
+        p = Path(__file__).resolve().parents[2] / "bin" / "ltbox" / "config.json"
         if p.exists():
             with open(p, "r", encoding="utf-8") as f:
                 c = json.load(f)

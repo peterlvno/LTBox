@@ -1,12 +1,12 @@
-import os
 import shutil
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from ltbox.patch import avb
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../bin")))
+sys.path.append(str(Path(__file__).resolve().parents[2] / "bin"))
 
 pytestmark = pytest.mark.integration
 

@@ -72,7 +72,7 @@ def _find_exports_to_validate(package_root: Path) -> dict[str, set[str]]:
 
 
 def test_init_exports_cover_attribute_accesses():
-    package_root = Path(__file__).resolve().parents[1] / "bin" / "ltbox"
+    package_root = Path(__file__).resolve().parents[2] / "bin" / "ltbox"
     exports = _find_exports_to_validate(package_root)
     missing = {}
     for module_name, attrs in exports.items():

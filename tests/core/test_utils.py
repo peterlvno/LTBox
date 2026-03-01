@@ -1,6 +1,5 @@
 import hashlib
 import json
-import os
 import subprocess
 import sys
 import urllib.error
@@ -11,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from ltbox import crypto, downloader, utils
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../bin")))
+sys.path.append(str(Path(__file__).resolve().parents[2] / "bin"))
 
 
 class TestUtils:
