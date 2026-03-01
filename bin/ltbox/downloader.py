@@ -5,7 +5,7 @@ import sys
 import tarfile
 import zipfile
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 import requests  # type: ignore[import-untyped]
 
@@ -88,21 +88,40 @@ def download_resource(
         raise ToolError(get_string("dl_err_download_tool").format(name=dest_path.name))
 
 
-def extract_archive_files(archive_path: Path, extract_map: Dict[str, Path]) -> None:
+def _resolve_extract_target(
+    member_name: str, extract_map: Dict[str, Path]
+) -> Optional[Path]:
+    normalized = member_name.lstrip("./")
+    if normalized in extract_map:
+        return extract_map[normalized]
+
+    for relative_path, target_path in extract_map.items():
+        if normalized.endswith(f"/{relative_path}"):
+            return target_path
+
+    return None
+
+
+def extract_archive_files(
+    archive_path: Path, extract_map: Dict[str, Path]
+) -> Set[Path]:
     msg = get_string("dl_extracting").format(filename=archive_path.name)
     utils.ui.echo(msg)
+    extracted_paths: Set[Path] = set()
+
     try:
         is_tar = archive_path.suffix == ".gz" or archive_path.suffix == ".tar"
 
         if is_tar:
             with tarfile.open(archive_path, "r:*") as tf:
                 for member in tf:
-                    if member.name in extract_map:
-                        target_path = extract_map[member.name]
+                    target_path = _resolve_extract_target(member.name, extract_map)
+                    if target_path:
                         f = tf.extractfile(member)
                         if f:
                             with open(target_path, "wb") as target:
                                 shutil.copyfileobj(f, target)
+                            extracted_paths.add(target_path)
                             utils.ui.echo(
                                 get_string("dl_extracted_file").format(
                                     filename=target_path.name
@@ -111,9 +130,12 @@ def extract_archive_files(archive_path: Path, extract_map: Dict[str, Path]) -> N
         else:
             with zipfile.ZipFile(archive_path, "r") as zf:
                 for zip_member in zf.infolist():
-                    if zip_member.filename in extract_map:
-                        target_path = extract_map[zip_member.filename]
+                    target_path = _resolve_extract_target(
+                        zip_member.filename, extract_map
+                    )
+                    if target_path:
                         _extract_zip_member(zf, zip_member, target_path)
+                        extracted_paths.add(target_path)
                         utils.ui.echo(
                             get_string("dl_extracted_file").format(
                                 filename=target_path.name
@@ -128,6 +150,8 @@ def extract_archive_files(archive_path: Path, extract_map: Dict[str, Path]) -> N
         raise ToolError(
             get_string("dl_err_extract_tool").format(name=archive_path.name)
         )
+
+    return extracted_paths
 
 
 def _download_github_asset(
@@ -485,6 +509,10 @@ def ensure_avb_tools() -> None:
             temp_tar_path.unlink()
         if temp_zip_path.exists():
             temp_zip_path.unlink()
+
+    missing = [path.name for path in files_to_extract.values() if not path.exists()]
+    if missing:
+        raise ToolError(get_string("dl_err_extract_tool").format(name="avb"))
 
     utils.ui.echo(get_string("dl_avb_ready"))
 

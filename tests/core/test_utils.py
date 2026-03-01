@@ -278,3 +278,36 @@ class TestUtils:
 
             args, _ = m_dl.call_args
             assert args[0] == "http://latest-ok"
+
+    def test_resolve_extract_target_handles_prefixed_archive_paths(self):
+        extract_map = {
+            "avbtool.py": Path("avbtool.py"),
+            "test/data/testkey_rsa4096.pem": Path("k1.pem"),
+        }
+
+        resolved = downloader._resolve_extract_target(
+            "android_external_avb-main/test/data/testkey_rsa4096.pem",
+            extract_map,
+        )
+
+        assert resolved == Path("k1.pem")
+
+    def test_ensure_avb_tools_raises_when_required_files_missing(self, tmp_path):
+        avbtool_py = tmp_path / "avbtool.py"
+
+        with (
+            patch("ltbox.downloader.const.AVBTOOL_PY", avbtool_py),
+            patch("ltbox.downloader.const.DOWNLOAD_DIR", tmp_path),
+            patch("ltbox.downloader.const.load_settings_raw") as mock_settings,
+            patch("ltbox.downloader.download_resource"),
+            patch("ltbox.downloader.extract_archive_files"),
+        ):
+            mock_settings.return_value = {
+                "tools": {
+                    "avb_archive_url": "https://example.com/avb.tar.gz",
+                    "avb_fallback_archive_url": "https://example.com/avb.zip",
+                }
+            }
+
+            with pytest.raises(downloader.ToolError):
+                downloader.ensure_avb_tools()
