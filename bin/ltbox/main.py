@@ -295,7 +295,7 @@ def run_task(
     log_filename = None
     if not is_workflow:
         log_dir = BASE_DIR.parent / "log"
-        log_dir.mkdir(exist_ok=True)
+        log_dir.mkdir(parents=True, exist_ok=True)
         log_filename = str(log_dir / f"log_{command}_{timestamp}.txt")
 
     try:
@@ -344,7 +344,7 @@ def run_info_scan(paths, constants, avb_patch):
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_dir = constants.BASE_DIR / "log"
-    log_dir.mkdir(exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
     log_filename = log_dir / f"image_info_{timestamp}.txt"
 
     files_to_scan = []
