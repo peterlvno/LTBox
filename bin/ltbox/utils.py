@@ -369,6 +369,10 @@ class ExternalTool:
 
 class AvbToolWrapper(ExternalTool):
     def __init__(self):
+        if not const.AVBTOOL_PY.exists():
+            from . import downloader
+
+            downloader.ensure_avb_tools()
         super().__init__([const.PYTHON_EXE, const.AVBTOOL_PY])
 
 
