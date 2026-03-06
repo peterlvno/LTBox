@@ -363,19 +363,24 @@ class FolkPatchStrategy(GkiRootStrategy):
         self._staging_dir = const.TOOLS_DIR / "folkpatch_staging"
 
     def configure_source(self) -> None:
-        menu = TerminalMenu("FolkPatch Version", breadcrumbs="Root > FolkPatch")
-        menu.add_option("1", "Stable (GitHub Releases)")
-        menu.add_option("2", "Nightly (GitHub Actions)")
-        choice = menu.ask("Select: ", "Invalid selection")
+        menu = TerminalMenu(
+            get_string("folkpatch_menu_version_title"),
+            breadcrumbs=get_string("folkpatch_menu_breadcrumbs"),
+        )
+        menu.add_option("1", get_string("folkpatch_menu_stable"))
+        menu.add_option("2", get_string("folkpatch_menu_nightly"))
+        choice = menu.ask(
+            get_string("prompt_select"), get_string("err_invalid_selection")
+        )
 
         if choice == "2":
             self.is_nightly = True
             utils.ui.clear()
             width = utils.ui.get_term_width()
             utils.ui.echo("-" * width)
-            utils.ui.echo("Enter FolkPatch GitHub Actions workflow ID:")
+            utils.ui.echo(get_string("folkpatch_prompt_workflow_id"))
             utils.ui.echo("-" * width)
-            self.workflow_id = input("> ").strip()
+            self.workflow_id = input(get_string("prompt_input_arrow")).strip()
         else:
             self.is_nightly = False
 
@@ -392,7 +397,7 @@ class FolkPatchStrategy(GkiRootStrategy):
                 downloader.download_folkpatch_release(self._staging_dir)
             return True
         except Exception as e:
-            utils.ui.error(f"Failed to download FolkPatch resources: {e}")
+            utils.ui.error(get_string("folkpatch_download_failed").format(e=e))
             return False
 
     def patch(
@@ -404,17 +409,13 @@ class FolkPatchStrategy(GkiRootStrategy):
         magiskboot_exe = utils.get_platform_executable("magiskboot")
         ensure_magiskboot()
 
-        utils.ui.echo(
-            "\nFolkPatch requires a SuperKey (8-63 characters, letters and numbers only)."
-        )
+        utils.ui.echo("\n" + get_string("folkpatch_superkey_requirement"))
         superkey = ""
         while True:
-            superkey = input("Enter SuperKey: ").strip()
+            superkey = input(get_string("folkpatch_enter_superkey")).strip()
             if 8 <= len(superkey) <= 63 and superkey.isalnum():
                 break
-            utils.ui.error(
-                "Invalid SuperKey. Must be 8-63 alphanumeric characters. Please try again."
-            )
+            utils.ui.error(get_string("folkpatch_superkey_invalid"))
 
         kpimg_src = self._staging_dir / "kpimg"
         if kpimg_src.exists():
@@ -422,7 +423,7 @@ class FolkPatchStrategy(GkiRootStrategy):
 
             shutil.copy(kpimg_src, work_dir / "kpimg")
         else:
-            utils.ui.error("kpimg not found in staging directory!")
+            utils.ui.error(get_string("folkpatch_kpimg_missing"))
             return None
 
         return patch_boot_with_root_algo(

@@ -232,7 +232,7 @@
   "act_unroot_magisk_detected": "[+] Magisk backup (init_boot.img, vbmeta.img) detected. Proceeding with Magisk unroot.",
   "act_unroot_menu_1_magisk": "Restore Magisk (init_boot, vbmeta)",
   "act_unroot_menu_2_lkm": "Restore LKM (init_boot, vbmeta)",
-  "act_unroot_menu_3_gki": "Restore GKI (boot)",
+  "act_unroot_menu_3_gki": "Restore FolkPatch/GKI (boot)",
   "act_unroot_menu_m": "Back to Main Menu",
   "act_unroot_menu_title": "Unroot Mode",
   "act_unroot_prompt_all": "[!] No backup boot image found.\n\n  [For Magisk Unroot]\n  Place 'init_boot.img' and 'vbmeta.img'\n  into the '{magisk_dir}' folder.\n\n  [For KernelSU Next & SukiSU Ultra LKM Unroot]\n  Place 'init_boot.img' and 'vbmeta.img'\n  into the '{lkm_dir}' folder.\n\n  [For KernelSU Next GKI Unroot]\n  Place 'boot.img' into the '{gki_dir}' folder.",
@@ -700,5 +700,15 @@
   "menu_select_slot": "Select Slot",
   "menu_slot_a": "Slot A",
   "menu_slot_b": "Slot B",
-  "act_warn_missing_sector_info": "Cannot find sector info for {partition}. Skipping."
+  "act_warn_missing_sector_info": "Cannot find sector info for {partition}. Skipping.",
+  "folkpatch_menu_version_title": "FolkPatch Version",
+  "folkpatch_menu_breadcrumbs": "Root > FolkPatch",
+  "folkpatch_menu_stable": "Stable (GitHub Releases)",
+  "folkpatch_menu_nightly": "Nightly (GitHub Actions)",
+  "folkpatch_prompt_workflow_id": "Enter FolkPatch GitHub Actions workflow ID:",
+  "folkpatch_download_failed": "Failed to download FolkPatch resources: {e}",
+  "folkpatch_superkey_requirement": "FolkPatch requires a SuperKey (8-63 characters, letters and numbers only).",
+  "folkpatch_enter_superkey": "Enter SuperKey: ",
+  "folkpatch_superkey_invalid": "Invalid SuperKey. Must be 8-63 alphanumeric characters. Try again.",
+  "folkpatch_kpimg_missing": "kpimg not found in staging directory!"
 }

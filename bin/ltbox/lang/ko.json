@@ -232,7 +232,7 @@
   "act_unroot_magisk_detected": "[+] Magisk 백업(init_boot.img, vbmeta.img)을 감지했습니다. Magisk 언루팅을 진행합니다.",
   "act_unroot_menu_1_magisk": "Magisk (init_boot, vbmeta) 복원",
   "act_unroot_menu_2_lkm": "LKM (init_boot, vbmeta) 복원",
-  "act_unroot_menu_3_gki": "GKI (boot) 복원",
+  "act_unroot_menu_3_gki": "FolkPatch/GKI (boot) 복원",
   "act_unroot_menu_m": "메인으로 돌아가기",
   "act_unroot_menu_title": "언루팅 모드",
   "act_unroot_prompt_all": "[!] 백업된 부트 이미지를 찾을 수 없습니다.\n\n  [Magisk 언루팅]\n  'init_boot.img'와 'vbmeta.img'를\n  '{magisk_dir}' 폴더에 넣으세요.\n\n  [KernelSU Next & SukiSU Ultra LKM 언루팅]\n  'init_boot.img'와 'vbmeta.img'를\n  '{lkm_dir}' 폴더에 넣으세요.\n\n  [KernelSU Next GKI 언루팅]\n  'boot.img'를 '{gki_dir}' 폴더에 넣으세요.",
@@ -700,5 +700,15 @@
   "menu_select_slot": "슬롯 선택",
   "menu_slot_a": "슬롯 A",
   "menu_slot_b": "슬롯 B",
-  "act_warn_missing_sector_info": "{partition}의 섹터 정보를 찾을 수 없어 건너뜁니다."
+  "act_warn_missing_sector_info": "{partition}의 섹터 정보를 찾을 수 없어 건너뜁니다.",
+  "folkpatch_menu_version_title": "FolkPatch 버전",
+  "folkpatch_menu_breadcrumbs": "루트 > FolkPatch",
+  "folkpatch_menu_stable": "안정 버전 (GitHub Releases)",
+  "folkpatch_menu_nightly": "나이틀리 (GitHub Actions)",
+  "folkpatch_prompt_workflow_id": "FolkPatch GitHub Actions 워크플로 ID를 입력하세요:",
+  "folkpatch_download_failed": "FolkPatch 리소스 다운로드에 실패했습니다: {e}",
+  "folkpatch_superkey_requirement": "FolkPatch에는 SuperKey가 필요합니다 (8~63자, 영문/숫자만 가능).",
+  "folkpatch_enter_superkey": "SuperKey 입력: ",
+  "folkpatch_superkey_invalid": "유효하지 않은 SuperKey입니다. 8~63자의 영문/숫자만 입력하세요. 다시 시도하세요.",
+  "folkpatch_kpimg_missing": "스테이징 디렉터리에서 kpimg를 찾을 수 없습니다!"
 }

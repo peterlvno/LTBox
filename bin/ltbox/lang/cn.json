@@ -232,7 +232,7 @@
   "act_unroot_magisk_detected": "[+] 检测到 Magisk 备份 (init_boot.img, vbmeta.img)。正在执行 Magisk unroot。",
   "act_unroot_menu_1_magisk": "还原 Magisk (init_boot, vbmeta)",
   "act_unroot_menu_2_lkm": "还原 LKM (init_boot, vbmeta)",
-  "act_unroot_menu_3_gki": "还原 GKI (boot)",
+  "act_unroot_menu_3_gki": "还原 FolkPatch/GKI (boot)",
   "act_unroot_menu_m": "返回主菜单",
   "act_unroot_menu_title": "Unroot 模式",
   "act_unroot_prompt_all": "[!] 未找到备份的引导镜像。\n\n  [对于 Magisk Unroot]\n  请将 'init_boot.img' 和 'vbmeta.img'\n  放入 '{magisk_dir}' 文件夹。\n\n  [对于 KernelSU Next & SukiSU Ultra LKM Unroot]\n  请将 'init_boot.img' 和 'vbmeta.img'\n  放入 '{lkm_dir}' 文件夹。\n\n  [对于 KernelSU Next GKI Unroot]\n  请将 'boot.img' 放入 '{gki_dir}' 文件夹。",
@@ -700,5 +700,15 @@
   "menu_select_slot": "选择槽位",
   "menu_slot_a": "槽位 A",
   "menu_slot_b": "槽位 B",
-  "act_warn_missing_sector_info": "找不到 {partition} 的扇区信息，已跳过。"
+  "act_warn_missing_sector_info": "找不到 {partition} 的扇区信息，已跳过。",
+  "folkpatch_menu_version_title": "FolkPatch 版本",
+  "folkpatch_menu_breadcrumbs": "Root > FolkPatch",
+  "folkpatch_menu_stable": "稳定版 (GitHub Releases)",
+  "folkpatch_menu_nightly": "夜间版 (GitHub Actions)",
+  "folkpatch_prompt_workflow_id": "请输入 FolkPatch 的 GitHub Actions 工作流 ID：",
+  "folkpatch_download_failed": "下载 FolkPatch 资源失败：{e}",
+  "folkpatch_superkey_requirement": "FolkPatch 需要 SuperKey（8-63 位，仅允许字母和数字）。",
+  "folkpatch_enter_superkey": "输入 SuperKey：",
+  "folkpatch_superkey_invalid": "SuperKey 无效。必须为 8-63 位字母数字字符。请重试。",
+  "folkpatch_kpimg_missing": "在暂存目录中找不到 kpimg！"
 }

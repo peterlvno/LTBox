@@ -232,7 +232,7 @@
   "act_unroot_magisk_detected": "[+] Обнаружена резервная копия Magisk (init_boot.img, vbmeta.img). Продолжение в режиме Magisk.",
   "act_unroot_menu_1_magisk": "Восстановление Magisk (init_boot, vbmeta)",
   "act_unroot_menu_2_lkm": "Восстановление LKM (init_boot, vbmeta)",
-  "act_unroot_menu_3_gki": "Восстановление GKI (boot)",
+  "act_unroot_menu_3_gki": "Восстановление FolkPatch/GKI (boot)",
   "act_unroot_menu_m": "Назад в меню",
   "act_unroot_menu_title": "режим удаления Root прав",
   "act_unroot_prompt_all": "[!] Резервные копии не найдены.\n\n  [Для Magisk]\n  Поместите 'init_boot.img' и 'vbmeta.img'\n  в папку '{magisk_dir}'.\n\n  [Для KernelSU Next & SukiSU Ultra (LKM)]\n  Поместите 'init_boot.img' и 'vbmeta.img'\n  в папку '{lkm_dir}'.\n\n  [Для KernelSU Next (GKI)]\n  Поместите 'boot.img' в '{gki_dir}'.",
@@ -700,5 +700,15 @@
   "menu_select_slot": "Выберите слот",
   "menu_slot_a": "Слот A",
   "menu_slot_b": "Слот B",
-  "act_warn_missing_sector_info": "Не найдена информация о секторах для {partition}. Пропуск."
+  "act_warn_missing_sector_info": "Не найдена информация о секторах для {partition}. Пропуск.",
+  "folkpatch_menu_version_title": "Версия FolkPatch",
+  "folkpatch_menu_breadcrumbs": "Root > FolkPatch",
+  "folkpatch_menu_stable": "Стабильная (GitHub Releases)",
+  "folkpatch_menu_nightly": "Ночная сборка (GitHub Actions)",
+  "folkpatch_prompt_workflow_id": "Введите ID workflow GitHub Actions для FolkPatch:",
+  "folkpatch_download_failed": "Не удалось скачать ресурсы FolkPatch: {e}",
+  "folkpatch_superkey_requirement": "Для FolkPatch требуется SuperKey (8–63 символа, только буквы и цифры).",
+  "folkpatch_enter_superkey": "Введите SuperKey: ",
+  "folkpatch_superkey_invalid": "Неверный SuperKey. Нужно 8–63 буквенно-цифровых символов. Повторите попытку.",
+  "folkpatch_kpimg_missing": "kpimg не найден в staging-директории!"
 }
