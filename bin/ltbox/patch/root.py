@@ -61,6 +61,10 @@ def patch_boot_with_root_algo(
     mb = utils.MagiskBootWrapper(magiskboot_exe)
 
     if root_type == "folkpatch":
+        if superkey is None:
+            utils.ui.error("SuperKey is required for FolkPatch.")
+            return None
+
         kptools_exe = const.DOWNLOAD_DIR / "kptools.exe"
         kpimg_file = work_dir / "kpimg"
 
