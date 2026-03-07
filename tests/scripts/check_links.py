@@ -97,24 +97,17 @@ def main() -> None:
     if not check_url(tools.get("openssl_url"), "OpenSSL"):
         has_error = True
 
-    # 2. Magiskboot (GitHub Release)
-    print("\n--- Magiskboot ---")
-    mb = config.get("magiskboot", {})
-    mb_repo = mb.get("repo") or mb.get("repo_url")
-    if not check_github_api(mb_repo, mb.get("tag"), "Magiskboot Release"):
-        has_error = True
-
-    # 3. KernelSU-Next (GitHub Release)
+    # 2. KernelSU-Next (GitHub Release)
     print("\n--- KernelSU-Next ---")
     ksu = config.get("kernelsu-next", {})
     ksu_repo = ksu.get("repo") or ksu.get("apk_repo")
     ksu_tag = ksu.get("tag") or ksu.get("apk_tag")
 
-    # 3-1. Release API Check
+    # 2-1. Release API Check
     if not check_github_api(ksu_repo, ksu_tag, "KernelSU-Next Release"):
         has_error = True
 
-    # 3-2. KSUInit (Nightly artifact from latest tag workflow)
+    # 2-2. KSUInit (Nightly artifact from latest tag workflow)
     resolved_tag = resolve_latest_tag(ksu_repo, ksu_tag)
     if not resolved_tag:
         print("FAILED (Unable to resolve latest KernelSU-Next tag)")
@@ -131,7 +124,7 @@ def main() -> None:
             if not check_url(ksuinit_url, "KSUInit Artifact"):
                 has_error = True
 
-    # 3-3. KernelSU Next (Nightly)
+    # 2-3. KernelSU Next (Nightly)
     nightly_wf = ksu.get("nightly_workflow")
     nightly_mgr = ksu.get("nightly_manager")
     if nightly_wf and nightly_mgr:
@@ -139,7 +132,7 @@ def main() -> None:
         if not check_url(url, "KernelSU-Next Nightly"):
             has_error = True
 
-    # 4. GKI_KernelSU_SUSFS
+    # 3. GKI_KernelSU_SUSFS
     print("\n--- WildKernels ---")
     wk = config.get("wildkernels", {})
     wk_owner = wk.get("owner", "WildKernels")
@@ -148,7 +141,7 @@ def main() -> None:
     if not check_github_api(f"{wk_owner}/{wk_repo}", wk_tag, "WildKernels GKI"):
         has_error = True
 
-    # 5. SukiSU Ultra (Nightly)
+    # 4. SukiSU Ultra (Nightly)
     print("\n--- SukiSU Ultra ---")
     suki = config.get("sukisu-ultra", {})
     suki_repo = suki.get("repo")

@@ -6,10 +6,6 @@
     "avb_fallback_archive_url": "https://github.com/LineageOS/android_external_avb/archive/refs/heads/lineage-23.2.zip",
     "openssl_url": "https://download.firedaemon.com/FireDaemon-OpenSSL/openssl-3.5.4.zip"
   },
-  "magiskboot": {
-    "repo": "PinNaCode/magiskboot_build",
-    "tag": "last-ci"
-  },
   "magisk": {
     "repo": "topjohnwu/Magisk",
     "tag": "latest"

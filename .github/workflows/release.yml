@@ -56,6 +56,12 @@ jobs:
 
           Get-ChildItem -Path bin/tools -Filter "*.exe" | Format-Table -AutoSize
 
+      - name: Download magiskboot artifact from test job
+        uses: actions/download-artifact@v8
+        with:
+          name: magiskboot-exe
+          path: bin/tools/
+
       - name: Create Archive
         run: |
           $archive = "LTBox-win_amd64-$($env:TAG_NAME).zip"

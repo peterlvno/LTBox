@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from ltbox import constants as const
-from ltbox import downloader, utils
 from ltbox.actions import edl
 from ltbox.actions import xml as xml_action
 from ltbox.actions.root import (
@@ -203,15 +202,21 @@ def test_root_gki(fw_pkg, tmp_path):
         d.mkdir(parents=True, exist_ok=True)
 
     with patch.multiple("ltbox.constants", **mock_dirs):
-        print("\n[INFO] [GKI] Ensuring magiskboot (Real Download)...")
-        downloader.ensure_magiskboot()
+        print("\n[INFO] [GKI] Checking bundled magiskboot...")
+        magiskboot_exe = mock_dirs["TOOLS_DIR"] / "magiskboot.exe"
+        real_magiskboot = (
+            Path(__file__).resolve().parents[2] / "bin" / "tools" / "magiskboot.exe"
+        )
 
-        magiskboot_exe = list(mock_dirs["DOWNLOAD_DIR"].glob("magiskboot.exe"))
-        if not magiskboot_exe:
-            magiskboot_exe = list(mock_dirs["TOOLS_DIR"].glob("magiskboot.exe"))
+        if real_magiskboot.exists():
+            shutil.copy(real_magiskboot, magiskboot_exe)
 
-        if not magiskboot_exe:
-            pass
+            for dll in ["msys-2.0.dll", "msys-z.dll"]:
+                real_dll = real_magiskboot.parent / dll
+                if real_dll.exists():
+                    shutil.copy(real_dll, mock_dirs["TOOLS_DIR"] / dll)
+        else:
+            pytest.skip("magiskboot.exe not found in bin/tools. Please build it first.")
 
         strategy = GkiRootStrategy()
 
@@ -302,16 +307,21 @@ def test_root_lkm(fw_pkg, tmp_path):
         d.mkdir(parents=True, exist_ok=True)
 
     with patch.multiple("ltbox.constants", **mock_dirs):
-        print("\n[INFO] [LKM] Ensuring magiskboot (Real Download)...")
-        downloader.ensure_magiskboot()
+        print("\n[INFO] [LKM] Checking bundled magiskboot...")
+        magiskboot_exe = mock_dirs["TOOLS_DIR"] / "magiskboot.exe"
+        real_magiskboot = (
+            Path(__file__).resolve().parents[2] / "bin" / "tools" / "magiskboot.exe"
+        )
 
-        magiskboot_exe = utils.get_platform_executable("magiskboot")
-        if not magiskboot_exe.exists():
-            found = list(mock_dirs["DOWNLOAD_DIR"].glob("*magiskboot*.exe"))
-            if found:
-                magiskboot_exe = found[0]
-            else:
-                pytest.fail("magiskboot executable not found after ensure_magiskboot")
+        if real_magiskboot.exists():
+            shutil.copy(real_magiskboot, magiskboot_exe)
+
+            for dll in ["msys-2.0.dll", "msys-z.dll"]:
+                real_dll = real_magiskboot.parent / dll
+                if real_dll.exists():
+                    shutil.copy(real_dll, mock_dirs["TOOLS_DIR"] / dll)
+        else:
+            pytest.skip("magiskboot.exe not found in bin/tools. Please build it first.")
 
         print(f"[INFO] [LKM] Extracting kernel version from {boot_img.name}...")
         try:
@@ -403,16 +413,21 @@ def test_root_magisk(fw_pkg, tmp_path):
         d.mkdir(parents=True, exist_ok=True)
 
     with patch.multiple("ltbox.constants", **mock_dirs):
-        print("\n[INFO] [MAGISK] Ensuring magiskboot (Real Download)...")
-        downloader.ensure_magiskboot()
+        print("\n[INFO] [MAGISK] Checking bundled magiskboot...")
+        magiskboot_exe = mock_dirs["TOOLS_DIR"] / "magiskboot.exe"
+        real_magiskboot = (
+            Path(__file__).resolve().parents[2] / "bin" / "tools" / "magiskboot.exe"
+        )
 
-        magiskboot_exe = utils.get_platform_executable("magiskboot")
-        if not magiskboot_exe.exists():
-            found = list(mock_dirs["DOWNLOAD_DIR"].glob("*magiskboot*.exe"))
-            if found:
-                magiskboot_exe = found[0]
-            else:
-                pytest.fail("magiskboot executable not found after ensure_magiskboot")
+        if real_magiskboot.exists():
+            shutil.copy(real_magiskboot, magiskboot_exe)
+
+            for dll in ["msys-2.0.dll", "msys-z.dll"]:
+                real_dll = real_magiskboot.parent / dll
+                if real_dll.exists():
+                    shutil.copy(real_dll, mock_dirs["TOOLS_DIR"] / dll)
+        else:
+            pytest.skip("magiskboot.exe not found in bin/tools. Please build it first.")
 
         strategy = MagiskRootStrategy()
 
@@ -554,8 +569,21 @@ def test_root_folkpatch(fw_pkg, tmp_path):
         d.mkdir(parents=True, exist_ok=True)
 
     with patch.multiple("ltbox.constants", **mock_dirs):
-        print("\n[INFO] [FOLKPATCH] Ensuring magiskboot (Real Download)...")
-        downloader.ensure_magiskboot()
+        print("\n[INFO] [FOLKPATCH] Checking bundled magiskboot...")
+        magiskboot_exe = mock_dirs["TOOLS_DIR"] / "magiskboot.exe"
+        real_magiskboot = (
+            Path(__file__).resolve().parents[2] / "bin" / "tools" / "magiskboot.exe"
+        )
+
+        if real_magiskboot.exists():
+            shutil.copy(real_magiskboot, magiskboot_exe)
+
+            for dll in ["msys-2.0.dll", "msys-z.dll"]:
+                real_dll = real_magiskboot.parent / dll
+                if real_dll.exists():
+                    shutil.copy(real_dll, mock_dirs["TOOLS_DIR"] / dll)
+        else:
+            pytest.skip("magiskboot.exe not found in bin/tools. Please build it first.")
 
         strategy = FolkPatchStrategy()
 

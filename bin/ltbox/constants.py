@@ -65,6 +65,7 @@ class LTBoxConfig:
         self.avbtool_py = self.download_dir / "avbtool.py"
         self.qsaharaserver_exe = self.tools_dir / "Qsaharaserver.exe"
         self.edl_exe = self.tools_dir / "fh_loader.exe"
+        self.magiskboot_exe = self.tools_dir / "magiskboot.exe"
 
     def load(self) -> None:
         if self._loaded:
@@ -96,14 +97,6 @@ class LTBoxConfig:
             )
 
     # --- Config Properties ---
-
-    @property
-    def magiskboot_repo(self) -> str:
-        return self._get_val("magiskboot", "repo")
-
-    @property
-    def magiskboot_tag(self) -> str:
-        return self._get_val("magiskboot", "tag")
 
     @property
     def ksu_apk_repo(self) -> str:
@@ -274,10 +267,9 @@ FASTBOOT_EXE = CONF.fastboot_exe
 AVBTOOL_PY = CONF.avbtool_py
 QSAHARASERVER_EXE = CONF.qsaharaserver_exe
 EDL_EXE = CONF.edl_exe
+MAGISKBOOT_EXE = CONF.magiskboot_exe
 
 try:
-    MAGISKBOOT_REPO = CONF.magiskboot_repo
-    MAGISKBOOT_TAG = CONF.magiskboot_tag
     KSU_APK_REPO = CONF.ksu_apk_repo
     KSU_APK_TAG = CONF.ksu_apk_tag
     MAGISK_REPO = CONF.magisk_repo

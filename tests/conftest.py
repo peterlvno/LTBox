@@ -43,6 +43,11 @@ def setup_external_tools(request):
     print("\n[INFO] Setting up external tools for integration tests...", flush=True)
     try:
         downloader.ensure_avb_tools()
+
+        from tests.scripts.build_magiskboot import build
+
+        build()
+
     except Exception as e:
         print(f"\n[WARN] Failed to setup tools: {e}", flush=True)
 

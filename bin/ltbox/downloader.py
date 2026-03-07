@@ -554,23 +554,6 @@ def ensure_openssl() -> None:
             temp_zip.unlink()
 
 
-def ensure_magiskboot() -> Path:
-    asset_patterns = {
-        "AMD64": "magiskboot-.*-windows-.*-x86_64-standalone\\.zip",
-    }
-
-    settings = const.load_settings_raw()
-    mb_config = settings.get("magiskboot", {})
-
-    return _ensure_tool_from_github_release(
-        tool_name="magiskboot",
-        exe_name_in_zip="magiskboot.exe",
-        repo_url=mb_config.get("repo"),
-        tag=mb_config.get("tag"),
-        asset_patterns=asset_patterns,
-    )
-
-
 def get_gki_kernel(kernel_version: str, work_dir: Path) -> Path:
     utils.ui.echo(get_string("dl_gki_downloading"))
 
@@ -993,7 +976,6 @@ def install_base_tools(lang_code: str = "en"):
         ensure_platform_tools()
         ensure_avb_tools()
         ensure_openssl()
-        ensure_magiskboot()
 
         utils.ui.echo(get_string("dl_base_complete"))
     except Exception as e:

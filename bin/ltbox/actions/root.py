@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from .. import constants as const
 from .. import device, downloader, utils
-from ..downloader import ensure_magiskboot
 from ..errors import ToolError
 from ..i18n import get_string
 from ..menu import TerminalMenu
@@ -228,8 +227,7 @@ class InitBootRootStrategy(ConfigurableRootStrategy):
         dev: Optional[device.DeviceController] = None,
         lkm_kernel_version: Optional[str] = None,
     ) -> Optional[Path]:
-        magiskboot_exe = utils.get_platform_executable("magiskboot")
-        ensure_magiskboot()
+        magiskboot_exe = const.MAGISKBOOT_EXE
 
         init_boot_source = work_dir / self.image_name
         init_boot_backup = const.BASE_DIR / self.backup_name
@@ -308,8 +306,7 @@ class GkiRootStrategy(ConfigurableRootStrategy):
         dev: Optional[device.DeviceController] = None,
         lkm_kernel_version: Optional[str] = None,
     ) -> Optional[Path]:
-        magiskboot_exe = utils.get_platform_executable("magiskboot")
-        ensure_magiskboot()
+        magiskboot_exe = const.MAGISKBOOT_EXE
 
         return patch_boot_with_root_algo(work_dir, magiskboot_exe, dev=None, gki=True)
 
@@ -406,8 +403,7 @@ class FolkPatchStrategy(GkiRootStrategy):
         dev: Optional[device.DeviceController] = None,
         lkm_kernel_version: Optional[str] = None,
     ) -> Optional[Path]:
-        magiskboot_exe = utils.get_platform_executable("magiskboot")
-        ensure_magiskboot()
+        magiskboot_exe = const.MAGISKBOOT_EXE
 
         utils.ui.echo("\n" + get_string("folkpatch_superkey_requirement"))
         superkey = ""
@@ -921,7 +917,10 @@ def _prepare_root_env(strategy: RootStrategy):
 
     utils.check_dependencies()
     edl.ensure_edl_requirements()
-    ensure_magiskboot()
+    if not const.MAGISKBOOT_EXE.exists():
+        raise ToolError(
+            get_string("dl_tool_not_found").format(tool_name="magiskboot.exe")
+        )
 
 
 def _get_lkm_kernel_version(
