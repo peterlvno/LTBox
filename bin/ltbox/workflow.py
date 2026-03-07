@@ -1,5 +1,4 @@
 import shutil
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Callable, Optional
@@ -232,23 +231,14 @@ def patch_all(
             success_msg += f"\n\n{get_string('wf_notice_widevine')}"
             return success_msg
 
-    except BaseException as e:
+    except KeyboardInterrupt as e:
         _log_workflow_halt()
-        if isinstance(e, KeyboardInterrupt):
-            raise UserCancelError(get_string("act_op_cancel")) from e
-        if isinstance(e, SystemExit):
-            raise LTBoxError(get_string("wf_err_halted_script").format(e=e), e) from e
-        if isinstance(
-            e,
-            (
-                LTBoxError,
-                subprocess.CalledProcessError,
-                FileNotFoundError,
-                RuntimeError,
-                KeyError,
-            ),
-        ):
-            raise
+        raise UserCancelError(get_string("act_op_cancel")) from e
+    except SystemExit as e:
+        _log_workflow_halt()
+        raise LTBoxError(get_string("wf_err_halted_script").format(e=e), e) from e
+    except Exception:
+        _log_workflow_halt()
         raise
     finally:
         utils.ui.info(get_string("logging_finished").format(log_file=log_file))
