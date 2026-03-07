@@ -1,4 +1,5 @@
 import sys
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import i18n, menu_data
@@ -7,6 +8,25 @@ from .menu import TerminalMenu, select_menu_action
 from .utils import ui
 from . import update_service
 from .task_runner import run_task
+
+
+class LoopAction(str, Enum):
+    BACK = "back"
+    RETURN = "return"
+    EXIT = "exit"
+
+
+class MainMenuAction(str, Enum):
+    SETTINGS = "menu_settings"
+    ROOT = "menu_root"
+    ADVANCED = "menu_advanced"
+    PATCH_ALL = "patch_all"
+    PATCH_ALL_WIPE = "patch_all_wipe"
+
+
+class RouteResult(str, Enum):
+    MAIN = "main"
+    RETURN = "return"
 
 
 def _loop_menu(
@@ -19,12 +39,12 @@ def _loop_menu(
         menu_items = menu_items_factory()
         action = select_menu_action(menu_items, title_key, breadcrumbs=breadcrumbs)
 
-        if action in ("back", "return", "exit"):
+        if action in (LoopAction.BACK, LoopAction.RETURN, LoopAction.EXIT):
             return action
 
         if action is not None:
             result = action_handler(action)
-            if result in ("back", "return", "exit"):
+            if result in (LoopAction.BACK, LoopAction.RETURN, LoopAction.EXIT):
                 return result
 
 
@@ -43,7 +63,7 @@ def advanced_menu(dev: Any, registry: Any, target_region: str):
         main_title,
         _handler,
     )
-    if action == "exit":
+    if action == LoopAction.EXIT:
         sys.exit()
 
 
@@ -60,9 +80,9 @@ def _root_action_menu(
         breadcrumbs,
         _handler,
     )
-    if res == "return":
-        return "main"
-    if res == "exit":
+    if res == LoopAction.RETURN:
+        return RouteResult.MAIN
+    if res == LoopAction.EXIT:
         sys.exit()
     return res
 
@@ -86,9 +106,9 @@ def _handle_ksu_mode(dev: Any, registry: Any, type_breadcrumbs: str) -> Optional
         type_breadcrumbs,
         _handler,
     )
-    if res == "return":
-        return "return"
-    if res == "exit":
+    if res == LoopAction.RETURN:
+        return RouteResult.RETURN
+    if res == LoopAction.EXIT:
         sys.exit()
     return None
 
@@ -139,7 +159,7 @@ def root_menu(dev: Any, registry: Any):
             action_func = dispatch_map.get(choice)
             if action_func is not None:
                 res = action_func()
-                if res in ("main", "return"):
+                if res in (RouteResult.MAIN, RouteResult.RETURN):
                     return
 
 
@@ -216,7 +236,7 @@ def settings_menu(
         _handler,
     )
 
-    if action == "exit":
+    if action == LoopAction.EXIT:
         sys.exit()
 
     return skip_adb, skip_rollback, target_region
@@ -299,9 +319,11 @@ def main_loop(
         )
 
     menu_handlers = {
-        "menu_settings": _run_settings,
-        "menu_root": lambda: root_menu(dev, registry),
-        "menu_advanced": lambda: advanced_menu(dev, registry, state["target_region"]),
+        MainMenuAction.SETTINGS: _run_settings,
+        MainMenuAction.ROOT: lambda: root_menu(dev, registry),
+        MainMenuAction.ADVANCED: lambda: advanced_menu(
+            dev, registry, state["target_region"]
+        ),
     }
 
     def _handler(action: str):
@@ -310,7 +332,7 @@ def main_loop(
             action_func()
         else:
             extras: Dict[str, Any] = {}
-            if action in ["patch_all", "patch_all_wipe"]:
+            if action in [MainMenuAction.PATCH_ALL, MainMenuAction.PATCH_ALL_WIPE]:
                 extras["skip_rollback"] = state["skip_rollback"]
                 extras["target_region"] = state["target_region"]
             run_task(action, dev, registry, extra_kwargs=extras)
