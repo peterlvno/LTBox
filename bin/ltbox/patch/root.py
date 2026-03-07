@@ -2,6 +2,7 @@ import re
 import shutil
 import sys
 import subprocess
+import lzma
 from pathlib import Path
 from typing import Optional, Union
 
@@ -302,9 +303,14 @@ def patch_boot_with_root_algo(
             if not ramdisk_backup.exists():
                 shutil.copy(work_dir / "ramdisk.cpio", ramdisk_backup)
 
-            mb.run("compress=xz", "magisk", "magisk.xz", cwd=work_dir)
-            mb.run("compress=xz", "stub.apk", "stub.xz", cwd=work_dir)
-            mb.run("compress=xz", "init-ld", "init-ld.xz", cwd=work_dir)
+            for fname in ["magisk", "stub.apk", "init-ld"]:
+                src_path = work_dir / fname
+                dst_path = work_dir / f"{fname}.xz"
+                with (
+                    open(src_path, "rb") as f_in,
+                    lzma.open(dst_path, "wb", format=lzma.FORMAT_XZ) as f_out,
+                ):
+                    shutil.copyfileobj(f_in, f_out)
 
             mb.run(
                 "cpio",
