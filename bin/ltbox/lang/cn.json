@@ -1,4 +1,5 @@
 {
+  "_lang": "简体中文",
   "act_active_slot": "[+] 当前活动槽位: {slot}",
   "act_adb_skipped_manual_install": "ADB 已跳过。请手动安装 Manager 应用。",
   "act_add_footer_vb": "[*] 正在向 vendor_boot 添加 Hash Footer...",
@@ -578,7 +579,6 @@
   "info_drag_files_prompt": "[!] 请拖放 .img 文件或文件夹。",
   "info_no_files_dragged": "[!] 未拖入任何文件或文件夹。",
   "lang_changed": "语言已更改。",
-  "lang_native_name": "简体中文",
   "logging_command": "[日志] 命令: {command}",
   "logging_enabled": "[日志] 日志已启用。\n    文件: {log_file}",
   "logging_finished": "[日志] 日志记录完成。\n    文件: {log_file}",

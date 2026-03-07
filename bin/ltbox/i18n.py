@@ -24,7 +24,7 @@ def get_available_languages() -> List[Tuple[str, str]]:
         try:
             with open(f, "r", encoding="utf-8") as lang_file:
                 temp_lang = json.load(lang_file)
-                lang_name = temp_lang.get("lang_native_name", lang_code)
+                lang_name = temp_lang.get("_lang", lang_code)
                 languages.append((lang_code, lang_name))
         except Exception:
             languages.append((lang_code, lang_code))

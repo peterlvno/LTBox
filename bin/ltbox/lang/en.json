@@ -1,4 +1,5 @@
 {
+  "_lang": "English",
   "act_active_slot": "[+] Active slot: {slot}",
   "act_adb_skipped_manual_install": "ADB skipped. Please install the Manager app manually.",
   "act_add_footer_vb": "[*] Adding Hash Footer to vendor_boot...",
@@ -578,7 +579,6 @@
   "info_drag_files_prompt": "[!] Drag and drop .img files or folders.",
   "info_no_files_dragged": "[!] No files or folders dropped.",
   "lang_changed": "Language has been changed.",
-  "lang_native_name": "English",
   "logging_command": "[Log] Command: {command}",
   "logging_enabled": "[Log] Logging enabled.\n    File: {log_file}",
   "logging_finished": "[Log] Logging finished.\n    File: {log_file}",

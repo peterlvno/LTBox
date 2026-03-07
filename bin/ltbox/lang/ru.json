@@ -1,4 +1,5 @@
 {
+  "_lang": "Русский",
   "act_active_slot": "[+] Активный слот: {slot}",
   "act_adb_skipped_manual_install": "ADB пропущен. Пожалуйста, установите приложение Manager вручную.",
   "act_add_footer_vb": "[*] Добавление Hash Footer в vendor_boot...",
@@ -578,7 +579,6 @@
   "info_drag_files_prompt": "[!] Перетащите .img файлы или папки.",
   "info_no_files_dragged": "[!] Файлы и папки не перенесены.",
   "lang_changed": "Язык был изменен.",
-  "lang_native_name": "Русский",
   "logging_command": "[Log] Команда: {command}",
   "logging_enabled": "[Log] Запись журнала включена.\n    Файл: {log_file}",
   "logging_finished": "[Log] Запись журнала завершена.\n    Файл: {log_file}",
