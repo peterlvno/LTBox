@@ -26,9 +26,4 @@ if "%~1"=="" (
 
 echo --- Starting Image Info Scan... ---
 "%PYTHON_EXE%" "%MAIN_PY%" info %*
-
-echo.
-echo --- Process Complete ---
-echo A log file (image_info_....txt) has been created in the main folder.
-pause
 endlocal
