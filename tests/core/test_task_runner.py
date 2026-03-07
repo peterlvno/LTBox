@@ -1,19 +1,13 @@
 import subprocess
 from contextlib import nullcontext
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from ltbox.registry import CommandRegistry
 from ltbox.errors import ToolError
 from ltbox.task_runner import run_task
-
-
-def _build_dev():
-    dev = MagicMock()
-    dev.adb = MagicMock()
-    dev.fastboot = MagicMock()
-    return dev
+from tests.helpers import make_device_mock
 
 
 def test_run_task_raises_for_unknown_command():
@@ -33,7 +27,7 @@ def test_run_task_handles_called_process_error_and_cleans_up():
         )
 
     registry.add("fail", failing_cmd, "Fail Task")
-    dev = _build_dev()
+    dev = make_device_mock()
 
     with (
         patch("ltbox.task_runner.logging_context", return_value=nullcontext()),
@@ -54,7 +48,7 @@ def test_run_task_unhandled_exception_bubbles_up():
         raise ZeroDivisionError("boom")
 
     registry.add("crash", crash_cmd, "Crash Task")
-    dev = _build_dev()
+    dev = make_device_mock()
 
     with (
         patch("ltbox.task_runner.logging_context", return_value=nullcontext()),

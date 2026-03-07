@@ -1,17 +1,15 @@
 import contextlib
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from ltbox import workflow
 from ltbox.errors import LTBoxError, UserCancelError
+from tests.helpers import make_device_mock
 
 
 def test_patch_all_flow_standard(mock_env):
-    mock_dev = MagicMock()
-    mock_dev.skip_adb = False
-    mock_dev.detect_active_slot.return_value = "_a"
-    mock_dev.adb.get_model.return_value = "TestModel"
+    mock_dev = make_device_mock()
 
     with (
         patch("ltbox.workflow.actions") as mock_actions,
@@ -33,7 +31,7 @@ def test_patch_all_flow_standard(mock_env):
 
 
 def test_patch_all_skip_arb():
-    mock_dev = MagicMock()
+    mock_dev = make_device_mock()
     with (
         patch("ltbox.workflow.actions") as mock_actions,
         patch("ltbox.workflow.utils.ui"),
@@ -46,7 +44,7 @@ def test_patch_all_skip_arb():
 
 
 def test_patch_all_keyboard_interrupt_is_mapped_to_user_cancel():
-    mock_dev = MagicMock()
+    mock_dev = make_device_mock()
 
     with (
         patch("ltbox.workflow.utils.ui"),
@@ -62,7 +60,7 @@ def test_patch_all_keyboard_interrupt_is_mapped_to_user_cancel():
 
 
 def test_patch_all_system_exit_is_mapped_to_ltbox_error():
-    mock_dev = MagicMock()
+    mock_dev = make_device_mock()
 
     with (
         patch("ltbox.workflow.utils.ui"),
@@ -78,7 +76,7 @@ def test_patch_all_system_exit_is_mapped_to_ltbox_error():
 
 
 def test_patch_all_domain_errors_are_reraised_and_halt_logged():
-    mock_dev = MagicMock()
+    mock_dev = make_device_mock()
 
     with (
         patch("ltbox.workflow.utils.ui"),
