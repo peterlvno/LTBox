@@ -5,12 +5,8 @@ from . import i18n, menu_data
 from .i18n import get_string
 from .menu import TerminalMenu, select_menu_action
 from .utils import ui
-from .main import (
-    run_task,
-    _prompt_for_update,
-    get_update_status,
-    SETTINGS_STORE,
-)
+from . import update_service
+from .task_runner import run_task
 
 
 def _loop_menu(
@@ -152,11 +148,11 @@ def _handle_update_check():
     ui.echo(get_string("act_update_checking"))
 
     current_version, latest_version, latest_release, latest_prerelease = (
-        get_update_status()
+        update_service.get_update_status()
     )
 
     if latest_version:
-        _prompt_for_update(current_version, latest_version)
+        update_service.prompt_for_update(current_version, latest_version)
     else:
         if latest_release or latest_prerelease:
             ui.echo(get_string("act_update_not_found").format(version=current_version))
@@ -232,7 +228,7 @@ def prompt_for_language(
     breadcrumbs: Optional[str] = None,
 ) -> str:
     if settings_store is None:
-        settings_store = SETTINGS_STORE
+        raise ValueError("settings_store is required")
 
     if not force_prompt:
         settings = settings_store.load()

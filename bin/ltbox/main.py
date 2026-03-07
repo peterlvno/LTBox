@@ -1,16 +1,14 @@
 import json
 import os
-import functools
 import platform
 import subprocess
 import sys
-import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from . import downloader, i18n, utils
+from . import downloader, i18n, update_service, utils
 from .i18n import get_string
 from .logger import logging_context
 from .registry import CommandRegistry
@@ -28,24 +26,6 @@ except ImportError:
     print(get_string("err_ensure_errors"), file=sys.stderr)
     input(get_string("press_enter_to_exit"))
     sys.exit(1)
-
-
-# --- UI Helper Class ---
-
-
-def _format_command_failure_messages(
-    error: subprocess.CalledProcessError,
-) -> List[str]:
-    messages = [
-        get_string("err_cmd_failed").format(
-            cmd=" ".join(error.cmd) if isinstance(error.cmd, list) else error.cmd
-        )
-    ]
-    if error.stdout:
-        messages.append(f"{get_string('err_cmd_stdout_header')}\n{error.stdout}")
-    if error.stderr:
-        messages.append(f"{get_string('err_cmd_stderr_header')}\n{error.stderr}")
-    return messages
 
 
 # --- Settings & Init ---
@@ -113,55 +93,6 @@ class SettingsStore:
 
 
 SETTINGS_STORE = SettingsStore(SETTINGS_FILE)
-
-
-def _read_current_version() -> str:
-    config_file = APP_DIR / "config.json"
-    if config_file.exists():
-        try:
-            with open(config_file, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
-                return config_data.get("version", "v0.0.0")
-        except Exception:
-            return "v0.0.0"
-    return "v0.0.0"
-
-
-def _get_latest_version(
-    current_version: str,
-) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    try:
-        latest_release, latest_prerelease = utils.get_latest_release_versions(
-            "miner7222", "LTBox"
-        )
-        latest_version = None
-
-        if latest_release and utils.is_update_available(
-            current_version, latest_release
-        ):
-            latest_version = latest_release
-        elif latest_release and utils.is_update_available(
-            latest_release, current_version
-        ):
-            if latest_prerelease and utils.is_update_available(
-                current_version, latest_prerelease
-            ):
-                latest_version = latest_prerelease
-        elif latest_release is None and latest_prerelease:
-            if utils.is_update_available(current_version, latest_prerelease):
-                latest_version = latest_prerelease
-
-        return latest_version, latest_release, latest_prerelease
-    except Exception:
-        return None, None, None
-
-
-def get_update_status() -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
-    current_version = _read_current_version()
-    latest_version, latest_release, latest_prerelease = _get_latest_version(
-        current_version
-    )
-    return current_version, latest_version, latest_release, latest_prerelease
 
 
 def _abort_platform_check(messages: List[str]) -> None:
@@ -247,106 +178,6 @@ def check_path_encoding():
 # --- Task Execution ---
 
 
-@functools.singledispatch
-def _handle_task_error(error: BaseException, title: str) -> None:
-    pass
-
-
-@_handle_task_error.register
-def _(error: LTBoxError, title: str) -> None:
-    ui.box_output([get_string("task_failed").format(title=title), str(error)], err=True)
-
-
-@_handle_task_error.register
-def _(error: subprocess.CalledProcessError, title: str) -> None:
-    ui.box_output(_format_command_failure_messages(error), err=True)
-
-
-@_handle_task_error.register(FileNotFoundError)
-@_handle_task_error.register(RuntimeError)
-@_handle_task_error.register(KeyError)
-def _(error: Exception, title: str) -> None:
-    ui.box_output([get_string("unexpected_error").format(e=error)], err=True)
-
-
-@_handle_task_error.register
-def _(error: SystemExit, title: str) -> None:
-    ui.error(get_string("process_halted"))
-
-
-@_handle_task_error.register
-def _(error: KeyboardInterrupt, title: str) -> None:
-    ui.error(get_string("process_cancelled"))
-
-
-def run_task(
-    command: str,
-    dev: Any,
-    registry: CommandRegistry,
-    extra_kwargs: Optional[Dict[str, Any]] = None,
-):
-    ui.clear()
-
-    cmd_info = registry.get(command)
-    if not cmd_info:
-        raise ToolError(get_string("unknown_command").format(command=command))
-
-    title = cmd_info.title
-    func = cmd_info.func
-    base_kwargs = cmd_info.default_kwargs
-    require_dev = cmd_info.require_dev
-    result_handler = cmd_info.result_handler
-
-    is_workflow = command in ("patch_all", "patch_all_wipe")
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    log_filename = None
-    if not is_workflow:
-        log_dir = BASE_DIR.parent / "log"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        log_filename = str(log_dir / f"log_{command}_{timestamp}.txt")
-
-    try:
-        with logging_context(log_filename):
-            if dev and hasattr(dev, "reset_task_state"):
-                dev.reset_task_state()
-
-            if not is_workflow:
-                ui.info(get_string("logging_enabled").format(log_file=log_filename))
-                ui.info(get_string("logging_command").format(command=command))
-
-            final_kwargs = base_kwargs.copy()
-
-            if extra_kwargs:
-                final_kwargs.update(extra_kwargs)
-
-            if require_dev:
-                final_kwargs["dev"] = dev
-
-            result = func(**final_kwargs)
-
-            if result_handler:
-                result_handler(result)
-            elif isinstance(result, str) and result:
-                ui.echo(result)
-            elif result:
-                ui.echo(get_string("act_unhandled_success_result").format(res=result))
-
-    except Exception as e:
-        _handle_task_error(e, title)
-    finally:
-        if dev and hasattr(dev, "adb"):
-            dev.adb.force_kill_server()
-        if dev and hasattr(dev, "fastboot"):
-            dev.fastboot.force_kill_server()
-
-        if not is_workflow:
-            ui.info(get_string("logging_finished").format(log_file=log_filename))
-
-        ui.echo("")
-        input(get_string("press_enter_to_continue"))
-
-
 def run_info_scan(paths, constants, avb_patch):
     print(get_string("scan_start"))
 
@@ -416,25 +247,6 @@ def _resolve_language_code(
     return "en" if is_info_mode else prompt_for_language(settings_store=settings_store)
 
 
-def _prompt_for_update(current_version: str, latest_version: Optional[str]) -> bool:
-    if not latest_version:
-        return False
-
-    ui.echo(get_string("update_avail_title"))
-
-    prompt_msg = get_string("update_avail_prompt").format(
-        curr=current_version, new=latest_version
-    )
-    choice = input(prompt_msg).strip().lower()
-
-    if choice == "y":
-        ui.echo(get_string("update_open_web"))
-        webbrowser.open("https://github.com/miner7222/LTBox/releases")
-        sys.exit(0)
-
-    ui.clear()
-
-
 def _initialize_runtime(lang_code: str) -> Tuple[type, CommandRegistry, Any, Any]:
     downloader.install_base_tools(lang_code)
     utils.check_dependencies()
@@ -447,7 +259,9 @@ def _initialize_runtime(lang_code: str) -> Tuple[type, CommandRegistry, Any, Any
 
     @REGISTRY.register("change_language", get_string("lang_changed"), require_dev=False)
     def change_language_task(breadcrumbs: Optional[str] = None):
-        new_lang = prompt_for_language(force_prompt=True, breadcrumbs=breadcrumbs)
+        new_lang = prompt_for_language(
+            force_prompt=True, settings_store=SETTINGS_STORE, breadcrumbs=breadcrumbs
+        )
         i18n.load_lang(new_lang)
         return get_string("lang_changed")
 
@@ -520,8 +334,8 @@ def _setup_language(is_info_mode: bool) -> str:
 
 def _check_updates() -> None:
     ui.clear()
-    current_version, latest_version, _, _ = get_update_status()
-    _prompt_for_update(current_version, latest_version)
+    current_version, latest_version, _, _ = update_service.get_update_status()
+    update_service.prompt_for_update(current_version, latest_version)
 
 
 def _init_and_run(is_info_mode: bool, lang_code: str) -> None:
