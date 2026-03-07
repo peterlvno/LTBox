@@ -38,10 +38,10 @@ jobs:
       - name: Install Tools from Cache
         run: ./.github/scripts/release/install-tools-from-cache.ps1
 
-      - name: Download magiskboot artifact from test job
+      - name: Download tools artifact from test job
         uses: actions/download-artifact@v8
         with:
-          name: magiskboot-exe
+          name: tools-exe
           path: bin/tools/
 
       - name: Create Archive
