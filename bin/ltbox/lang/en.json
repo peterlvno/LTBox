@@ -561,6 +561,7 @@
   "logging_finished": "[Log] Logging finished.\n    File: {log_file}",
   "menu_adv_11": "Flash firmware to device",
   "menu_adv_12": "Flash selected partition(s)",
+  "menu_adv_13": "Sign & Flash Custom Recovery",
   "menu_adv_1_prc": "Change firmware region for China (PRC) device",
   "menu_adv_1_row": "Change firmware region for Global (ROW) device",
   "menu_adv_2": "Dump devinfo/persist from device",

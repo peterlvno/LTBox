@@ -561,6 +561,7 @@
   "logging_finished": "[日志] 日志记录完成。\n    文件: {log_file}",
   "menu_adv_11": "刷入固件到设备",
   "menu_adv_12": "刷入选定分区",
+  "menu_adv_13": "签名并刷入第三方 Recovery",
   "menu_adv_1_prc": "为中国版 (PRC) 设备更改固件区域",
   "menu_adv_1_row": "为全球版 (ROW) 设备更改固件区域",
   "menu_adv_2": "从设备导出 devinfo/persist",

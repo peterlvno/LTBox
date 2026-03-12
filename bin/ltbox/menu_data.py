@@ -173,6 +173,12 @@ def get_advanced_menu_data(target_region: str) -> List[MenuItem]:
             text=lambda: get_string("menu_adv_12"),
             action="flash_partition_labels",
         ),
+        MenuSpec(
+            "option",
+            key="13",
+            text=lambda: get_string("menu_adv_13"),
+            action="sign_and_flash_twrp",
+        ),
         MenuSpec("separator"),
         MenuSpec("label", text=lambda: get_string("menu_adv_sub_nav")),
         *_nav_specs(include_back=True, include_exit=True),
@@ -345,12 +351,6 @@ def get_main_menu_data(target_region: str) -> List[MenuItem]:
             key="6",
             text=lambda: get_string("menu_main_unroot"),
             action="unroot_device",
-        ),
-        MenuSpec(
-            "option",
-            key="7",
-            text=lambda: get_string("menu_main_rec_flash"),
-            action="sign_and_flash_twrp",
         ),
         MenuSpec("separator"),
         MenuSpec(

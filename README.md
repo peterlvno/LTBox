@@ -62,9 +62,6 @@ Opens the root selection menu:
 **`6. Unroot device`**
 Restores the device to a non-rooted state by flashing the stock image from backups.
 
-**`7. Sign & Flash Custom Recovery`**
-Signs a custom recovery image (e.g., TWRP) with test keys and flashes it to the recovery partition.
-
 **`0. Settings`**
 Opens the settings submenu to configure the toolkit (see below).
 
@@ -118,6 +115,9 @@ Manual full flash. Copies all patched files and flashes them using `fh_loader`.
 
 **`12. Flash selected partitions`**
 Flashes selected partitions to the device.
+
+**`13. Sign & Flash Custom Recovery`**
+Signs a custom recovery image (e.g., TWRP) with test keys and flashes it to the recovery partition.
 
 ## 4. Other Utilities
 

@@ -561,6 +561,7 @@
   "logging_finished": "[Log] 로그 기록 완료.\n    저장: {log_file}",
   "menu_adv_11": "기기에 펌웨어 플래싱",
   "menu_adv_12": "선택한 파티션만 플래싱",
+  "menu_adv_13": "커스텀 리커버리 서명 및 플래싱",
   "menu_adv_1_prc": "펌웨어의 지역을 중국(PRC) 기기용으로 변경",
   "menu_adv_1_row": "펌웨어의 지역을 글로벌(ROW) 기기용으로 변경",
   "menu_adv_2": "기기에서 devinfo/persist 추출",
