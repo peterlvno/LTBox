@@ -119,6 +119,18 @@ class LTBoxConfig:
         return self._get_val("sukisu-ultra", "workflow", default="")
 
     @property
+    def folkpatch_repo(self) -> str:
+        return self._get_val("folkpatch", "repo", default="matsuzaka-yuki/FolkPatch")
+
+    @property
+    def folkpatch_tag(self) -> str:
+        return self._get_val("folkpatch", "tag", default="latest")
+
+    @property
+    def folkpatch_workflow(self) -> str:
+        return self._get_val("folkpatch", "workflow", default="")
+
+    @property
     def release_owner(self) -> str:
         return self._get_val("wildkernels", "owner", default="WildKernels")
 
@@ -262,6 +274,9 @@ try:
     KSU_APK_TAG = CONF.ksu_apk_tag
     SUKISU_REPO = CONF.sukisu_repo
     SUKISU_WORKFLOW = CONF.sukisu_workflow
+    FOLKPATCH_REPO = CONF.folkpatch_repo
+    FOLKPATCH_TAG = CONF.folkpatch_tag
+    FOLKPATCH_WORKFLOW = CONF.folkpatch_workflow
     RELEASE_OWNER = CONF.release_owner
     RELEASE_REPO = CONF.release_repo
     RELEASE_TAG = CONF.release_tag

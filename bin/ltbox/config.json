@@ -29,6 +29,11 @@
     "manager": "Spoofed-Manager-release.zip",
     "manager_fallbacks": ["Manager-release.zip"]
   },
+  "folkpatch": {
+    "repo": "matsuzaka-yuki/FolkPatch",
+    "tag": "latest",
+    "workflow": ""
+  },
   "edl": {
     "loader_filename": "xbl_s_devprg_ns.melf"
   },

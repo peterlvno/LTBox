@@ -355,9 +355,13 @@ class FolkPatchStrategy(GkiRootStrategy):
         super().__init__()
         self.is_nightly = False
         self.workflow_id = None
+        self.repo_config: Dict[str, Any] = {}
         self._staging_dir = const.TOOLS_DIR / "folkpatch_staging"
 
     def configure_source(self) -> None:
+        settings = const.load_settings_raw()
+        self.repo_config = settings.get("folkpatch", {})
+
         menu = TerminalMenu(
             get_string("folkpatch_menu_version_title"),
             breadcrumbs=get_string("folkpatch_menu_breadcrumbs"),
@@ -374,8 +378,15 @@ class FolkPatchStrategy(GkiRootStrategy):
             width = utils.ui.get_term_width()
             utils.ui.echo("-" * width)
             utils.ui.echo(get_string("folkpatch_prompt_workflow_id"))
+            default_workflow = str(self.repo_config.get("workflow", "")).strip()
+            if default_workflow:
+                utils.ui.echo(
+                    get_string("prompt_workflow_default").format(id=default_workflow)
+                )
             utils.ui.echo("-" * width)
             self.workflow_id = input(get_string("prompt_input_arrow")).strip()
+            if not self.workflow_id:
+                self.workflow_id = default_workflow
         else:
             self.is_nightly = False
 
