@@ -1,8 +1,10 @@
 import sys
+from dataclasses import replace
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import i18n, menu_data
+from .app_state import AppState
 from .i18n import get_string
 from .menu import TerminalMenu, select_menu_action
 from .utils import ui
@@ -248,26 +250,26 @@ def _handle_update_check():
 def settings_menu(
     dev: Any,
     registry: Any,
-    skip_adb: bool,
-    skip_rollback: bool,
-    target_region: str,
-    settings_store: Any,
-) -> Tuple[bool, bool, str]:
+    state: AppState,
+) -> AppState:
     main_title = get_string("menu_main_title")
+    next_state = state
 
     def _toggle_region():
-        nonlocal target_region
-        target_region = "ROW" if target_region == "PRC" else "PRC"
-        settings_store.update(target_region=target_region)
+        nonlocal next_state
+        next_state = replace(
+            next_state,
+            target_region="ROW" if next_state.target_region == "PRC" else "PRC",
+        )
 
     def _toggle_adb():
-        nonlocal skip_adb
-        skip_adb = not skip_adb
-        dev.skip_adb = skip_adb
+        nonlocal next_state
+        next_state = replace(next_state, skip_adb=not next_state.skip_adb)
+        dev.skip_adb = next_state.skip_adb
 
     def _toggle_rollback():
-        nonlocal skip_rollback
-        skip_rollback = not skip_rollback
+        nonlocal next_state
+        next_state = replace(next_state, skip_rollback=not next_state.skip_rollback)
 
     def _change_lang():
         cmd_info = registry.get("change_language")
@@ -291,7 +293,9 @@ def settings_menu(
 
     action = _loop_menu(
         lambda: menu_data.get_settings_menu_data(
-            "ON" if skip_adb else "OFF", "ON" if skip_rollback else "OFF", target_region
+            "ON" if next_state.skip_adb else "OFF",
+            "ON" if next_state.skip_rollback else "OFF",
+            next_state.target_region,
         ),
         "menu_settings_title",
         main_title,
@@ -301,7 +305,15 @@ def settings_menu(
     if action == LoopAction.EXIT:
         sys.exit()
 
-    return skip_adb, skip_rollback, target_region
+    return next_state
+
+
+def build_task_kwargs(action: str, state: AppState) -> Dict[str, Any]:
+    extras: Dict[str, Any] = {}
+    if action in [MainMenuAction.PATCH_ALL, MainMenuAction.PATCH_ALL_WIPE]:
+        extras["skip_rollback"] = state.skip_rollback
+        extras["target_region"] = state.target_region
+    return extras
 
 
 def prompt_for_language(
@@ -357,34 +369,20 @@ def prompt_for_language(
 def main_loop(
     device_controller_class: Any,
     registry: Any,
-    settings_store: Any,
-):
-    settings = settings_store.load()
-
-    state = {
-        "skip_adb": False,
-        "skip_rollback": False,
-        "target_region": settings.target_region,
-    }
-    dev = device_controller_class(skip_adb=state["skip_adb"])
+    initial_state: AppState,
+) -> AppState:
+    state = initial_state
+    dev = device_controller_class(skip_adb=state.skip_adb)
 
     def _run_settings():
-        state["skip_adb"], state["skip_rollback"], state["target_region"] = (
-            settings_menu(
-                dev,
-                registry,
-                state["skip_adb"],
-                state["skip_rollback"],
-                state["target_region"],
-                settings_store,
-            )
-        )
+        nonlocal state
+        state = settings_menu(dev, registry, state)
 
     menu_handlers: Dict[str, Callable[[], Any]] = {
         MainMenuAction.SETTINGS: _run_settings,
         MainMenuAction.ROOT: lambda: root_menu(dev, registry),
         MainMenuAction.ADVANCED: lambda: advanced_menu(
-            dev, registry, state["target_region"]
+            dev, registry, state.target_region
         ),
     }
 
@@ -393,15 +391,14 @@ def main_loop(
         if action_func:
             action_func()
         else:
-            extras: Dict[str, Any] = {}
-            if action in [MainMenuAction.PATCH_ALL, MainMenuAction.PATCH_ALL_WIPE]:
-                extras["skip_rollback"] = state["skip_rollback"]
-                extras["target_region"] = state["target_region"]
+            extras = build_task_kwargs(action, state)
             run_task(action, dev, registry, extra_kwargs=extras)
 
     _loop_menu(
-        lambda: menu_data.get_main_menu_data(state["target_region"]),
+        lambda: menu_data.get_main_menu_data(state.target_region),
         "menu_main_title",
         None,
         _handler,
     )
+
+    return state

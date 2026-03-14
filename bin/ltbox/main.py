@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable, ClassVar, Dict, List, Optional, Tuple
 
 from . import downloader, i18n, update_service, utils
+from .app_state import AppState
 from .i18n import get_string
 from .logger import logging_context
 from .registry import CommandRegistry
@@ -314,7 +315,19 @@ def _run_entry_mode(
 
         from .menu_router import main_loop
 
-        main_loop(device_controller_class, registry, settings_store=settings_store)
+        settings = settings_store.load()
+        final_state = main_loop(
+            device_controller_class,
+            registry,
+            initial_state=AppState(
+                target_region=settings.target_region,
+                language=settings.language,
+            ),
+        )
+        settings_store.update(
+            target_region=final_state.target_region,
+            language=final_state.language,
+        )
 
 
 # --- Singleton Check ---
