@@ -29,6 +29,21 @@ class RouteResult(str, Enum):
     RETURN = "return"
 
 
+ROOT_TYPE_MENU_SPEC: List[Optional[Tuple[str, str]]] = [
+    ("1", "menu_root_type_ksu"),
+    ("2", "menu_root_type_ksu_next"),
+    None,
+    ("3", "menu_root_type_sukisu"),
+    ("4", "menu_root_type_resukisu"),
+    None,
+    ("5", "APatch"),
+    ("6", "FolkPatch"),
+    None,
+    ("b", "menu_back"),
+    ("x", "menu_main_exit"),
+]
+
+
 def _loop_menu(
     menu_items_factory: Callable[[], List[Any]],
     title_key: str,
@@ -113,11 +128,10 @@ def _handle_ksu_mode(dev: Any, registry: Any, type_breadcrumbs: str) -> Optional
     return None
 
 
-def root_menu(dev: Any, registry: Any):
-    main_title = get_string("menu_main_title")
-    type_breadcrumbs = f"{main_title} > {get_string('menu_root_type_title')}"
-
-    dispatch_map = {
+def _build_root_dispatch_map(
+    dev: Any, registry: Any, type_breadcrumbs: str
+) -> Dict[str, Callable[[], Optional[str]]]:
+    return {
         "1": lambda: _root_action_menu(
             dev, registry, gki=False, root_type="kernelsu", breadcrumbs=type_breadcrumbs
         ),
@@ -136,21 +150,31 @@ def root_menu(dev: Any, registry: Any):
         ),
     }
 
-    while True:
-        mode_menu = TerminalMenu(
-            get_string("menu_root_type_title"), breadcrumbs=main_title
+
+def _build_root_type_menu(main_title: str) -> TerminalMenu:
+    menu = TerminalMenu(get_string("menu_root_type_title"), breadcrumbs=main_title)
+
+    for item in ROOT_TYPE_MENU_SPEC:
+        if item is None:
+            menu.add_separator()
+            continue
+
+        key, label = item
+        menu.add_option(
+            key,
+            get_string(label) if label.startswith("menu_") else label,
         )
-        mode_menu.add_option("1", get_string("menu_root_type_ksu"))
-        mode_menu.add_option("2", get_string("menu_root_type_ksu_next"))
-        mode_menu.add_separator()
-        mode_menu.add_option("3", get_string("menu_root_type_sukisu"))
-        mode_menu.add_option("4", get_string("menu_root_type_resukisu"))
-        mode_menu.add_separator()
-        mode_menu.add_option("5", "APatch")
-        mode_menu.add_option("6", "FolkPatch")
-        mode_menu.add_separator()
-        mode_menu.add_option("b", get_string("menu_back"))
-        mode_menu.add_option("x", get_string("menu_main_exit"))
+
+    return menu
+
+
+def root_menu(dev: Any, registry: Any):
+    main_title = get_string("menu_main_title")
+    type_breadcrumbs = f"{main_title} > {get_string('menu_root_type_title')}"
+    dispatch_map = _build_root_dispatch_map(dev, registry, type_breadcrumbs)
+
+    while True:
+        mode_menu = _build_root_type_menu(main_title)
 
         choice = mode_menu.ask(
             get_string("prompt_select"), get_string("err_invalid_selection")
