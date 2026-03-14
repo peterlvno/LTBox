@@ -8,30 +8,42 @@ on:
   push:
     branches:
       - '**'
-    paths:
-      - 'bin/**'
-      - 'tests/**'
-      - '.github/workflows/**'
   pull_request:
-    paths:
-      - 'bin/**'
-      - 'tests/**'
-      - '.github/workflows/**'
   workflow_call:
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ github.event_name == 'workflow_call' && 'true' || steps.filter.outputs.python_ci }}
+    steps:
+      - uses: actions/checkout@v6
+        if: ${{ github.event_name != 'workflow_call' }}
+      - id: filter
+        if: ${{ github.event_name != 'workflow_call' }}
+        uses: dorny/paths-filter@v4
+        with:
+          filters: .github/path-filters.yml
+
   unit-test:
+    if: ${{ needs.changes.outputs.should_run == 'true' }}
+    needs: changes
     uses: ./.github/workflows/python-command.yml
     with:
       task: unit
 
   architecture-test:
+    if: ${{ needs.changes.outputs.should_run == 'true' }}
+    needs: changes
     uses: ./.github/workflows/python-command.yml
     with:
       task: architecture
 
   integration-test:
-    needs: unit-test
+    if: ${{ needs.changes.outputs.should_run == 'true' }}
+    needs:
+      - changes
+      - unit-test
     runs-on: windows-latest
     env:
       TEST_FW_URL: ${{ secrets.TEST_FW_URL }}

@@ -9,18 +9,25 @@ on:
     - cron: '0 0 * * 1'
   workflow_dispatch:
   push:
-    paths:
-      - 'bin/**'
-      - 'tests/**'
-      - '.github/workflows/**'
   pull_request:
-    paths:
-      - 'bin/**'
-      - 'tests/**'
-      - '.github/workflows/**'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ contains(fromJSON('["schedule","workflow_dispatch"]'), github.event_name) && 'true' || steps.filter.outputs.python_ci }}
+    steps:
+      - uses: actions/checkout@v6
+        if: ${{ !contains(fromJSON('["schedule","workflow_dispatch"]'), github.event_name) }}
+      - id: filter
+        if: ${{ !contains(fromJSON('["schedule","workflow_dispatch"]'), github.event_name) }}
+        uses: dorny/paths-filter@v4
+        with:
+          filters: .github/path-filters.yml
+
   check-urls:
+    if: ${{ needs.changes.outputs.should_run == 'true' }}
+    needs: changes
     uses: ./.github/workflows/python-command.yml
     with:
       task: links

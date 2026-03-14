@@ -6,18 +6,23 @@ concurrency:
 
 on:
   push:
-    paths:
-      - 'bin/**/*.py'
-      - 'tests/**/*.py'
-      - '.github/workflows/**'
   pull_request:
-    paths:
-      - 'bin/**/*.py'
-      - 'tests/**/*.py'
-      - '.github/workflows/**'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.python_ci }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          filters: .github/path-filters.yml
+
   lint:
+    if: ${{ needs.changes.outputs.should_run == 'true' }}
+    needs: changes
     uses: ./.github/workflows/python-command.yml
     with:
-      task: links
+      task: lint
