@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -58,6 +59,8 @@ class LTBoxConfig:
 
         # --- Executables ---
         self.python_exe = self.python_dir / "python.exe"
+        if not self.python_exe.exists():
+            self.python_exe = Path(sys.executable)
         self.adb_exe = self.download_dir / "adb.exe"
         self.fastboot_exe = self.download_dir / "fastboot.exe"
         self.avbtool_py = self.download_dir / "avbtool.py"
