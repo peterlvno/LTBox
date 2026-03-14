@@ -75,9 +75,7 @@ def test_xml_fallback(mock_env):
         ),
         (["rawprogram0.xml"], "rawprogram0.xml", "B"),
     ]
-    tmpl = (
-        """<xml version=\"1.0\" ><data><program label=\"{m}\" filename=\"\"/></data>"""
-    )
+    tmpl = """<xml version=\"1.0\" ><data><program label=\"{m}\" filename=\"\"/></data></xml>"""
 
     for fnames, expected, marker in cases:
         if target.exists():
@@ -94,7 +92,7 @@ def test_xml_fallback(mock_env):
 
         assert target.exists()
         root = ET.parse(target).getroot()
-        assert root.find("program").get("label") == marker
+        assert root.find(".//program").get("label") == marker
 
 
 def test_gki_strategy_requires_vbmeta_file():

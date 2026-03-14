@@ -55,7 +55,7 @@ def test_root_menu_uses_dispatch_map_and_returns_on_route(monkeypatch):
     assert called["count"] == 1
     assert called["breadcrumbs"]["5"].endswith(" > APatch")
     assert called["breadcrumbs"]["6"].endswith(" > FolkPatch")
-    assert result is None
+    assert result is menu_router.RouteResult.MAIN
 
 
 def test_build_root_dispatch_map_routes_with_selected_type_breadcrumbs(monkeypatch):
