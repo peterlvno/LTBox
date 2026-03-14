@@ -355,7 +355,7 @@ class FolkPatchStrategy(GkiRootStrategy):
         super().__init__()
         self.root_type = root_type
         self.is_nightly = False
-        self.workflow_id = None
+        self.workflow_id: Optional[str] = None
         self.repo_config: Dict[str, Any] = {}
         self._staging_dir = const.TOOLS_DIR / f"{self.root_type}_staging"
 
