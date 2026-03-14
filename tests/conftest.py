@@ -31,12 +31,11 @@ def pytest_collection_modifyitems(config, items):
     )
 
     for item in items:
+        item.add_marker(pytest.mark.usefixtures("mock_python_executable"))
+
         if "integration" in item.keywords:
             if not run_integration:
                 item.add_marker(skip_integration)
-            continue
-
-        item.add_marker(pytest.mark.usefixtures("mock_python_executable"))
 
 
 @pytest.fixture(scope="session")

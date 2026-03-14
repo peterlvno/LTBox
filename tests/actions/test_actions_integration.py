@@ -80,6 +80,19 @@ def _run_patch_with_fail_context(
         pytest.fail(f"{fail_label} patching failed with real tools: {e}")
 
 
+def _setup_gki_context(ctx: dict[str, Path | None]) -> None:
+    shutil.copy(ctx["boot_img"], ctx["work_dir"] / "boot.img")
+    shutil.copy(ctx["boot_img"], ctx["base_dir"] / "boot.bak.img")
+
+
+def _setup_folkpatch_context(ctx: dict[str, Path | None]) -> None:
+    shutil.copy(ctx["boot_img"], ctx["work_dir"] / "boot.img")
+    if ctx["vbmeta_img"] is None:
+        pytest.fail("FolkPatch requires vbmeta image in setup context")
+    shutil.copy(ctx["vbmeta_img"], ctx["base_dir"] / "vbmeta.bak.img")
+    shutil.copy(ctx["boot_img"], ctx["base_dir"] / "boot.bak.img")
+
+
 def test_xml_wipe(firmware_file_getter):
     (path,) = firmware_file_getter("rawprogram_unsparse0.xml")
 
@@ -150,10 +163,7 @@ def test_prc_to_row(firmware_file_getter, mock_env):
             "OUTPUT_ROOT_DIR",
             "[INFO] [GKI] Downloading resources (Manager APK)...",
             "Failed to download GKI resources",
-            lambda ctx: (
-                shutil.copy(ctx["boot_img"], ctx["work_dir"] / "boot.img")
-                or shutil.copy(ctx["boot_img"], ctx["base_dir"] / "boot.bak.img")
-            ),
+            _setup_gki_context,
             "boot.img",
             None,
             None,
@@ -164,11 +174,7 @@ def test_prc_to_row(firmware_file_getter, mock_env):
             "OUTPUT_ROOT_DIR",
             "[INFO] [FOLKPATCH] Downloading resources (kptools, APK)...",
             "Failed to download FolkPatch resources",
-            lambda ctx: (
-                shutil.copy(ctx["boot_img"], ctx["work_dir"] / "boot.img")
-                or shutil.copy(ctx["vbmeta_img"], ctx["base_dir"] / "vbmeta.bak.img")
-                or shutil.copy(ctx["boot_img"], ctx["base_dir"] / "boot.bak.img")
-            ),
+            _setup_folkpatch_context,
             "boot.img",
             None,
             "SuperKey1234",
