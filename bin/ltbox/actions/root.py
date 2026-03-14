@@ -514,7 +514,10 @@ class LkmRootStrategy(InitBootRootStrategy):
     def configure_source(self) -> None:
         settings = const.load_settings_raw()
 
-        if self.root_type == "sukisu":
+        if self.root_type == "kernelsu":
+            self.repo_config = settings.get("kernelsu", {})
+            root_name = "KernelSU"
+        elif self.root_type == "sukisu":
             self.repo_config = settings.get("sukisu-ultra", {})
             root_name = "SukiSU Ultra"
         elif self.root_type == "resukisu":

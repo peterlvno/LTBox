@@ -118,14 +118,17 @@ def root_menu(dev: Any, registry: Any):
     type_breadcrumbs = f"{main_title} > {get_string('menu_root_type_title')}"
 
     dispatch_map = {
-        "1": lambda: _handle_ksu_mode(dev, registry, type_breadcrumbs),
-        "2": lambda: _root_action_menu(
+        "1": lambda: _root_action_menu(
+            dev, registry, gki=False, root_type="kernelsu", breadcrumbs=type_breadcrumbs
+        ),
+        "2": lambda: _handle_ksu_mode(dev, registry, type_breadcrumbs),
+        "3": lambda: _root_action_menu(
             dev, registry, gki=False, root_type="sukisu", breadcrumbs=type_breadcrumbs
         ),
-        "3": lambda: _root_action_menu(
+        "4": lambda: _root_action_menu(
             dev, registry, gki=False, root_type="resukisu", breadcrumbs=type_breadcrumbs
         ),
-        "4": lambda: _root_action_menu(
+        "5": lambda: _root_action_menu(
             dev, registry, gki=True, root_type="folkpatch", breadcrumbs=type_breadcrumbs
         ),
     }
@@ -134,10 +137,13 @@ def root_menu(dev: Any, registry: Any):
         mode_menu = TerminalMenu(
             get_string("menu_root_type_title"), breadcrumbs=main_title
         )
-        mode_menu.add_option("1", get_string("menu_root_type_ksu_next"))
-        mode_menu.add_option("2", get_string("menu_root_type_sukisu"))
-        mode_menu.add_option("3", get_string("menu_root_type_resukisu"))
-        mode_menu.add_option("4", "FolkPatch")
+        mode_menu.add_option("1", get_string("menu_root_type_ksu"))
+        mode_menu.add_option("2", get_string("menu_root_type_ksu_next"))
+        mode_menu.add_separator()
+        mode_menu.add_option("3", get_string("menu_root_type_sukisu"))
+        mode_menu.add_option("4", get_string("menu_root_type_resukisu"))
+        mode_menu.add_separator()
+        mode_menu.add_option("5", "FolkPatch")
         mode_menu.add_separator()
         mode_menu.add_option("b", get_string("menu_back"))
         mode_menu.add_option("x", get_string("menu_main_exit"))

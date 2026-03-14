@@ -604,6 +604,7 @@
   "menu_root_subtype_release": "안정 (GitHub Releases)",
   "menu_root_subtype_title": "버전 선택",
   "menu_root_title": "루팅 메뉴",
+  "menu_root_type_ksu": "KernelSU",
   "menu_root_type_ksu_next": "KernelSU Next",
   "menu_root_type_resukisu": "ReSukiSU",
   "menu_root_type_sukisu": "SukiSU Ultra",

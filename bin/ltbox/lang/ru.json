@@ -604,6 +604,7 @@
   "menu_root_subtype_release": "Стабильная (GitHub Releases)",
   "menu_root_subtype_title": "Выберите версию",
   "menu_root_title": "Меню Root",
+  "menu_root_type_ksu": "KernelSU",
   "menu_root_type_ksu_next": "KernelSU Next",
   "menu_root_type_resukisu": "ReSukiSU",
   "menu_root_type_sukisu": "SukiSU Ultra",
