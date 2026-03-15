@@ -646,7 +646,7 @@ class LkmRootStrategy(InitBootRootStrategy):
     def download_resources(self, kernel_version: Optional[str] = None) -> bool:
         _cleanup_manager_apk(show_message=False)
 
-        repo = self.repo_config.get("repo")
+        repo = self.repo_config.get("repo", "")
         manager = self.repo_config.get("manager")
 
         if self.root_type in ("sukisu", "resukisu") or self.is_nightly:
