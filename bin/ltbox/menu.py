@@ -4,6 +4,8 @@ from .i18n import get_string
 from .menu_data import MenuItem
 from .utils import ui
 
+SEPARATOR_TEXT = "-" * 12
+
 try:
     import questionary
     from questionary import Choice, Separator
@@ -57,7 +59,7 @@ class TerminalMenu:
                 if text:
                     ui.echo(f"  {text}")
                 else:
-                    ui.echo("")
+                    ui.echo(f"   {SEPARATOR_TEXT}")
 
         width = ui.get_term_width()
         ui.echo("\n" + "=" * width + "\n")
@@ -66,12 +68,12 @@ class TerminalMenu:
         if questionary:
             self._render_header()
 
-            choices = []
+            choices = [Separator(" ")]
             for key, text, is_selectable in self.options:
                 if is_selectable and key is not None:
                     choices.append(Choice(f"{key}. {text}", value=key.lower()))
                 else:
-                    display_text = f"  {text}" if text else " "
+                    display_text = f"  {text}" if text else f"   {SEPARATOR_TEXT}"
                     choices.append(Separator(display_text))
 
             answer = questionary.select(

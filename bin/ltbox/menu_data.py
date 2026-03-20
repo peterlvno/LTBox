@@ -99,10 +99,8 @@ def get_advanced_menu_data(target_region: str) -> List[MenuItem]:
     )
 
     specs = [
-        MenuSpec("label", text=lambda: get_string("menu_adv_sub_region_dump")),
         MenuSpec("option", key="1", text=region_text, action="convert"),
         MenuSpec("separator"),
-        MenuSpec("label", text=lambda: get_string("menu_adv_sub_patch_region")),
         MenuSpec(
             "option",
             key="2",
@@ -122,7 +120,6 @@ def get_advanced_menu_data(target_region: str) -> List[MenuItem]:
             action="flash_partitions",
         ),
         MenuSpec("separator"),
-        MenuSpec("label", text=lambda: get_string("menu_adv_sub_arb")),
         MenuSpec(
             "option",
             key="5",
@@ -142,7 +139,6 @@ def get_advanced_menu_data(target_region: str) -> List[MenuItem]:
             action="write_anti_rollback",
         ),
         MenuSpec("separator"),
-        MenuSpec("label", text=lambda: get_string("menu_adv_sub_xml_flash")),
         MenuSpec(
             "option",
             key="8",
@@ -161,6 +157,7 @@ def get_advanced_menu_data(target_region: str) -> List[MenuItem]:
             text=lambda: get_string("task_title_modify_xml_nowipe"),
             action="modify_xml",
         ),
+        MenuSpec("separator"),
         MenuSpec(
             "option",
             key="11",
@@ -186,7 +183,6 @@ def get_advanced_menu_data(target_region: str) -> List[MenuItem]:
             action="sign_and_flash_twrp",
         ),
         MenuSpec("separator"),
-        MenuSpec("label", text=lambda: get_string("menu_adv_sub_nav")),
         *_nav_specs(include_back=True, include_exit=True),
     ]
     return _build_menu(specs)
@@ -314,10 +310,11 @@ def get_settings_menu_data(
             ),
             action="toggle_modify_region_code",
         ),
+        MenuSpec("separator"),
         MenuSpec(
             "option",
             key="5",
-            text=lambda: get_string("menu_settings_lang"),
+            text=lambda: f"{get_string('menu_settings_lang')}: [{get_string('_lang')}]",
             action="change_lang",
         ),
         MenuSpec(
