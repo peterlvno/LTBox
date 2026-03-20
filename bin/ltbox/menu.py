@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from .i18n import get_string
 from .menu_data import MenuItem
@@ -68,7 +68,7 @@ class TerminalMenu:
         if questionary:
             self._render_header()
 
-            choices = [Separator(" ")]
+            choices: List[Union[Choice, Separator]] = [Separator(" ")]
             for key, text, is_selectable in self.options:
                 if is_selectable and key is not None:
                     choices.append(Choice(f"{key}. {text}", value=key.lower()))
