@@ -18,9 +18,7 @@
 
 该工具包利用了某些联想 Android 平板电脑中存在的安全漏洞。这些设备的固件使用了公开的 AOSP（Android Open Source Project）测试密钥进行签名。
 
-由于这种漏洞，即使 bootloader 被锁定 ，设备的 bootloader 也会信任并启动任何使用这些常用测试密钥签名的映像。
-
-该工具包是一个包含多种脚本的集合，利用此漏洞，对**已锁定 bootloader 的设备**执行高级修改。
+由于这种漏洞，即使 bootloader 被锁定 ，设备的 bootloader 也会信任并启动任何使用这些常用测试密钥签名的映像。这使得在 bootloader 锁定的设备上也能进行高级修改。
 
 ### 目标型号
 
@@ -32,8 +30,6 @@
 **注意：从 2026 年发布的 拯救者Y700 五代开始，该漏洞已被修复，因此无法使用此工具。**
 
 ## 2. 使用方法
-
-该工具包设计为**完全自动化**。
 
 1.  **下载并解压：** 下载最新版本并将其解压到文件夹（确保路径中不包含**空格或非 ASCII 字符**）。
 2.  **运行脚本：** 双击 `start.bat` 。
@@ -57,9 +53,12 @@
 以 ADB 模式连接到设备，并禁用系统更新包以防止自动更新。
 
 **`5. Root 设备`**
-打开 root 提权方式选择菜单：
-* **LKM Mode:** 修补 `init_boot.img` 和 `vbmeta.img` 。
-* **GKI Mode:** 通过将 `boot.img` 的内核替换为 `GKI_KernelSU_SUSFS` 来修补 `boot.img` 。
+打开 root 提权方式选择菜单。支持的 root 类型：
+* **KernelSU / KernelSU Next** — LKM & GKI 模式
+* **SukiSU Ultra / ReSukiSU** — LKM 模式
+* **APatch / FolkPatch**
+
+目前 Legion Tab Y700 二代仅支持通过 KernelSU Next GKI 模式和 APatch / FolkPatch 进行 root。
 
 **`6. 设备 Unroot`**
 通过从备份中刷入官方镜像，将设备恢复到未 root 状态。
@@ -72,8 +71,10 @@
 
 ### 3.2 设置菜单
 
-* **Region:** 在 PRC （中国）和 ROW （全球）之间切换目标固件区域。
-* **Skip ADB:** 跳过 ADB 检查。如果设备已处于 EDL/Fastboot 模式，则此功能很有用。
+* **Preset:** 循环切换设备预设（ROW、PRC、Stock）。每个预设会配置目标区域及相关默认值。
+* **Modify Region Code:** 开启/关闭区域代码修改。关闭时，刷入固件时不修改区域。
+* **Region:** 在 **PRC**（中国）和 **ROW**（全球）之间切换目标固件区域。仅在 Modify Region Code 开启时显示。
+* **Skip ADB:** 跳过 ADB 检查。如果设备已处于 EDL/fastboot 模式，则此功能很有用。
 * **Skip Anti-Rollback:** 跳过自动防回滚检查。
 * **Language:** 切换工具包的界面语言。
 * **Check for Updates:** 检查 LTBox 的最新版本。
@@ -83,7 +84,7 @@
 用于手动控制和故障排除的各个步骤。
 
 **`1. 为中国版 (PRC) / 全球版 (ROW) 设备更改固件区域`**
-根据选择的区域设置（PRC 或 ROW）转换 `vendor_boot.img`，并使用更新的验证元数据重建 `vbmeta.img`。
+根据选择的区域设置（PRC 或 ROW）转换 `vendor_boot.img`，并使用更新的验证元数据重建 `vbmeta.img`。仅在 Modify Region Code 开启时显示。
 
 **`2. 从设备导出 devinfo/persist`**
 将 EDL 模式下设备的 `devinfo` 和 `persist` 分区转储到 `backup/` 文件夹。
@@ -118,7 +119,10 @@
 **`12. 刷入选定分区`**
 将选定的分区刷入设备。
 
-**`13. 签名并刷入第三方 Recovery`**
+**`13. 为修改后的镜像重建 vbmeta`**
+重建 `vbmeta.img`，使其包含任何修改过的分区镜像的更新哈希/链描述符（例如手动修补后）。
+
+**`14. 签名并刷入第三方 Recovery`**
 使用测试密钥对自定义恢复映像（例如 TWRP）进行签名，并将其刷入恢复分区。
 
 ## 4. 其他实用工具

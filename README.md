@@ -18,9 +18,7 @@ Modifying your device's firmware carries significant risks, including but not li
 
 This toolkit exploits a security vulnerability found in certain Lenovo Android tablets. These devices have firmware signed with publicly available **AOSP (Android Open Source Project) test keys**.
 
-Because of this vulnerability, the device's bootloader trusts and boots any image signed with these common test keys, even if the bootloader is **locked**.
-
-This toolkit is an all-in-one collection of scripts that leverages this flaw to perform advanced modifications on a device with a locked bootloader.
+Because of this vulnerability, the device's bootloader trusts and boots any image signed with these common test keys, even if the bootloader is **locked**. This allows advanced modifications on a device with a locked bootloader.
 
 ### Target Models
 
@@ -32,8 +30,6 @@ This toolkit is an all-in-one collection of scripts that leverages this flaw to 
 **Note: Starting from the Legion Tab Y700 5th Gen released in 2026, this vulnerability has been patched, so this tool cannot be used.**
 
 ## 2. How to Use
-
-The toolkit is designed to be fully automated.
 
 1.  **Download & Extract:** Download the latest release and extract it to a folder (ensure the path contains no spaces or non-ASCII characters).
 2.  **Run the Script:** Double-click **`start.bat`**.
@@ -57,9 +53,12 @@ Attempts to fix boot issues caused by taking a Full OTA update on a converted de
 Connects to the device in ADB mode and disables system update packages to prevent automatic updates.
 
 **`5. Root device`**
-Opens the root selection menu:
-* **LKM Mode:** Patches `init_boot.img` & `vbmeta.img`.
-* **GKI Mode:** Patches `boot.img` by replacing its kernel with [GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS).
+Opens the root selection menu. Available root types:
+* **KernelSU / KernelSU Next** — LKM & GKI mode
+* **SukiSU Ultra / ReSukiSU** — LKM mode
+* **APatch / FolkPatch**
+
+Currently, rooting on the Legion Tab Y700 2nd Gen is only possible using KernelSU Next GKI mode and APatch / FolkPatch.
 
 **`6. Unroot device`**
 Restores the device to a non-rooted state by flashing the stock image from backups.
@@ -72,8 +71,10 @@ Opens the advanced menu for individual steps, manual control, and troubleshootin
 
 ### 3.2 Settings Menu
 
-* **Region:** Toggle target firmware region between **PRC** (China) and **ROW** (Global).
-* **Skip ADB:** Toggle ADB checks. Useful if the device is already in EDL/Fastboot mode.
+* **Preset:** Cycle through device presets (ROW, PRC, Stock). Each preset configures the target region and related defaults.
+* **Modify Region Code:** Toggle region code modification ON/OFF. When OFF, firmware is flashed without modifying the region.
+* **Region:** Toggle target firmware region between **PRC** (China) and **ROW** (Global). Only visible when Modify Region Code is ON.
+* **Skip ADB:** Toggle ADB checks. Useful if the device is already in EDL/fastboot mode.
 * **Skip Anti-Rollback:** Toggle automated Anti-Rollback checks.
 * **Language:** Switch the toolkit's interface language.
 * **Check for Updates:** Check for the latest version of LTBox.
@@ -83,7 +84,7 @@ Opens the advanced menu for individual steps, manual control, and troubleshootin
 Individual steps for manual control and troubleshooting.
 
 **`1. Convert ROM Region to PRC/ROW`**
-Converts `vendor_boot.img` and rebuilds `vbmeta.img` with updated verification metadata based on the selected region settings (PRC or ROW).
+Converts `vendor_boot.img` and rebuilds `vbmeta.img` with updated verification metadata based on the selected region settings (PRC or ROW). Only visible when Modify Region Code is ON.
 
 **`2. Dump devinfo/persist from device`**
 Dumps `devinfo` and `persist` partitions from the device in EDL mode to the `backup/` folder.
@@ -118,7 +119,10 @@ Manual full flash. Copies all patched files and flashes them using `fh_loader`.
 **`12. Flash selected partitions`**
 Flashes selected partitions to the device.
 
-**`13. Sign & Flash Custom Recovery`**
+**`13. Rebuild vbmeta for modified images`**
+Rebuilds `vbmeta.img` to include updated hash/chain descriptors for any modified partition images (e.g., after manual patching).
+
+**`14. Sign & Flash Custom Recovery`**
 Signs a custom recovery image (e.g., TWRP) with test keys and flashes it to the recovery partition.
 
 ## 4. Other Utilities
