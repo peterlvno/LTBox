@@ -664,6 +664,7 @@
   "scan_saved_to": "[*] 정보가 {filename} 파일에 저장되었습니다.",
   "scan_scanning_file": "[*] 스캔 중: {filename}...",
   "scan_start": "[*] 이미지 정보 스캔 시작...",
+  "startup_admin_required": "LTBox를 실행하려면 관리자 권한이 필요합니다. 관리자 권한으로 LTBox를 다시 실행해 주세요.",
   "startup_conflict_confirm": "해당 프로세스(들)을 종료하고 계속 진행하시겠습니까? (y/n): ",
   "startup_conflict_exit_message": "진행 중인 작업 완료 후 LTBox를 재실행하세요.",
   "startup_conflict_processes_prompt": "원활한 작동을 위해 해당 프로세스(들)을 미리 종료해야합니다: {processes}\nPC에서 기기로 데이터를 전송 중이 아닌지 확인해주세요.",

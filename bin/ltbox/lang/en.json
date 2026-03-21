@@ -664,6 +664,7 @@
   "scan_saved_to": "[*] Info saved to: {filename}",
   "scan_scanning_file": "[*] Scanning: {filename}...",
   "scan_start": "[*] Starting Image Info Scan...",
+  "startup_admin_required": "Administrator privileges are required to run LTBox. Please restart LTBox as administrator.",
   "startup_conflict_confirm": "Continue by ending the process(es)? (y/n): ",
   "startup_conflict_exit_message": "Please complete ongoing work and restart LTBox.",
   "startup_conflict_processes_prompt": "For smooth operation, you must close these process(es) first: {processes}\nPlease make sure your PC is not currently transferring data to the device.",

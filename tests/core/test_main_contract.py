@@ -67,6 +67,7 @@ def test_entry_point_runs_conflict_check_after_singleton_check():
     with (
         patch("ltbox.main._prepare_environment", return_value=object()),
         patch("ltbox.main._setup_language", return_value="en"),
+        patch("ltbox.main._ensure_admin_or_exit"),
         patch("ltbox.main._handle_conflicting_processes_once") as conflict_check,
         patch("ltbox.main._check_updates"),
         patch("ltbox.main._init_and_run"),
@@ -84,6 +85,22 @@ def test_entry_point_skips_conflict_check_when_another_instance_is_running():
         patch("ltbox.main.ui.clear"),
         patch("ltbox.main.ui.error"),
         patch("builtins.input", return_value=""),
+    ):
+        with pytest.raises(SystemExit) as exc:
+            main.entry_point()
+
+    assert exc.value.code == 0
+    conflict_check.assert_not_called()
+
+
+def test_entry_point_exits_when_admin_required_check_fails():
+    with (
+        patch("ltbox.main._prepare_environment", return_value=object()),
+        patch("ltbox.main._setup_language", return_value="en"),
+        patch("ltbox.main._ensure_admin_or_exit", side_effect=SystemExit(0)),
+        patch("ltbox.main._handle_conflicting_processes_once") as conflict_check,
+        patch("ltbox.main._check_updates"),
+        patch("ltbox.main._init_and_run"),
     ):
         with pytest.raises(SystemExit) as exc:
             main.entry_point()

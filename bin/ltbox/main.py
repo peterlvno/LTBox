@@ -398,6 +398,28 @@ def _check_updates() -> None:
     update_service.prompt_for_update(current_version, latest_version)
 
 
+def _is_running_as_admin() -> bool:
+    if os.name != "nt":
+        return True
+
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def _ensure_admin_or_exit() -> None:
+    if _is_running_as_admin():
+        return
+
+    ui.clear()
+    ui.error(get_string("startup_admin_required"))
+    input(get_string("press_enter_to_exit"))
+    sys.exit(0)
+
+
 def _force_kill_processes(exe_names: List[str]) -> None:
     for exe_name in exe_names:
         try:
@@ -498,6 +520,7 @@ def entry_point() -> None:
             input()
             sys.exit(0)
 
+        _ensure_admin_or_exit()
         _handle_conflicting_processes_once()
         _check_updates()
         _init_and_run(is_info_mode, lang_code)
