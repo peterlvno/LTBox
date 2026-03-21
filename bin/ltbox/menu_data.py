@@ -296,6 +296,15 @@ def get_settings_menu_data(
         MenuSpec(
             "option",
             key="3",
+            text=lambda: get_string("menu_settings_modify_region").format(
+                state=modify_region_code_state
+            ),
+            action="toggle_modify_region_code",
+        ),
+        MenuSpec("separator"),
+        MenuSpec(
+            "option",
+            key="4",
             text=lambda: get_string("menu_settings_skip_adb").format(
                 state=skip_adb_state
             ),
@@ -303,19 +312,11 @@ def get_settings_menu_data(
         ),
         MenuSpec(
             "option",
-            key="4",
+            key="5",
             text=lambda: get_string("menu_settings_skip_rb").format(
                 state=skip_rb_state
             ),
             action="toggle_rollback",
-        ),
-        MenuSpec(
-            "option",
-            key="5",
-            text=lambda: get_string("menu_settings_modify_region").format(
-                state=modify_region_code_state
-            ),
-            action="toggle_modify_region_code",
         ),
         MenuSpec("separator"),
         MenuSpec(
