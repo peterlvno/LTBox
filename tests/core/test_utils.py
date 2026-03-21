@@ -230,6 +230,7 @@ class TestUtils:
             patch("ltbox.utils.const.EDL_EXE", edl_exe),
             patch("ltbox.utils.const.QSAHARASERVER_EXE", qs_exe),
             patch("ltbox.utils.const.KEY_MAP", {}),
+            patch("ltbox.utils._check_required_windows_drivers"),
             patch("ltbox.utils.ui") as mock_ui,
         ):
             with pytest.raises(RuntimeError):
@@ -237,6 +238,53 @@ class TestUtils:
 
             mock_ui.echo.assert_called_once_with(
                 utils.get_string("utils_err_non_release_download")
+            )
+
+    @patch("ltbox.utils.subprocess.run")
+    def test_driver_present_via_pnputil_matches_inf_name(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["pnputil", "/enum-drivers"],
+            returncode=0,
+            stdout=(
+                "Published Name : oem12.inf\n"
+                "Original Name  : qcser.inf\n"
+                "Provider Name  : Qualcomm\n"
+            ),
+            stderr="",
+        )
+
+        assert utils._driver_present_via_pnputil(["qcser.inf"]) is True
+
+    @patch("ltbox.utils.subprocess.run")
+    def test_driver_present_via_pnputil_handles_command_failure(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=["pnputil", "/enum-drivers"], returncode=1, stdout="", stderr="err"
+        )
+
+        assert utils._driver_present_via_pnputil(["qcser.inf"]) is False
+
+    def test_driver_present_via_driver_store(self, tmp_path):
+        driver_store = tmp_path / "System32" / "DriverStore" / "FileRepository"
+        driver_store.mkdir(parents=True)
+        (driver_store / "android_winusb.inf_amd64_abcd").mkdir()
+
+        with patch.dict("ltbox.utils.os.environ", {"SystemRoot": str(tmp_path)}):
+            assert (
+                utils._driver_present_via_driver_store(["android_winusb.inf"]) is True
+            )
+            assert utils._driver_present_via_driver_store(["qcser.inf"]) is False
+
+    def test_check_required_windows_drivers_raises_on_missing_qdloader(self):
+        with (
+            patch("ltbox.utils.os.name", "nt"),
+            patch("ltbox.utils._is_driver_present", return_value=False),
+            patch("ltbox.utils.ui") as mock_ui,
+        ):
+            with pytest.raises(RuntimeError, match="Qualcomm HS-USB QDLoader 9008"):
+                utils._check_required_windows_drivers()
+
+            mock_ui.error.assert_called_once_with(
+                utils.get_string("utils_err_missing_qdloader_driver")
             )
 
     @pytest.mark.integration
@@ -273,6 +321,7 @@ class TestUtils:
             patch("ltbox.utils.const.EDL_EXE", edl_exe),
             patch("ltbox.utils.const.QSAHARASERVER_EXE", qs_exe),
             patch("ltbox.utils.const.KEY_MAP", {}),
+            patch("ltbox.utils._check_required_windows_drivers"),
             patch("ltbox.utils.ui") as mock_ui,
         ):
             utils.check_dependencies()

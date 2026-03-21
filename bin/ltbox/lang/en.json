@@ -689,6 +689,8 @@
   "update_open_web": "[*] Opening browser...",
   "utils_check_deps": "[*] Checking Dependencies...",
   "utils_deps_found": "[+] Dependencies verified.",
+  "utils_err_missing_android_usb_driver": "You must install the Android USB driver to run.",
+  "utils_err_missing_qdloader_driver": "You must install the Qualcomm HS-USB QDLoader 9008 driver to run.",
   "utils_err_non_release_download": "It looks like you downloaded source code instead of the release package. Download the correct one.",
   "utils_missing_dep": "[!] Error: Dependency '{name}' missing.",
   "utils_missing_item_format": " - {item}",

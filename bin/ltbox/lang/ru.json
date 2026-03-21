@@ -689,6 +689,8 @@
   "update_open_web": "[*] Открытие браузера...",
   "utils_check_deps": "[*] Проверка зависимостей...",
   "utils_deps_found": "[+] Зависимости проверены.",
+  "utils_err_missing_android_usb_driver": "Для запуска необходимо установить драйвер Android USB.",
+  "utils_err_missing_qdloader_driver": "Для запуска необходимо установить драйвер Qualcomm HS-USB QDLoader 9008.",
   "utils_err_non_release_download": "Похоже, вы скачали исходный код вместо релизного пакета. Скачайте правильный файл.",
   "utils_missing_dep": "[!] Ошибка: Отсутствует зависимость '{name}'.",
   "utils_missing_item_format": " - {item}",

@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import subprocess
 import time
 import urllib.request
 import functools
@@ -218,7 +219,72 @@ def check_dependencies() -> None:
         ui.echo(get_string("utils_run_install"))
         raise RuntimeError(get_string("utils_run_install"))
 
+    _check_required_windows_drivers()
+
     ui.echo(get_string("utils_deps_found"))
+
+
+def _check_required_windows_drivers() -> None:
+    if os.name != "nt":
+        return
+
+    if not _is_driver_present(["qcser.inf", "lenovo_ser.inf"]):
+        msg = get_string("utils_err_missing_qdloader_driver")
+        ui.error(msg)
+        raise RuntimeError(msg)
+
+    if not _is_driver_present(["android_winusb.inf"]):
+        msg = get_string("utils_err_missing_android_usb_driver")
+        ui.error(msg)
+        raise RuntimeError(msg)
+
+
+def _is_driver_present(expected_inf_names: List[str]) -> bool:
+    return _driver_present_via_pnputil(
+        expected_inf_names
+    ) or _driver_present_via_driver_store(expected_inf_names)
+
+
+def _driver_present_via_pnputil(expected_inf_names: List[str]) -> bool:
+    expected_set = {name.lower() for name in expected_inf_names}
+    try:
+        result = subprocess.run(
+            ["pnputil", "/enum-drivers"],
+            capture_output=True,
+            text=True,
+            check=False,
+            encoding="utf-8",
+            errors="ignore",
+        )
+        if result.returncode != 0:
+            return False
+
+        for line in result.stdout.splitlines():
+            if ":" not in line:
+                continue
+            value = line.split(":", 1)[1].strip().lower()
+            if value in expected_set:
+                return True
+    except OSError:
+        return False
+
+    return False
+
+
+def _driver_present_via_driver_store(expected_inf_names: List[str]) -> bool:
+    driver_store = (
+        Path(os.environ.get("SystemRoot", r"C:\Windows"))
+        / "System32"
+        / "DriverStore"
+        / "FileRepository"
+    )
+    if not driver_store.exists():
+        return False
+
+    for inf_name in expected_inf_names:
+        if any(driver_store.glob(f"{inf_name}*")):
+            return True
+    return False
 
 
 def move_existing_files(files: Iterable[Path], dst_dir: Path) -> int:
