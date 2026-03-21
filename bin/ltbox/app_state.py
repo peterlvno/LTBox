@@ -8,4 +8,5 @@ class AppState:
     skip_rollback: bool = False
     modify_region_code: bool = True
     target_region: str = "PRC"
+    preset_code: str = "1"
     language: Optional[str] = None

@@ -67,41 +67,18 @@ PRESET_2_KEY = "menu_settings_preset_2"
 PRESET_3_KEY = "menu_settings_preset_3"
 
 
-def _resolve_settings_preset_label(state: AppState) -> str:
-    if (
-        state.target_region == "PRC"
-        and state.modify_region_code
-        and not state.skip_rollback
-    ):
+def _preset_label_from_code(preset_code: str) -> str:
+    if preset_code == "1":
         return get_string(PRESET_1_KEY)
-    if (
-        state.target_region == "ROW"
-        and state.modify_region_code
-        and not state.skip_rollback
-    ):
+    if preset_code == "2":
         return get_string(PRESET_2_KEY)
-    if (
-        state.target_region == "ROW"
-        and not state.modify_region_code
-        and state.skip_rollback
-    ):
+    if preset_code == "3":
         return get_string(PRESET_3_KEY)
     return "-"
 
 
-def _prompt_for_settings_preset(breadcrumbs: str) -> Optional[str]:
-    preset_title = get_string("menu_settings_preset")
-    menu = TerminalMenu(preset_title, breadcrumbs=breadcrumbs)
-    menu.add_option("1", get_string(PRESET_1_KEY))
-    menu.add_option("2", get_string(PRESET_2_KEY))
-    menu.add_option("3", get_string(PRESET_3_KEY))
-    menu.add_separator()
-    menu.add_option("b", get_string("menu_back"))
-
-    choice = menu.ask(get_string("prompt_select"), get_string("err_invalid_selection"))
-    if choice == "b":
-        return None
-    return choice
+def _resolve_settings_preset_label(state: AppState) -> str:
+    return _preset_label_from_code(state.preset_code)
 
 
 def _loop_menu(
@@ -331,6 +308,7 @@ def settings_menu(
                 target_region="PRC",
                 modify_region_code=True,
                 skip_rollback=False,
+                preset_code="1",
             )
         elif preset_choice == "2":
             next_state = replace(
@@ -338,26 +316,33 @@ def settings_menu(
                 target_region="ROW",
                 modify_region_code=True,
                 skip_rollback=False,
+                preset_code="2",
             )
         elif preset_choice == "3":
             next_state = replace(
                 next_state,
-                target_region="ROW",
                 modify_region_code=False,
                 skip_rollback=True,
+                preset_code="3",
             )
 
     def _select_preset():
-        breadcrumbs = f"{main_title} > {get_string('menu_settings_title')}"
-        selected = _prompt_for_settings_preset(breadcrumbs)
-        if selected is not None:
-            _apply_selected_preset(selected)
+        current_preset_code = next_state.preset_code
+        if current_preset_code == "1":
+            _apply_selected_preset("2")
+        elif current_preset_code == "2":
+            _apply_selected_preset("3")
+        elif current_preset_code == "3":
+            _apply_selected_preset("1")
+        else:
+            _apply_selected_preset("1")
 
     def _toggle_region():
         nonlocal next_state
         next_state = replace(
             next_state,
             target_region="ROW" if next_state.target_region == "PRC" else "PRC",
+            preset_code="-",
         )
 
     def _toggle_adb():
@@ -367,12 +352,16 @@ def settings_menu(
 
     def _toggle_rollback():
         nonlocal next_state
-        next_state = replace(next_state, skip_rollback=not next_state.skip_rollback)
+        next_state = replace(
+            next_state, skip_rollback=not next_state.skip_rollback, preset_code="-"
+        )
 
     def _toggle_modify_region_code():
         nonlocal next_state
         next_state = replace(
-            next_state, modify_region_code=not next_state.modify_region_code
+            next_state,
+            modify_region_code=not next_state.modify_region_code,
+            preset_code="-",
         )
 
     def _change_lang():
@@ -398,7 +387,7 @@ def settings_menu(
 
     action = _loop_menu(
         lambda: menu_data.get_settings_menu_data(
-            _resolve_settings_preset_label(next_state),
+            _preset_label_from_code(next_state.preset_code),
             "ON" if next_state.skip_adb else "OFF",
             "ON" if next_state.skip_rollback else "OFF",
             "ON" if next_state.modify_region_code else "OFF",

@@ -131,6 +131,7 @@ def test_settings_menu_returns_updated_state(monkeypatch):
         skip_rollback=True,
         modify_region_code=False,
         target_region="ROW",
+        preset_code="-",
         language=None,
     )
     assert action == menu_router.LoopAction.BACK
@@ -139,29 +140,18 @@ def test_settings_menu_returns_updated_state(monkeypatch):
 
 def test_resolve_settings_preset_label():
     assert (
-        menu_router._resolve_settings_preset_label(
-            AppState(target_region="PRC", modify_region_code=True, skip_rollback=False)
-        )
+        menu_router._resolve_settings_preset_label(AppState(preset_code="1"))
         == "Install Global Firmware on Chinese Device"
     )
     assert (
-        menu_router._resolve_settings_preset_label(
-            AppState(target_region="ROW", modify_region_code=True, skip_rollback=False)
-        )
+        menu_router._resolve_settings_preset_label(AppState(preset_code="2"))
         == "Install Chinese Firmware on Global Device"
     )
     assert (
-        menu_router._resolve_settings_preset_label(
-            AppState(target_region="ROW", modify_region_code=False, skip_rollback=True)
-        )
+        menu_router._resolve_settings_preset_label(AppState(preset_code="3"))
         == "Install Stock Firmware without any modifications"
     )
-    assert (
-        menu_router._resolve_settings_preset_label(
-            AppState(target_region="PRC", modify_region_code=False, skip_rollback=True)
-        )
-        == "-"
-    )
+    assert menu_router._resolve_settings_preset_label(AppState(preset_code="-")) == "-"
 
 
 def test_settings_menu_preset_selection_applies_values(monkeypatch):
@@ -169,7 +159,6 @@ def test_settings_menu_preset_selection_applies_values(monkeypatch):
     monkeypatch.setattr(
         menu_router, "select_menu_action", lambda *_args, **_kwargs: next(actions)
     )
-    monkeypatch.setattr(menu_router, "_prompt_for_settings_preset", lambda *_args: "3")
 
     class DummyDev:
         def __init__(self):
@@ -183,8 +172,9 @@ def test_settings_menu_preset_selection_applies_values(monkeypatch):
     )
 
     assert next_state.target_region == "ROW"
-    assert next_state.modify_region_code is False
-    assert next_state.skip_rollback is True
+    assert next_state.modify_region_code is True
+    assert next_state.skip_rollback is False
+    assert next_state.preset_code == "2"
     assert action == menu_router.LoopAction.BACK
 
 
@@ -205,3 +195,79 @@ def test_settings_menu_data_orders_modify_region_before_skip_adb():
         "toggle_adb",
         "toggle_rollback",
     ]
+
+
+def test_settings_menu_preset_selection_cycles_to_third_preset(monkeypatch):
+    actions = iter(["select_preset", "back"])
+    monkeypatch.setattr(
+        menu_router, "select_menu_action", lambda *_args, **_kwargs: next(actions)
+    )
+
+    class DummyDev:
+        def __init__(self):
+            self.skip_adb = False
+
+    state = AppState(
+        target_region="ROW",
+        modify_region_code=True,
+        skip_rollback=False,
+        preset_code="2",
+    )
+    dev = DummyDev()
+
+    next_state, _ = menu_router.settings_menu(dev, registry=MagicMock(), state=state)
+
+    assert next_state.target_region == "ROW"
+    assert next_state.modify_region_code is False
+    assert next_state.skip_rollback is True
+    assert next_state.preset_code == "3"
+
+
+def test_settings_menu_direct_toggle_recomputes_preset_code(monkeypatch):
+    actions = iter(["toggle_modify_region_code", "back"])
+    monkeypatch.setattr(
+        menu_router, "select_menu_action", lambda *_args, **_kwargs: next(actions)
+    )
+
+    class DummyDev:
+        def __init__(self):
+            self.skip_adb = False
+
+    state = AppState(
+        target_region="PRC",
+        modify_region_code=True,
+        skip_rollback=False,
+        preset_code="1",
+    )
+    dev = DummyDev()
+
+    next_state, _ = menu_router.settings_menu(dev, registry=MagicMock(), state=state)
+
+    assert next_state.modify_region_code is False
+    assert next_state.preset_code == "-"
+
+
+def test_preset_three_does_not_change_target_region(monkeypatch):
+    actions = iter(["select_preset", "back"])
+    monkeypatch.setattr(
+        menu_router, "select_menu_action", lambda *_args, **_kwargs: next(actions)
+    )
+
+    class DummyDev:
+        def __init__(self):
+            self.skip_adb = False
+
+    state = AppState(
+        target_region="PRC",
+        modify_region_code=True,
+        skip_rollback=False,
+        preset_code="2",
+    )
+    dev = DummyDev()
+
+    next_state, _ = menu_router.settings_menu(dev, registry=MagicMock(), state=state)
+
+    assert next_state.target_region == "PRC"
+    assert next_state.modify_region_code is False
+    assert next_state.skip_rollback is True
+    assert next_state.preset_code == "3"
