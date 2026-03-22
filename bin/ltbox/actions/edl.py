@@ -384,7 +384,7 @@ def dump_partitions(
                 utils.ui.echo(get_string("act_skip_dump").format(target=target, e=e))
                 if target in critical_targets:
                     failed_targets.append(target)
-            except Exception as e:
+            except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
                 utils.ui.error(get_string("act_err_dump").format(target=target, e=e))
                 if target in critical_targets:
                     failed_targets.append(target)
@@ -525,7 +525,7 @@ def _prepare_flash_files(skip_dp: bool = False) -> None:
                     )
                 )
                 copied_count += 1
-            except Exception as e:
+            except (OSError, shutil.Error) as e:
                 utils.ui.error(get_string("act_err_copy").format(name=folder.name, e=e))
 
     if not skip_dp:
@@ -540,7 +540,7 @@ def _prepare_flash_files(skip_dp: bool = False) -> None:
                     )
                 )
                 copied_count += 1
-            except Exception as e:
+            except (OSError, shutil.Error) as e:
                 utils.ui.error(
                     get_string("act_err_copy").format(
                         name=const.OUTPUT_DP_DIR.name, e=e
@@ -682,7 +682,7 @@ def flash_full_firmware(
             dev.edl.flash_rawprogram(
                 port, const.EDL_LOADER_FILE, "UFS", raw_xmls, patch_xmls
             )
-        except Exception as e:
+        except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
             utils.ui.error(get_string("act_err_main_flash").format(e=e))
             utils.ui.error(
                 get_string("err_detailed_traceback") + traceback.format_exc()

@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 
 from .. import constants as const
 from .. import device, utils
-from ..errors import ToolError
+from ..errors import DeviceCommandError, DeviceConnectionError, ToolError
 from ..i18n import get_string
 from ..menu import TerminalMenu
 from ..partition import require_partition_params
@@ -17,7 +17,7 @@ from .root_strategies import (
     _cleanup_manager_apk,
     get_root_strategy,
 )
-from .system import detect_slot
+from .system import get_slot_suffix
 
 
 def _patch_root_from_folder(
@@ -179,12 +179,11 @@ def patch_and_flash_root(
 
     edl.ensure_edl_requirements()
 
-    active_slot = detect_slot(dev)
-    suffix = active_slot if active_slot else ""
+    suffix = get_slot_suffix(dev)
     partition_map = strategy.get_partition_map(suffix)
 
-    if active_slot:
-        utils.ui.echo(get_string("act_active_slot").format(slot=active_slot))
+    if suffix:
+        utils.ui.echo(get_string("act_active_slot").format(slot=suffix))
     else:
         utils.ui.echo(get_string("act_warn_root_slot"))
         if gki:
@@ -219,7 +218,7 @@ def _get_lkm_kernel_version(
         if not dev.skip_adb:
             try:
                 return dev.adb.get_kernel_version()
-            except Exception as e:
+            except (DeviceCommandError, DeviceConnectionError) as e:
                 utils.ui.error(get_string("act_root_warn_lkm_kver_fail").format(e=e))
                 utils.ui.error(get_string("act_root_warn_lkm_kver_retry"))
         else:
@@ -338,7 +337,7 @@ def _generate_root_image(
             utils.ui.echo(
                 get_string("act_patched_boot_saved").format(dir=final_boot.parent.name)
             )
-        except Exception as e:
+        except (ToolError, subprocess.CalledProcessError, OSError, KeyError) as e:
             if isinstance(e, ToolError):
                 utils.ui.error(str(e))
             else:
@@ -426,13 +425,12 @@ def root_device(
 
     _install_manager_apk(dev)
 
-    active_slot = detect_slot(dev)
-    suffix = active_slot if active_slot else ""
+    suffix = get_slot_suffix(dev)
 
     partition_map = strategy.get_partition_map(suffix)
 
-    if active_slot:
-        utils.ui.echo(get_string("act_active_slot").format(slot=active_slot))
+    if suffix:
+        utils.ui.echo(get_string("act_active_slot").format(slot=suffix))
     else:
         utils.ui.echo(get_string("act_warn_root_slot"))
         if gki:
@@ -519,8 +517,7 @@ def unroot_device(dev: device.DeviceController) -> None:
     if not dev.skip_adb:
         dev.adb.wait_for_device()
 
-    active_slot = detect_slot(dev)
-    suffix = active_slot if active_slot else ""
+    suffix = get_slot_suffix(dev)
 
     if selected_strategy:
         with dev.edl_session(auto_reset=True, reset_msg_key="act_reset_sys") as port:
@@ -564,8 +561,7 @@ def sign_and_flash_recovery(dev: device.DeviceController) -> None:
     if not dev.skip_adb:
         dev.adb.wait_for_device()
 
-    active_slot = detect_slot(dev)
-    suffix = active_slot if active_slot else ""
+    suffix = get_slot_suffix(dev)
     target_partition = f"recovery{suffix}"
 
     utils.ui.echo(get_string("act_root_step2"))
@@ -584,7 +580,7 @@ def sign_and_flash_recovery(dev: device.DeviceController) -> None:
                     start_sector=params["start_sector"],
                     num_sectors=params["num_sectors"],
                 )
-            except Exception as e:
+            except (subprocess.CalledProcessError, OSError, ValueError) as e:
                 utils.ui.error(
                     get_string("act_err_dump").format(part=target_partition, e=e)
                 )
@@ -666,6 +662,6 @@ def _install_manager_apk(dev: device.DeviceController):
         dev.adb.wait_for_device()
         dev.adb.install(manager_apk)
         utils.ui.echo(get_string("act_ksu_ok"))
-    except Exception as e:
+    except (DeviceCommandError, DeviceConnectionError, OSError) as e:
         utils.ui.error(get_string("act_err_ksu").format(e=e))
     utils.ui.echo("-" * width + "\n")

@@ -1,15 +1,19 @@
 from typing import Optional
 
 from .. import device, utils
-from ..errors import ToolError
+from ..errors import DeviceCommandError, DeviceConnectionError, ToolError
 from ..i18n import get_string
 
 
 def detect_slot(dev: device.DeviceController) -> Optional[str]:
     try:
         return dev.detect_active_slot()
-    except Exception as e:
+    except (DeviceCommandError, DeviceConnectionError) as e:
         raise ToolError(get_string("act_warn_slot_fail")) from e
+
+
+def get_slot_suffix(dev: device.DeviceController) -> str:
+    return detect_slot(dev) or ""
 
 
 def _safe_shell(
@@ -17,7 +21,7 @@ def _safe_shell(
 ) -> str:
     try:
         return dev.adb.shell(cmd)
-    except Exception as e:
+    except (DeviceCommandError, DeviceConnectionError) as e:
         if error_msg:
             utils.ui.echo(f"{error_msg}: {e}", err=True)
         return ""

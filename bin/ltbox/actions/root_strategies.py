@@ -413,7 +413,7 @@ class APatchStrategy(GkiRootStrategy):
                     tag=self.repo_config.get("tag", "latest"),
                 )
             return True
-        except Exception as e:
+        except (ToolError, OSError, zipfile.BadZipFile) as e:
             utils.ui.error(
                 get_string("apatch_download_failed").format(e=e, name=self.source_name)
             )
@@ -643,7 +643,7 @@ class LkmRootStrategy(InitBootRootStrategy):
             shutil.rmtree(temp_dl_dir)
             return True
 
-        except Exception as e:
+        except (ToolError, zipfile.BadZipFile, OSError) as e:
             utils.ui.error(f"{e}")
             utils.ui.error(get_string("err_download_workflow"))
             return False
@@ -670,7 +670,7 @@ class LkmRootStrategy(InitBootRootStrategy):
                             tag=resolved_tag, id=workflow_id
                         )
                     )
-                except Exception as e:
+                except (ToolError, ValueError) as e:
                     utils.ui.error(f"{e}")
                     utils.ui.error(get_string("err_download_workflow"))
                     return False

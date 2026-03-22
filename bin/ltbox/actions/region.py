@@ -5,16 +5,18 @@ from typing import Callable, List, Optional, Tuple
 
 from .. import constants as const
 from .. import device, utils
+from ..errors import ToolError
 from ..i18n import get_string
 from ..menu import TerminalMenu
 from ..patch.avb import (
     _apply_avb_integrity_footer,
+    _require_info_keys,
     extract_image_avb_info,
     rebuild_vbmeta_with_chained_images,
 )
 from ..patch.region import detect_country_codes, edit_vendor_boot, patch_country_codes
 from . import edl
-from .system import detect_slot
+from .system import get_slot_suffix
 
 
 def rebuild_vbmeta(
@@ -47,14 +49,11 @@ def rebuild_vbmeta(
         shutil.copy(src, dst)
 
         image_info = extract_image_avb_info(src)
-        for key in ["partition_size", "name", "rollback", "salt", "algorithm"]:
-            if key not in image_info:
-                if key == "partition_size" and "data_size" in image_info:
-                    image_info["partition_size"] = image_info["data_size"]
-                else:
-                    raise KeyError(
-                        get_string("img_err_missing_key").format(key=key, name=src.name)
-                    )
+        _require_info_keys(
+            image_info,
+            ["partition_size", "name", "rollback", "salt", "algorithm"],
+            src,
+        )
 
         _apply_avb_integrity_footer(dst, image_info, None)
         rebuilt_inputs.append(dst)
@@ -81,10 +80,9 @@ def rebuild_vbmeta(
     if not dev.skip_adb:
         dev.adb.wait_for_device()
 
-    active_slot = ""
     try:
-        active_slot = detect_slot(dev) or ""
-    except Exception:
+        active_slot = get_slot_suffix(dev)
+    except (ToolError, OSError):
         active_slot = ""
 
     on_log(get_string("rescue_reboot_edl"))
@@ -195,16 +193,11 @@ def convert_region_images(
 
     on_log(get_string("act_add_footer_vb"))
 
-    for key in ["partition_size", "name", "rollback", "salt", "algorithm"]:
-        if key not in vendor_boot_info:
-            if key == "partition_size" and "data_size" in vendor_boot_info:
-                vendor_boot_info["partition_size"] = vendor_boot_info["data_size"]
-            else:
-                raise KeyError(
-                    get_string("img_err_missing_key").format(
-                        key=key, name=vendor_boot_bak.name
-                    )
-                )
+    _require_info_keys(
+        vendor_boot_info,
+        ["partition_size", "name", "rollback", "salt", "algorithm"],
+        vendor_boot_bak,
+    )
 
     _apply_avb_integrity_footer(vendor_boot_patched, vendor_boot_info, None)
 
@@ -426,7 +419,7 @@ def rescue_after_ota(
             if not edit_vendor_boot(str(vb_path), copy_if_unchanged=False):
                 on_log(get_string("rescue_skip_no_change").format(slot=slot))
                 continue
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             on_log(get_string("rescue_skip_error").format(slot=slot, e=e))
             continue
 
@@ -441,18 +434,17 @@ def rescue_after_ota(
         on_log(get_string("rescue_remaking_vbmeta").format(slot=slot))
 
         vb_info = extract_image_avb_info(vb_path)
-        part_size = vb_info.get("partition_size", vb_info.get("data_size"))
-
-        if "partition_size" not in vb_info:
-            vb_info["partition_size"] = part_size
-        if "name" not in vb_info:
-            vb_info["name"] = "vendor_boot"
-        if "rollback" not in vb_info:
-            vb_info["rollback"] = "0"
-        if "salt" not in vb_info:
-            vb_info["salt"] = ""
-        if "algorithm" not in vb_info:
-            vb_info["algorithm"] = "SHA256_RSA4096"
+        _require_info_keys(
+            vb_info,
+            ["partition_size", "name", "rollback", "salt", "algorithm"],
+            vb_path,
+            defaults={
+                "name": "vendor_boot",
+                "rollback": "0",
+                "salt": "",
+                "algorithm": "SHA256_RSA4096",
+            },
+        )
 
         _apply_avb_integrity_footer(dest_vb, vb_info, None)
 

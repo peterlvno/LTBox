@@ -141,7 +141,7 @@ def detect_country_codes() -> Dict[str, Optional[str]]:
                         break
                 if results[filename]:
                     break
-        except Exception as e:
+        except OSError as e:
             utils.ui.error(get_string("img_det_err_read").format(name=filename, e=e))
 
     return results

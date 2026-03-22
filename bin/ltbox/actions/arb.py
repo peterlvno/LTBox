@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 from enum import Enum
 from pathlib import Path
 from typing import Tuple
@@ -12,7 +13,8 @@ from ..patch.avb import (
     patch_chained_image_rollback,
     patch_vbmeta_image_rollback,
 )
-from . import edl, system
+from . import edl
+from .system import get_slot_suffix
 
 
 class ArbStatus(str, Enum):
@@ -48,7 +50,7 @@ def read_anti_rollback(
         vbmeta_info = extract_image_avb_info(dumped_vbmeta_path)
         vbmeta_rollback = int(vbmeta_info.get("rollback", "0"))
 
-    except Exception as e:
+    except (FileNotFoundError, ValueError, subprocess.CalledProcessError) as e:
         width = utils.ui.get_term_width()
         utils.ui.error("\n" + "!" * width)
         utils.ui.error(get_string("act_err_arb_early_fw"))
@@ -81,7 +83,7 @@ def read_anti_rollback(
 
         new_vbmeta_info = extract_image_avb_info(new_vbmeta_img)
         new_vbmeta_rb = int(new_vbmeta_info.get("rollback", "0"))
-    except Exception as e:
+    except (ValueError, subprocess.CalledProcessError) as e:
         utils.ui.error(get_string("act_err_read_new_info").format(e=e))
         utils.ui.echo(get_string("act_arb_error"))
         return ArbStatus.ERROR, 0, 0
@@ -148,7 +150,7 @@ def patch_anti_rollback(comparison_result: Tuple[ArbStatus, int, int]) -> None:
         )
         utils.ui.echo("  " + "=" * width)
 
-    except Exception as e:
+    except (KeyError, subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
         utils.ui.error(get_string("act_err_arb_patch").format(e=e))
         shutil.rmtree(const.OUTPUT_ANTI_ROLLBACK_DIR)
 
@@ -156,8 +158,7 @@ def patch_anti_rollback(comparison_result: Tuple[ArbStatus, int, int]) -> None:
 def read_device_anti_rollback(dev: device.DeviceController) -> None:
     utils.ui.echo(get_string("act_start_arb"))
 
-    active_slot_suffix = system.detect_slot(dev)
-    suffix = active_slot_suffix if active_slot_suffix else ""
+    suffix = get_slot_suffix(dev)
     boot_target = f"boot{suffix}"
     vbmeta_target = f"vbmeta_system{suffix}"
 

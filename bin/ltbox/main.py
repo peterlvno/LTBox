@@ -89,7 +89,7 @@ class SettingsStore:
                 with open(self._path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return data if isinstance(data, dict) else {}
-            except Exception:
+            except (json.JSONDecodeError, OSError):
                 return {}
         return {}
 
@@ -414,7 +414,7 @@ def _is_running_as_admin() -> bool:
             return False
 
         return bool(windll.shell32.IsUserAnAdmin())
-    except Exception:
+    except (ImportError, OSError, AttributeError):
         return False
 
 
@@ -439,7 +439,7 @@ def _force_kill_processes(exe_names: List[str]) -> None:
                     getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
                 ),
             )
-        except Exception:
+        except (subprocess.CalledProcessError, OSError):
             pass
 
 
@@ -456,7 +456,7 @@ def _get_running_processes(exe_names: List[str]) -> List[str]:
         )
         tasklist_output = result.stdout.lower()
         return [name for name in exe_names if name.lower() in tasklist_output]
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
         return []
 
 

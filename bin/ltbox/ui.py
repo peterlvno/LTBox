@@ -26,6 +26,9 @@ class ConsoleUI:
     def error(self, message: str) -> None:
         self.echo(f"\033[91m{message}\033[0m", err=True)
 
+    def banner(self, char: str = "=", indent: str = "  ") -> str:
+        return f"{indent}{char * self.get_term_width()}"
+
     def box_output(self, lines: List[str], err: bool = False) -> None:
         self.echo("", err=err)
         for line in lines:

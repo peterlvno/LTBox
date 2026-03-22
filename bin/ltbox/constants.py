@@ -77,7 +77,7 @@ class LTBoxConfig:
                 with open(self.config_file, "r", encoding="utf-8") as f:
                     self._config_data = json.load(f)
                 self._loaded = True
-            except Exception as e:
+            except (json.JSONDecodeError, OSError) as e:
                 raise RuntimeError(
                     f"[!] Critical Error: Failed to load config.json: {e}"
                 )
@@ -272,34 +272,30 @@ QSAHARASERVER_EXE = CONF.qsaharaserver_exe
 EDL_EXE = CONF.edl_exe
 MAGISKBOOT_EXE = CONF.magiskboot_exe
 
-try:
-    KSU_APK_REPO = CONF.ksu_apk_repo
-    KSU_APK_TAG = CONF.ksu_apk_tag
-    SUKISU_REPO = CONF.sukisu_repo
-    SUKISU_WORKFLOW = CONF.sukisu_workflow
-    FOLKPATCH_REPO = CONF.apatch_repo
-    FOLKPATCH_TAG = CONF.apatch_tag
-    FOLKPATCH_WORKFLOW = CONF.apatch_workflow
-    RELEASE_OWNER = CONF.release_owner
-    RELEASE_REPO = CONF.release_repo
-    RELEASE_TAG = CONF.release_tag
-    REPO_URL = CONF.repo_url
-    ANYKERNEL_ZIP_FILENAME = CONF.anykernel_zip_filename
+KSU_APK_REPO = CONF.ksu_apk_repo
+KSU_APK_TAG = CONF.ksu_apk_tag
+SUKISU_REPO = CONF.sukisu_repo
+SUKISU_WORKFLOW = CONF.sukisu_workflow
+FOLKPATCH_REPO = CONF.apatch_repo
+FOLKPATCH_TAG = CONF.apatch_tag
+FOLKPATCH_WORKFLOW = CONF.apatch_workflow
+RELEASE_OWNER = CONF.release_owner
+RELEASE_REPO = CONF.release_repo
+RELEASE_TAG = CONF.release_tag
+REPO_URL = CONF.repo_url
+ANYKERNEL_ZIP_FILENAME = CONF.anykernel_zip_filename
 
-    EDL_LOADER_FILENAME = CONF.edl_loader_filename
-    EDL_LOADER_FILE = CONF.edl_loader_file
+EDL_LOADER_FILENAME = CONF.edl_loader_filename
+EDL_LOADER_FILE = CONF.edl_loader_file
 
-    PLATFORM_TOOLS_ZIP_URL = CONF.platform_tools_zip_url
-    AVB_ARCHIVE_URL = CONF.avb_archive_url
+PLATFORM_TOOLS_ZIP_URL = CONF.platform_tools_zip_url
+AVB_ARCHIVE_URL = CONF.avb_archive_url
 
-    ROW_PATTERN_DOT = CONF.row_pattern_dot
-    PRC_PATTERN_DOT = CONF.prc_pattern_dot
-    ROW_PATTERN_I = CONF.row_pattern_i
-    PRC_PATTERN_I = CONF.prc_pattern_i
+ROW_PATTERN_DOT = CONF.row_pattern_dot
+PRC_PATTERN_DOT = CONF.prc_pattern_dot
+ROW_PATTERN_I = CONF.row_pattern_i
+PRC_PATTERN_I = CONF.prc_pattern_i
 
-    KEY_MAP = CONF.key_map
-    COUNTRY_CODES = CONF.country_codes
-    SORTED_COUNTRY_CODES = CONF.sorted_country_codes
-
-except RuntimeError:
-    pass
+KEY_MAP = CONF.key_map
+COUNTRY_CODES = CONF.country_codes
+SORTED_COUNTRY_CODES = CONF.sorted_country_codes

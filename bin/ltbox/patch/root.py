@@ -7,6 +7,7 @@ from typing import Optional, Union
 
 from .. import constants as const
 from .. import device, downloader, utils
+from ..errors import ToolError
 from ..i18n import get_string
 
 
@@ -220,7 +221,7 @@ def patch_boot_with_root_algo(
                         return None
                     downloader.get_lkm_kernel_release(kmod_path, lkm_kernel_version)
 
-            except Exception as e:
+            except (ToolError, OSError) as e:
                 print(
                     get_string("img_root_lkm_download_fail").format(e=e),
                     file=sys.stderr,
@@ -293,6 +294,6 @@ def get_kernel_version(file_path: Union[str, Path]) -> Optional[str]:
             print(get_string("img_kv_err_parse"), file=sys.stderr)
             return None
 
-    except Exception as e:
+    except (UnicodeDecodeError, OSError) as e:
         print(get_string("unexpected_error").format(e=e), file=sys.stderr)
         return None

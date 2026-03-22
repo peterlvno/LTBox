@@ -154,84 +154,88 @@ def extract_archive_files(
     return extracted_paths
 
 
+def _find_non_testing_release(owner_repo: str, asset_pattern: str) -> Optional[dict]:
+    response = requests.get(
+        f"https://api.github.com/repos/{owner_repo}/releases",
+        params={"per_page": 10},
+    )
+    response.raise_for_status()
+
+    releases: list[dict] = []
+    try:
+        payload = response.json()
+        if isinstance(payload, list):
+            releases = payload
+    except ValueError:
+        releases = []
+
+    if not releases:
+        return None
+
+    first_non_testing_index = None
+    for index, release in enumerate(releases):
+        if release.get("draft"):
+            continue
+        body = release.get("body") or ""
+        if "TESTING" not in body:
+            first_non_testing_index = index
+            break
+
+    if first_non_testing_index is not None:
+        for release in releases[first_non_testing_index:]:
+            if release.get("draft"):
+                continue
+            if any(
+                re.match(asset_pattern, asset["name"])
+                for asset in release.get("assets", [])
+            ):
+                return release
+
+    return None
+
+
+def _fetch_release_data(owner_repo: str, tag: str, asset_pattern: str) -> dict:
+    if owner_repo.lower() == "wildkernels/gki_kernelsu_susfs" and (
+        not tag or tag.lower() == "latest"
+    ):
+        release_data = _find_non_testing_release(owner_repo, asset_pattern)
+        if release_data is not None:
+            return release_data
+
+    if not tag or tag.lower() == "latest":
+        api_url = f"https://api.github.com/repos/{owner_repo}/releases/latest"
+    else:
+        api_url = f"https://api.github.com/repos/{owner_repo}/releases/tags/{tag}"
+
+    response = requests.get(api_url)
+    response.raise_for_status()
+    return response.json()
+
+
+def _find_asset_by_pattern(release_data: dict, asset_pattern: str) -> dict:
+    target_asset = next(
+        (
+            asset
+            for asset in release_data.get("assets", [])
+            if re.match(asset_pattern, asset["name"])
+        ),
+        None,
+    )
+    if not target_asset:
+        raise ToolError(get_string("dl_err_download_tool").format(name=asset_pattern))
+    return target_asset
+
+
 def _download_github_asset(
     repo_url: str, tag: str, asset_pattern: str, dest_dir: Path
 ) -> Path:
-    import requests  # type: ignore[import-untyped]
     from requests.exceptions import RequestException  # type: ignore[import-untyped]
 
     owner_repo = _get_owner_repo(repo_url)
 
     try:
-        release_data = None
-        if owner_repo.lower() == "wildkernels/gki_kernelsu_susfs" and (
-            not tag or tag.lower() == "latest"
-        ):
-            releases_url = f"https://api.github.com/repos/{owner_repo}/releases"
-            response = requests.get(releases_url, params={"per_page": 10})
-            response.raise_for_status()
-
-            releases: list[dict] = []
-            try:
-                payload = response.json()
-                if isinstance(payload, list):
-                    releases = payload
-            except ValueError:
-                releases = []
-
-            if releases:
-                first_non_testing_index = None
-                for index, release in enumerate(releases):
-                    if release.get("draft"):
-                        continue
-                    body = release.get("body") or ""
-                    if "TESTING" not in body:
-                        first_non_testing_index = index
-                        break
-
-                if first_non_testing_index is not None:
-                    for release in releases[first_non_testing_index:]:
-                        if release.get("draft"):
-                            continue
-                        if any(
-                            re.match(asset_pattern, asset["name"])
-                            for asset in release.get("assets", [])
-                        ):
-                            release_data = release
-                            break
-
-            if release_data is None:
-                latest_url = (
-                    f"https://api.github.com/repos/{owner_repo}/releases/latest"
-                )
-                response = requests.get(latest_url)
-                response.raise_for_status()
-                release_data = response.json()
-        else:
-            if not tag or tag.lower() == "latest":
-                api_url = f"https://api.github.com/repos/{owner_repo}/releases/latest"
-            else:
-                api_url = (
-                    f"https://api.github.com/repos/{owner_repo}/releases/tags/{tag}"
-                )
-
-            response = requests.get(api_url)
-            response.raise_for_status()
-            release_data = response.json()
-
-        target_asset = next(
-            (
-                asset
-                for asset in release_data.get("assets", [])
-                if re.match(asset_pattern, asset["name"])
-            ),
-            None,
-        )
-
-        if not target_asset:
-            raise ToolError(
-                get_string("dl_err_download_tool").format(name=asset_pattern)
-            )
+        release_data = _fetch_release_data(owner_repo, tag, asset_pattern)
+        target_asset = _find_asset_by_pattern(release_data, asset_pattern)
 
         download_url = target_asset["browser_download_url"]
         filename = target_asset["name"]
@@ -557,9 +561,105 @@ def get_gki_kernel(kernel_version: str, work_dir: Path) -> Path:
         utils.ui.echo(get_string("dl_gki_extract_ok"))
         return kernel_image
 
-    except Exception as e:
+    except (ToolError, zipfile.BadZipFile, OSError) as e:
         utils.ui.echo(get_string("dl_gki_download_fail").format(version=tag))
         raise ToolError(str(e))
+
+
+def _download_manager_artifact(
+    base_url: str,
+    target_dir: Path,
+    manager_name: str,
+    manager_fallback_names: Optional[list[str]] = None,
+) -> None:
+    manager_zip = target_dir / manager_name
+
+    candidates = [manager_name]
+    if manager_fallback_names:
+        candidates.extend(
+            name for name in manager_fallback_names if name not in candidates
+        )
+
+    for candidate in candidates:
+        candidate_url = f"{base_url}/{candidate}"
+        candidate_path = target_dir / candidate
+        try:
+            download_resource(candidate_url, candidate_path)
+            if candidate_path != manager_zip:
+                if manager_zip.exists():
+                    manager_zip.unlink()
+                shutil.move(candidate_path, manager_zip)
+            return
+        except (ToolError, requests.RequestException, OSError):
+            if candidate_path.exists():
+                candidate_path.unlink()
+            continue
+
+    raise ToolError(f"Failed to download manager artifact (tried: {candidates})")
+
+
+def _download_ksuinit_artifact(
+    base_url: str,
+    repo: str,
+    workflow_id: str,
+    target_dir: Path,
+    ksuinit_variants: Optional[list[str]] = None,
+    download_all_ksuinit: bool = False,
+) -> None:
+    ksuinit_dest = target_dir / "ksuinit"
+
+    artifact_names: list[str] = []
+    if download_all_ksuinit:
+        try:
+            owner_repo = _get_owner_repo(repo)
+            artifact_names = _get_workflow_run_artifacts(owner_repo, workflow_id)
+        except ToolError:
+            artifact_names = []
+
+    candidates = (
+        [name for name in artifact_names if name.startswith("ksuinit")]
+        if artifact_names
+        else (ksuinit_variants or ["ksuinit"])
+    )
+
+    preferred = ["ksuinit", "ksuinit-aarch64-linux-android"]
+    candidates.sort(
+        key=lambda name: preferred.index(name) if name in preferred else len(preferred)
+    )
+
+    downloaded = False
+    for variant in candidates:
+        ksuinit_url = f"{base_url}/{variant}.zip"
+        temp_zip = target_dir / f"temp_{variant}.zip"
+        try:
+            download_resource(ksuinit_url, temp_zip)
+
+            with zipfile.ZipFile(temp_zip, "r") as zf:
+                for member in zf.namelist():
+                    if member.endswith("ksuinit"):
+                        with zf.open(member) as src, open(ksuinit_dest, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+                        downloaded = True
+                        if download_all_ksuinit:
+                            variant_name = variant.replace("/", "_")
+                            variant_dest = target_dir / f"{variant_name}.ksuinit"
+                            with (
+                                zf.open(member) as src,
+                                open(variant_dest, "wb") as dst,
+                            ):
+                                shutil.copyfileobj(src, dst)
+                        break
+            temp_zip.unlink()
+
+            if downloaded and not download_all_ksuinit:
+                break
+        except (ToolError, requests.RequestException, zipfile.BadZipFile, OSError):
+            if temp_zip.exists():
+                temp_zip.unlink()
+            continue
+
+    if not downloaded:
+        raise ToolError(get_string("dl_err_ksuinit_download_variants"))
 
 
 def download_nightly_artifacts(
@@ -574,8 +674,6 @@ def download_nightly_artifacts(
 ):
     base_url = f"https://nightly.link/{repo}/actions/runs/{workflow_id}"
 
-    lkm_url = f"{base_url}/{mapped_name}-lkm.zip"
-
     manager_zip = target_dir / manager_name
     ksuinit_dest = target_dir / "ksuinit"
     lkm_dest = target_dir / "lkm.zip"
@@ -585,104 +683,24 @@ def download_nightly_artifacts(
     )
 
     try:
-        manager_candidates = [manager_name]
-        if manager_fallback_names:
-            manager_candidates.extend(
-                name
-                for name in manager_fallback_names
-                if name not in manager_candidates
-            )
-
-        manager_downloaded = False
-        for candidate in manager_candidates:
-            candidate_url = f"{base_url}/{candidate}"
-            candidate_path = target_dir / candidate
-            try:
-                download_resource(candidate_url, candidate_path)
-                if candidate_path != manager_zip:
-                    if manager_zip.exists():
-                        manager_zip.unlink()
-                    shutil.move(candidate_path, manager_zip)
-                manager_downloaded = True
-                break
-            except Exception:
-                if candidate_path.exists():
-                    candidate_path.unlink()
-                continue
-
-        if not manager_downloaded:
-            raise ToolError(
-                f"Failed to download manager artifact (tried: {manager_candidates})"
-            )
-
-        artifact_names: list[str] = []
-        if download_all_ksuinit:
-            try:
-                owner_repo = _get_owner_repo(repo)
-                artifact_names = _get_workflow_run_artifacts(owner_repo, workflow_id)
-            except ToolError:
-                artifact_names = []
-
-        ksuinit_candidates = (
-            [name for name in artifact_names if name.startswith("ksuinit")]
-            if artifact_names
-            else (ksuinit_variants or ["ksuinit"])
+        _download_manager_artifact(
+            base_url, target_dir, manager_name, manager_fallback_names
         )
-
-        preferred = [
-            "ksuinit",
-            "ksuinit-aarch64-linux-android",
-        ]
-        ksuinit_candidates.sort(
-            key=lambda name: (
-                preferred.index(name) if name in preferred else len(preferred)
-            )
+        _download_ksuinit_artifact(
+            base_url,
+            repo,
+            workflow_id,
+            target_dir,
+            ksuinit_variants,
+            download_all_ksuinit,
         )
-
-        ksuinit_downloaded = False
-        for variant in ksuinit_candidates:
-            ksuinit_url = f"{base_url}/{variant}.zip"
-            temp_ksuinit_zip = target_dir / f"temp_{variant}.zip"
-            try:
-                download_resource(ksuinit_url, temp_ksuinit_zip)
-
-                with zipfile.ZipFile(temp_ksuinit_zip, "r") as zf:
-                    for member in zf.namelist():
-                        if member.endswith("ksuinit"):
-                            with (
-                                zf.open(member) as src,
-                                open(ksuinit_dest, "wb") as dst,
-                            ):
-                                shutil.copyfileobj(src, dst)
-                            ksuinit_downloaded = True
-                            if download_all_ksuinit:
-                                variant_name = variant.replace("/", "_")
-                                variant_dest = target_dir / f"{variant_name}.ksuinit"
-                                with (
-                                    zf.open(member) as src,
-                                    open(variant_dest, "wb") as dst,
-                                ):
-                                    shutil.copyfileobj(src, dst)
-                            break
-                temp_ksuinit_zip.unlink()
-
-                if ksuinit_downloaded and not download_all_ksuinit:
-                    break
-            except Exception:
-                if temp_ksuinit_zip.exists():
-                    temp_ksuinit_zip.unlink()
-                continue
-
-        if not ksuinit_downloaded:
-            raise ToolError(get_string("dl_err_ksuinit_download_variants"))
-
-        download_resource(lkm_url, lkm_dest)
+        download_resource(f"{base_url}/{mapped_name}-lkm.zip", lkm_dest)
 
         utils.ui.echo(
             get_string("dl_download_success").format(filename="All Artifacts")
         )
 
-    except Exception as e:
+    except (ToolError, requests.RequestException, zipfile.BadZipFile, OSError) as e:
         if manager_zip.exists():
             manager_zip.unlink()
         if ksuinit_dest.exists():
@@ -912,7 +930,7 @@ def install_base_tools(lang_code: str = "en"):
         ensure_avb_tools()
 
         utils.ui.echo(get_string("dl_base_complete"))
-    except Exception as e:
+    except (ToolError, OSError) as e:
         msg = get_string("dl_base_error").format(error=e)
         utils.ui.error(msg)
         input(get_string("press_enter_to_exit"))

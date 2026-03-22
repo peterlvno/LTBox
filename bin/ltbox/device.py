@@ -36,7 +36,7 @@ class BaseDeviceManager:
                     getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
                 ),
             )
-        except Exception:
+        except (subprocess.CalledProcessError, OSError):
             pass
 
     def _force_kill_processes(self, exe_names: List[str]) -> None:
@@ -69,7 +69,7 @@ class AdbManager(BaseDeviceManager):
             return None
         try:
             device = self._get_device()
-        except Exception as e:
+        except AdbError as e:
             raise DeviceConnectionError(
                 get_string("device_err_wait_adb").format(e=e), e
             )
@@ -101,7 +101,7 @@ class AdbManager(BaseDeviceManager):
                 for d in adbutils.adb.device_list():
                     if d.get_state() == "device":
                         return True
-            except Exception:
+            except (AdbError, OSError):
                 pass
             return False
 
@@ -123,7 +123,7 @@ class AdbManager(BaseDeviceManager):
     def get_model(self) -> Optional[str]:
         try:
             return self._with_device(lambda d: d.prop.model)
-        except Exception as e:
+        except (DeviceConnectionError, AdbError) as e:
             raise DeviceConnectionError(
                 get_string("device_err_get_model").format(e=e), e
             )
@@ -136,7 +136,7 @@ class AdbManager(BaseDeviceManager):
                 return suffix if suffix in ["_a", "_b"] else None
 
             return self._with_device(_read_suffix)
-        except Exception as e:
+        except (DeviceConnectionError, AdbError) as e:
             raise DeviceConnectionError(
                 get_string("device_err_get_slot").format(e=e), e
             )
@@ -166,7 +166,7 @@ class AdbManager(BaseDeviceManager):
                 )
             print(get_string("dl_lkm_kver_found").format(ver=ver))
             return ver
-        except Exception as e:
+        except (DeviceConnectionError, DeviceCommandError, AdbError) as e:
             raise DeviceCommandError(
                 get_string("dl_lkm_kver_fail").format(ver=str(e)), e
             )
@@ -184,20 +184,20 @@ class AdbManager(BaseDeviceManager):
                         with device.open_transport() as c:
                             c.send_command("reboot:edl")
                             c.check_okay()
-                    except Exception:
+                    except (AdbError, OSError):
                         device.shell("reboot edl")
                 elif target == "bootloader":
                     try:
                         with device.open_transport() as c:
                             c.send_command("reboot:bootloader")
                             c.check_okay()
-                    except Exception:
+                    except (AdbError, OSError):
                         device.shell("reboot bootloader")
                 else:
                     device.shell(f"reboot {target}")
 
             self._with_device(_reboot)
-        except Exception as e:
+        except (DeviceConnectionError, DeviceCommandError, AdbError) as e:
             raise DeviceCommandError(get_string("device_err_reboot").format(e=e), e)
 
     def install(self, apk_path: str) -> None:
@@ -308,7 +308,7 @@ class EdlManager(BaseDeviceManager):
             ctypes.windll.kernel32.SetThreadExecutionState(
                 es_continuous | es_system_required | es_awaymode_required
             )
-        except Exception:
+        except (OSError, AttributeError):
             yield
             return
 
@@ -317,7 +317,7 @@ class EdlManager(BaseDeviceManager):
         finally:
             try:
                 ctypes.windll.kernel32.SetThreadExecutionState(es_continuous)
-            except Exception:
+            except (OSError, AttributeError):
                 pass
 
     def check_device(self, silent: bool = False) -> Optional[str]:
@@ -611,7 +611,7 @@ class DeviceController:
         if not self.skip_adb:
             try:
                 self.adb.reboot("bootloader")
-            except Exception as e:
+            except (DeviceCommandError, AdbError) as e:
                 ui.warn(get_string("act_err_reboot_bl").format(e=e))
 
         self.fastboot.wait_for_device()
@@ -669,7 +669,7 @@ class DeviceController:
         if load_programmer:
             try:
                 self.edl.load_programmer_safe(port, const.EDL_LOADER_FILE)
-            except Exception as e:
+            except (DeviceCommandError, FileNotFoundError) as e:
                 ui.warn(get_string("act_warn_prog_load").format(e=e))
 
         try:
@@ -688,7 +688,7 @@ class DeviceController:
                     ui.info(get_string("device_resetting"))
                     self.edl.reset(port)
                     ui.info(get_string("act_reset_sent"))
-                except Exception as e:
+                except (DeviceCommandError, OSError) as e:
                     ui.error(get_string("act_err_reset").format(e=e))
                 if post_sleep > 0:
                     ui.info(get_string("act_wait_stability_long"))

@@ -26,7 +26,7 @@ def get_available_languages() -> List[Tuple[str, str]]:
                 temp_lang = json.load(lang_file)
                 lang_name = temp_lang.get("_lang", lang_code)
                 languages.append((lang_code, lang_name))
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             languages.append((lang_code, lang_code))
 
     languages.sort(key=lambda x: (0 if x[0] == "en" else 1, x[1].lower()))
@@ -41,7 +41,7 @@ def load_lang(lang_code: str = "en"):
         try:
             with open(fallback_file, "r", encoding="utf-8") as f:
                 _fallback_data = json.load(f)
-        except Exception as e:
+        except (json.JSONDecodeError, OSError) as e:
             print(f"[!] Failed to load fallback language en.json: {e}", file=sys.stderr)
             _fallback_data = {}
 
@@ -52,7 +52,7 @@ def load_lang(lang_code: str = "en"):
         try:
             with open(lang_file, "r", encoding="utf-8") as f:
                 _lang_data = json.load(f)
-        except Exception as e:
+        except (json.JSONDecodeError, OSError) as e:
             print(
                 f"[!] Failed to load language {lang_code}, using fallback: {e}",
                 file=sys.stderr,

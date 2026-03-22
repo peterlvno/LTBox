@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import time
+import urllib.error
 import urllib.request
 import functools
 import warnings
@@ -45,7 +46,7 @@ def get_latest_release_versions(
                             latest_release, tag
                         ):
                             latest_release = tag
-    except Exception:
+    except (urllib.error.URLError, json.JSONDecodeError, OSError):
         return None, None
     return latest_release, latest_prerelease
 

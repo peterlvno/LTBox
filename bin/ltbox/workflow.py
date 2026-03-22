@@ -7,7 +7,13 @@ from . import actions
 from . import constants as const
 from . import device, utils
 from .context import TaskContext
-from .errors import DeviceError, LTBoxError, UserCancelError
+from .errors import (
+    DeviceCommandError,
+    DeviceConnectionError,
+    DeviceError,
+    LTBoxError,
+    UserCancelError,
+)
 from .i18n import get_string
 from .logger import logging_context
 
@@ -39,7 +45,7 @@ def _populate_device_info(ctx: TaskContext) -> None:
             ctx.device_model = ctx.dev.adb.get_model()
             if not ctx.device_model:
                 raise DeviceError(get_string("wf_err_adb_model"))
-        except Exception as e:
+        except (DeviceConnectionError, DeviceCommandError) as e:
             raise DeviceError(get_string("wf_err_get_model").format(e=e), e)
 
 

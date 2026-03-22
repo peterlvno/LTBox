@@ -60,7 +60,7 @@ def get_partition_params(
                         "source_xml": xml_path.name,
                         "size_in_kb": prog.get("size_in_KB"),
                     }
-        except Exception as e:
+        except (ET.ParseError, OSError) as e:
             print(get_string("act_xml_parse_err").format(name=xml_path.name, e=e))
 
     return None
