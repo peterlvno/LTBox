@@ -6,6 +6,15 @@ from .utils import ui
 
 SEPARATOR_TEXT = "-" * 12
 
+_LOGO_LINES = [
+    "██╗  ████████╗██████╗  ██████╗ ██╗  ██╗",
+    "██║  ╚══██╔══╝██╔══██╗██╔═══██╗╚██╗██╔╝",
+    "██║     ██║   ██████╔╝██║   ██║ ╚███╔╝ ",
+    "██║     ██║   ██╔══██╗██║   ██║ ██╔██╗ ",
+    "███████╗██║   ██████╔╝╚██████╔╝██╔╝ ██╗",
+    "╚══════╝╚═╝   ╚═════╝  ╚═════╝ ╚═╝  ╚═╝",
+]
+
 try:
     import questionary
     from questionary import Choice, Separator
@@ -45,9 +54,17 @@ class TerminalMenu:
     def _render_header(self) -> None:
         width = ui.get_term_width()
         ui.clear()
-        ui.echo("\n" + "=" * width)
-        ui.echo(f"   {self._display_title()}")
-        ui.echo("=" * width + "\n")
+        if self.breadcrumbs is None:
+            ui.echo("\n" + "=" * width)
+            ui.echo("")
+            for line in _LOGO_LINES:
+                ui.echo(line.center(width))
+            ui.echo("")
+            ui.echo("=" * width + "\n")
+        else:
+            ui.echo("\n" + "=" * width)
+            ui.echo(f"   {self._display_title()}")
+            ui.echo("=" * width + "\n")
 
     def show(self) -> None:
         self._render_header()
