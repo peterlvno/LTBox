@@ -135,6 +135,7 @@
   "act_install_ksu": "[*] 正在安装 {name}...",
   "act_invalid_selection": "无效选择。",
   "act_ksu_ok": "[+] APK 已安装。",
+  "act_manager_apk_manual_install": "[!] 管理器 APK 无法自动安装。\n    Root 已完成，请手动安装: {path}",
   "act_manager_apk_not_found": "未找到 Manager APK。跳过安装。",
   "act_manual_edl": "  [需要操作] 请手动进入 EDL 模式。",
   "act_manual_edl_hint": "  (使用组合键或 Fastboot 菜单)",

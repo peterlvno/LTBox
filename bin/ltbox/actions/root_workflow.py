@@ -152,6 +152,7 @@ def patch_and_flash_root(
 
     if hasattr(strategy, "configure_source"):
         strategy.configure_source()
+        utils.ui.clear()
 
     utils.ui.echo(get_string("act_clean_dir").format(dir=strategy.log_output_dir_name))
     utils.recreate_dir(strategy.output_dir)
@@ -410,6 +411,7 @@ def root_device(
 
     if hasattr(strategy, "configure_source"):
         strategy.configure_source()
+        utils.ui.clear()
 
     _prepare_root_env(strategy)
 
@@ -423,7 +425,7 @@ def root_device(
         utils.ui.error(get_string("err_download_resources_abort"))
         return
 
-    _install_manager_apk(dev)
+    apk_installed = _install_manager_apk(dev)
 
     suffix = get_slot_suffix(dev)
 
@@ -452,6 +454,9 @@ def root_device(
     utils.ui.error(get_string("act_root_warn_brick"))
     utils.ui.echo("!" * width + "\n")
     utils.ui.echo(get_string("act_root_finish"))
+
+    if not apk_installed:
+        _move_manager_apk_to_base()
 
 
 def unroot_device(dev: device.DeviceController) -> None:
@@ -641,7 +646,7 @@ def sign_and_flash_recovery(dev: device.DeviceController) -> None:
     utils.ui.echo(get_string("act_success"))
 
 
-def _install_manager_apk(dev: device.DeviceController):
+def _install_manager_apk(dev: device.DeviceController) -> bool:
     manager_apk = const.TOOLS_DIR / "manager.apk"
 
     width = utils.ui.get_term_width()
@@ -650,18 +655,31 @@ def _install_manager_apk(dev: device.DeviceController):
 
     if not manager_apk.exists():
         utils.ui.error(get_string("act_manager_apk_not_found"))
-        return
+        utils.ui.echo("-" * width + "\n")
+        return False
 
     if dev.skip_adb:
         utils.ui.echo(get_string("act_adb_skipped_manual_install"))
         utils.ui.echo(get_string("act_file_location").format(path=manager_apk))
-        return
+        utils.ui.echo("-" * width + "\n")
+        return True
 
     utils.ui.echo(get_string("act_wait_sys_adb"))
     try:
         dev.adb.wait_for_device()
         dev.adb.install(manager_apk)
         utils.ui.echo(get_string("act_ksu_ok"))
-    except (DeviceCommandError, DeviceConnectionError, OSError) as e:
+        utils.ui.echo("-" * width + "\n")
+        return True
+    except Exception as e:
         utils.ui.error(get_string("act_err_ksu").format(e=e))
-    utils.ui.echo("-" * width + "\n")
+        utils.ui.echo("-" * width + "\n")
+        return False
+
+
+def _move_manager_apk_to_base():
+    manager_apk = const.TOOLS_DIR / "manager.apk"
+    if manager_apk.exists():
+        dest = const.BASE_DIR / "manager.apk"
+        shutil.move(str(manager_apk), str(dest))
+        utils.ui.echo(get_string("act_manager_apk_manual_install").format(path=dest))

@@ -135,6 +135,7 @@
   "act_install_ksu": "[*] {name} 설치 중...",
   "act_invalid_selection": "잘못된 선택입니다.",
   "act_ksu_ok": "[+] APK 설치됨.",
+  "act_manager_apk_manual_install": "[!] 매니저 APK를 자동으로 설치하지 못했습니다.\n    루팅은 완료되었습니다. 다음 파일을 수동으로 설치하세요: {path}",
   "act_manager_apk_not_found": "Manager APK를 찾을 수 없습니다. 설치를 건너뜁니다.",
   "act_manual_edl": "  [조치 필요] 수동으로 EDL 모드로 부팅하세요.",
   "act_manual_edl_hint": "(키 조합 또는 Fastboot 메뉴 사용)",

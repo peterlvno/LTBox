@@ -135,6 +135,7 @@
   "act_install_ksu": "[*] Installing {name}...",
   "act_invalid_selection": "Invalid selection.",
   "act_ksu_ok": "[+] APK installed.",
+  "act_manager_apk_manual_install": "[!] The manager APK could not be installed automatically.\n    Root is complete. Please manually install: {path}",
   "act_manager_apk_not_found": "Manager APK not found. Skipping installation.",
   "act_manual_edl": "  [ACTION REQUIRED] Manually boot into EDL.",
   "act_manual_edl_hint": "  (Use Key Combo or Fastboot menu)",

@@ -135,6 +135,7 @@
   "act_install_ksu": "[*] Установка {name}...",
   "act_invalid_selection": "Неверный выбор.",
   "act_ksu_ok": "[+] APK установлен.",
+  "act_manager_apk_manual_install": "[!] Не удалось установить APK менеджера автоматически.\n    Root завершён. Установите вручную: {path}",
   "act_manager_apk_not_found": "Manager APK не найден. Пропуск установки.",
   "act_manual_edl": "  [ТРЕБУЕТСЯ ДЕЙСТВИЕ] Вход в режим EDL вручную.",
   "act_manual_edl_hint": "  (Используйте сочетание клавиш или меню Fastboot)",

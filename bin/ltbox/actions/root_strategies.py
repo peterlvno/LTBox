@@ -426,6 +426,7 @@ class APatchStrategy(GkiRootStrategy):
     ) -> Optional[Path]:
         magiskboot_exe = const.MAGISKBOOT_EXE
 
+        utils.ui.clear()
         utils.ui.echo(
             "\n"
             + get_string("apatch_superkey_requirement").format(name=self.source_name)
