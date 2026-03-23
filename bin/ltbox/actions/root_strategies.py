@@ -404,12 +404,14 @@ class APatchStrategy(GkiRootStrategy):
                     self.workflow_id,
                     self._staging_dir,
                     repo=self.repo_config.get("repo", ""),
+                    name=self.source_name,
                 )
             else:
                 downloader.download_apatch_release(
                     self._staging_dir,
                     repo=self.repo_config.get("repo", ""),
                     tag=self.repo_config.get("tag", "latest"),
+                    name=self.source_name,
                 )
             return True
         except (ToolError, OSError, zipfile.BadZipFile) as e:

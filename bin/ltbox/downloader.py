@@ -633,8 +633,10 @@ def get_lkm_kernel_release(
         raise ToolError(str(e))
 
 
-def download_apatch_release(target_dir: Path, repo: str = "", tag: str = "latest"):
-    utils.ui.echo(get_string("dl_apatch_stable_downloading"))
+def download_apatch_release(
+    target_dir: Path, repo: str = "", tag: str = "latest", name: str = "APatch"
+):
+    utils.ui.echo(get_string("dl_apatch_stable_downloading").format(name=name))
     apk_path = target_dir / "FolkPatch.apk"
     _download_and_move_github_asset(
         repo or const.FOLKPATCH_REPO,
@@ -645,9 +647,13 @@ def download_apatch_release(target_dir: Path, repo: str = "", tag: str = "latest
     _extract_apatch_kpimg(apk_path, target_dir)
 
 
-def download_apatch_nightly(workflow_id: str, target_dir: Path, repo: str = ""):
+def download_apatch_nightly(
+    workflow_id: str, target_dir: Path, repo: str = "", name: str = "APatch"
+):
     utils.ui.echo(
-        get_string("dl_apatch_nightly_downloading").format(workflow_id=workflow_id)
+        get_string("dl_apatch_nightly_downloading").format(
+            name=name, workflow_id=workflow_id
+        )
     )
     repo = repo or const.FOLKPATCH_REPO
     artifact_names = _get_workflow_run_artifacts(repo, workflow_id)
@@ -658,7 +664,7 @@ def download_apatch_nightly(workflow_id: str, target_dir: Path, repo: str = ""):
     if not target_artifact:
         raise ToolError(
             get_string("dl_err_apatch_artifact_missing").format(
-                workflow_id=workflow_id, artifacts=artifact_names
+                name=name, workflow_id=workflow_id, artifacts=artifact_names
             )
         )
 
