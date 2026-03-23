@@ -522,6 +522,11 @@ def entry_point() -> None:
         is_info_mode = len(sys.argv) > 1 and sys.argv[1].lower() == "info"
         singleton_mutex = _prepare_environment()
         lang_code = _setup_language(is_info_mode)
+
+        if is_info_mode:
+            _init_and_run(is_info_mode, lang_code)
+            return
+
         if not singleton_mutex:
             ui.clear()
             ui.error(get_string("err_already_running"))
