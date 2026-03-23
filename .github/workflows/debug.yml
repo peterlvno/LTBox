@@ -105,3 +105,11 @@ jobs:
           "### Debug Build Artifacts" >> $env:GITHUB_STEP_SUMMARY
           "- Archive: $archive ($([Math]::Round($archiveInfo.Length / 1MB, 2)) MB)" >> $env:GITHUB_STEP_SUMMARY
           "- Checksum: $checksum" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-build-${{ env.SHORT_SHA }}
+          path: |
+            LTBox-win_amd64-${{ env.SHORT_SHA }}.zip
+            LTBox-win_amd64-${{ env.SHORT_SHA }}.zip.sha256
