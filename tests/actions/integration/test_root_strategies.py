@@ -11,6 +11,7 @@ from ltbox.actions.root_strategies import (
 )
 
 from .fixtures import (
+    _copy_bundled_kptools,
     _copy_bundled_magiskboot,
     _prepare_mock_dirs,
     _run_patch_with_fail_context,
@@ -75,6 +76,8 @@ def test_root_patch_strategies(
 
     with patch.multiple("ltbox.constants", **mock_dirs):
         _copy_bundled_magiskboot(mock_dirs["TOOLS_DIR"])
+        if strategy_cls is APatchStrategy:
+            _copy_bundled_kptools(mock_dirs["TOOLS_DIR"])
 
         strategy = strategy_cls()
 

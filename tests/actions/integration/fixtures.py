@@ -6,9 +6,9 @@ from typing import Any, Optional, TypedDict
 
 import pytest
 
-MAGISKBOOT_PATH = (
-    Path(__file__).resolve().parents[3] / "bin" / "tools" / "magiskboot.exe"
-)
+_REAL_TOOLS_DIR = Path(__file__).resolve().parents[3] / "bin" / "tools"
+MAGISKBOOT_PATH = _REAL_TOOLS_DIR / "magiskboot.exe"
+KPTOOLS_PATH = _REAL_TOOLS_DIR / "kptools.exe"
 
 
 class RootSetupContext(TypedDict):
@@ -67,6 +67,15 @@ def _copy_bundled_magiskboot(tools_dir: Path) -> Path:
     for dll_file in MAGISKBOOT_PATH.parent.glob("*.dll"):
         shutil.copy(dll_file, tools_dir / dll_file.name)
     return magiskboot_exe
+
+
+def _copy_bundled_kptools(tools_dir: Path) -> Path:
+    if not KPTOOLS_PATH.exists():
+        pytest.skip("kptools.exe not found in bin/tools. Bundle it via CI first.")
+
+    kptools_exe = tools_dir / "kptools.exe"
+    shutil.copy(KPTOOLS_PATH, kptools_exe)
+    return kptools_exe
 
 
 def _run_patch_with_fail_context(
