@@ -440,6 +440,7 @@ class APatchStrategy(GkiRootStrategy):
                 break
             utils.ui.error(get_string("apatch_superkey_invalid"))
 
+        utils.ui.clear()
         kpimg_src = self._staging_dir / "kpimg"
         if kpimg_src.exists():
             import shutil
