@@ -7,7 +7,7 @@ set "MAIN_PY=%~dp0bin\run.py"
 
 if not exist "%PYTHON_EXE%" (
     echo [!] Python not found at: %PYTHON_EXE%
-    echo [!] Please run install.bat or start.bat first.
+    echo [!] Please re-download or re-extract the LTBox release package.
     pause
     goto :eof
 )

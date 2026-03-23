@@ -46,7 +46,7 @@ def patch_boot_with_root_algo(
             )
             return None
 
-        kptools_exe = const.DOWNLOAD_DIR / "kptools.exe"
+        kptools_exe = const.TOOLS_DIR / "kptools.exe"
         kpimg_file = work_dir / "kpimg"
 
         utils.ui.echo(

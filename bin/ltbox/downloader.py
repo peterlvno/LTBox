@@ -1,7 +1,5 @@
-import platform
 import re
 import shutil
-import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -18,7 +16,6 @@ from . import constants as const
 from . import net, utils
 from .errors import ToolError
 from .i18n import get_string
-from .i18n import load_lang as i18n_load_lang
 
 
 def _get_owner_repo(repo_url: str) -> str:
@@ -368,159 +365,6 @@ def get_latest_tagged_workflow_run(
     return run_id, resolved_tag
 
 
-def _ensure_tool_from_github_release(
-    tool_name: str,
-    exe_name_in_zip: str,
-    repo_url: str,
-    tag: str,
-    asset_patterns: Dict[str, str],
-) -> Path:
-    tool_exe = const.DOWNLOAD_DIR / f"{tool_name}.exe"
-    if tool_exe.exists():
-        return tool_exe
-
-    utils.ui.echo(get_string("dl_tool_not_found").format(tool_name=tool_exe.name))
-    const.DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-    arch = platform.machine()
-    asset_pattern = asset_patterns.get(arch)
-    if not asset_pattern:
-        msg = get_string("dl_unsupported_arch").format(arch=arch, tool_name=tool_name)
-        utils.ui.error(msg)
-        raise ToolError(msg)
-
-    msg = get_string("dl_detect_arch").format(arch=arch, pattern=asset_pattern)
-    utils.ui.echo(msg)
-
-    try:
-        downloaded_zip_path = _download_github_asset(
-            repo_url, tag, asset_pattern, const.DOWNLOAD_DIR
-        )
-
-        with zipfile.ZipFile(downloaded_zip_path, "r") as zip_ref:
-            exe_info = None
-            for member in zip_ref.infolist():
-                if member.filename.endswith(exe_name_in_zip):
-                    exe_info = member
-                    break
-
-            if not exe_info:
-                raise FileNotFoundError(
-                    get_string("dl_err_exe_in_zip_not_found").format(
-                        exe_name=exe_name_in_zip, zip_name=downloaded_zip_path.name
-                    )
-                )
-
-            extracted_path = const.DOWNLOAD_DIR / Path(exe_info.filename).name
-            _extract_zip_member(zip_ref, exe_info, extracted_path)
-
-            if extracted_path != tool_exe:
-                shutil.move(extracted_path, tool_exe)
-
-        downloaded_zip_path.unlink()
-        utils.ui.echo(get_string("dl_tool_success").format(tool_name=tool_name))
-        return tool_exe
-
-    except (FileNotFoundError, zipfile.BadZipFile, OSError, ToolError) as e:
-        msg_err = get_string("dl_tool_failed").format(tool_name=tool_name, error=e)
-        utils.ui.error(msg_err)
-        raise ToolError(msg_err)
-
-
-def ensure_platform_tools() -> None:
-    if const.ADB_EXE.exists() and const.FASTBOOT_EXE.exists():
-        return
-
-    utils.ui.echo(get_string("dl_platform_not_found"))
-    const.DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    temp_zip_path = const.DOWNLOAD_DIR / "platform-tools.zip"
-
-    settings = const.load_settings_raw()
-    url = settings.get("tools", {}).get("platform_tools_url")
-    download_resource(url, temp_zip_path)
-
-    try:
-        with zipfile.ZipFile(temp_zip_path) as zf:
-            for member in zf.infolist():
-                if member.is_dir():
-                    continue
-
-                if re.match(r"^platform-tools/[^/]+$", member.filename):
-                    file_name = Path(member.filename).name
-                    target_path = const.DOWNLOAD_DIR / file_name
-                    _extract_zip_member(zf, member, target_path)
-
-        temp_zip_path.unlink()
-        utils.ui.echo(get_string("dl_platform_success"))
-
-    except (zipfile.BadZipFile, OSError, IOError) as e:
-        msg_err = get_string("dl_platform_failed").format(error=e)
-        utils.ui.error(msg_err)
-        if temp_zip_path.exists():
-            temp_zip_path.unlink()
-        raise ToolError(msg_err)
-
-
-def ensure_avb_tools() -> None:
-    key1 = const.DOWNLOAD_DIR / "testkey_rsa4096.pem"
-    key2 = const.DOWNLOAD_DIR / "testkey_rsa2048.pem"
-
-    if const.AVBTOOL_PY.exists() and key1.exists() and key2.exists():
-        return
-
-    utils.ui.echo(get_string("dl_avb_not_found"))
-    const.DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    temp_tar_path = const.DOWNLOAD_DIR / "avb.tar.gz"
-    temp_zip_path = const.DOWNLOAD_DIR / "avb.zip"
-
-    settings = const.load_settings_raw()
-    files_to_extract = {
-        "avbtool.py": const.AVBTOOL_PY,
-        "test/data/testkey_rsa4096.pem": key1,
-        "test/data/testkey_rsa2048.pem": key2,
-    }
-
-    url = settings.get("tools", {}).get("avb_archive_url")
-    fallback_archive_url = settings.get("tools", {}).get(
-        "avb_fallback_archive_url",
-        "https://github.com/LineageOS/android_external_avb/archive/refs/heads/lineage-23.2.zip",
-    )
-
-    try:
-        download_resource(
-            url,
-            temp_tar_path,
-            timeout=10,
-            retries=0,
-            backoff=0,
-        )
-        extract_archive_files(temp_tar_path, files_to_extract)
-    except ToolError:
-        utils.ui.echo(get_string("dl_avb_fallback_repo"))
-        try:
-            download_resource(
-                fallback_archive_url,
-                temp_zip_path,
-                timeout=10,
-                retries=0,
-                backoff=0,
-            )
-            extract_archive_files(temp_zip_path, files_to_extract)
-        except (ToolError, OSError) as e:
-            raise ToolError(get_string("dl_err_extract_tool").format(name="avb")) from e
-    finally:
-        if temp_tar_path.exists():
-            temp_tar_path.unlink()
-        if temp_zip_path.exists():
-            temp_zip_path.unlink()
-
-    missing = [path.name for path in files_to_extract.values() if not path.exists()]
-    if missing:
-        raise ToolError(get_string("dl_err_extract_tool").format(name="avb"))
-
-    utils.ui.echo(get_string("dl_avb_ready"))
-
-
 def get_gki_kernel(kernel_version: str, work_dir: Path) -> Path:
     utils.ui.echo(get_string("dl_gki_downloading"))
 
@@ -789,71 +633,6 @@ def get_lkm_kernel_release(
         raise ToolError(str(e))
 
 
-def download_kptools(target_dir: Path):
-    kptools_exe = target_dir / "kptools.exe"
-    if kptools_exe.exists():
-        return
-
-    utils.ui.echo(get_string("dl_kptools_downloading"))
-    import requests
-
-    releases_url = "https://api.github.com/repos/bmax121/KernelPatch/releases"
-    try:
-        response = requests.get(releases_url, timeout=15)
-        response.raise_for_status()
-        releases = response.json()
-    except requests.RequestException as e:
-        raise ToolError(get_string("dl_err_kptools_fetch_releases").format(e=e))
-
-    asset_url = None
-    for release in releases:
-        if release.get("draft"):
-            continue
-        for asset in release.get("assets", []):
-            if "kptools-msys2-win.7z" in asset["name"]:
-                asset_url = asset["browser_download_url"]
-                break
-        if asset_url:
-            break
-
-    if not asset_url:
-        raise ToolError(get_string("dl_err_kptools_asset_not_found"))
-
-    temp_7z = target_dir / "kptools-msys2-win.7z"
-    download_resource(asset_url, temp_7z)
-
-    import py7zr
-
-    try:
-        utils.ui.echo(get_string("dl_kptools_extracting"))
-        with py7zr.SevenZipFile(temp_7z, mode="r") as z:
-            z.extractall(path=target_dir)
-    finally:
-        if temp_7z.exists():
-            temp_7z.unlink()
-
-    if not kptools_exe.exists():
-        extracted_exe = next(target_dir.rglob("kptools.exe"), None)
-        if extracted_exe:
-            exe_dir = extracted_exe.parent
-            for item in exe_dir.iterdir():
-                dest = target_dir / item.name
-                if dest.exists():
-                    if dest.is_dir():
-                        shutil.rmtree(dest)
-                    else:
-                        dest.unlink()
-                shutil.move(str(item), str(target_dir))
-
-            try:
-                exe_dir.rmdir()
-            except OSError:
-                pass
-        else:
-            raise ToolError(get_string("dl_err_kptools_exe_not_found"))
-    utils.ui.echo(get_string("dl_kptools_ready"))
-
-
 def download_apatch_release(target_dir: Path, repo: str = "", tag: str = "latest"):
     utils.ui.echo(get_string("dl_apatch_stable_downloading"))
     apk_path = target_dir / "FolkPatch.apk"
@@ -916,34 +695,3 @@ def _extract_apatch_kpimg(apk_path: Path, target_dir: Path):
 
     manager_apk = const.TOOLS_DIR / "manager.apk"
     shutil.copy(apk_path, manager_apk)
-
-
-def install_base_tools(lang_code: str = "en"):
-    i18n_load_lang(lang_code)
-
-    utils.ui.echo(get_string("dl_base_installing"))
-    const.DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        utils.ui.echo(get_string("utils_check_deps"))
-
-        ensure_platform_tools()
-        ensure_avb_tools()
-
-        utils.ui.echo(get_string("dl_base_complete"))
-    except (ToolError, OSError) as e:
-        msg = get_string("dl_base_error").format(error=e)
-        utils.ui.error(msg)
-        input(get_string("press_enter_to_exit"))
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    lang_code = "en"
-    if "--lang" in sys.argv:
-        try:
-            lang_code = sys.argv[sys.argv.index("--lang") + 1]
-        except (IndexError, ValueError):
-            pass
-
-    if len(sys.argv) > 1 and "install_base_tools" in sys.argv:
-        install_base_tools(lang_code)

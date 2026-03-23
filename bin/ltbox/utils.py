@@ -64,7 +64,7 @@ def is_update_available(current: str, latest: str) -> bool:
 @functools.lru_cache(maxsize=1)
 def _get_tool_env() -> dict:
     env = os.environ.copy()
-    paths = [str(const.TOOLS_DIR), str(const.DOWNLOAD_DIR)]
+    paths = [str(const.TOOLS_DIR)]
     env["PATH"] = os.pathsep.join(paths) + os.pathsep + env["PATH"]
     return env
 
@@ -128,7 +128,7 @@ def format_command_output(result: CommandResult) -> str:
 
 
 def get_platform_executable(name: str) -> Path:
-    return const.DOWNLOAD_DIR / f"{name}.exe"
+    return const.TOOLS_DIR / f"{name}.exe"
 
 
 def _wait_for_resource(
@@ -389,10 +389,6 @@ class ExternalTool:
 
 class AvbToolWrapper(ExternalTool):
     def __init__(self):
-        if not const.AVBTOOL_PY.exists():
-            from . import downloader
-
-            downloader.ensure_avb_tools()
         super().__init__([const.PYTHON_EXE, const.AVBTOOL_PY])
 
 

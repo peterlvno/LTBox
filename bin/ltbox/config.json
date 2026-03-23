@@ -1,10 +1,5 @@
 {
   "version": "v2.4.5",
-  "tools": {
-    "platform_tools_url": "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
-    "avb_archive_url": "https://android.googlesource.com/platform/external/avb/+archive/refs/heads/main.tar.gz",
-    "avb_fallback_archive_url": "https://github.com/LineageOS/android_external_avb/archive/refs/heads/lineage-23.2.zip"
-  },
   "kernelsu": {
     "repo": "tiann/KernelSU",
     "tag": "latest",

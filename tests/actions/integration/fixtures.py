@@ -49,7 +49,6 @@ def firmware_file_getter(request, fw_pkg):
 def _prepare_mock_dirs(tmp_path: Path, root_output_key: str) -> dict[str, Path]:
     mock_dirs = {
         "TOOLS_DIR": tmp_path / "bin" / "tools",
-        "DOWNLOAD_DIR": tmp_path / "bin" / "download",
         root_output_key: tmp_path / "output" / root_output_key.lower(),
         "IMAGE_DIR": tmp_path / "images",
         "BASE_DIR": tmp_path / "base",

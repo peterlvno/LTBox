@@ -80,10 +80,18 @@ def main() -> None:
     with open(config_path, "r", encoding="utf-8") as f:
         config = json.load(f)
 
+    ci_tools_path = Path(".github/ci-tools.json")
+    if not ci_tools_path.exists():
+        print("::error::CI tools config not found!")
+        sys.exit(1)
+
+    with open(ci_tools_path, "r", encoding="utf-8") as f:
+        ci_tools = json.load(f)
+
     has_error = False
 
-    # 1. Static Tools
-    tools = config.get("tools", {})
+    # 1. Static Tools (from CI config)
+    tools = ci_tools.get("tools", {})
     print("--- Static Tools ---")
     if not check_url(tools.get("platform_tools_url"), "Platform Tools"):
         has_error = True

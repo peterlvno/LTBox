@@ -13,7 +13,6 @@ class LTBoxConfig:
         self.base_dir = Path(__file__).parent.parent.parent.resolve()
         self.ltbox_dir = self.base_dir / "bin" / "ltbox"
         self.tools_dir = self.base_dir / "bin" / "tools"
-        self.download_dir = self.tools_dir / "dl"
         self.python_dir = self.base_dir / "bin" / "python3"
         self.config_file = self.ltbox_dir / "config.json"
 
@@ -61,9 +60,9 @@ class LTBoxConfig:
         self.python_exe = self.python_dir / "python.exe"
         if not self.python_exe.exists():
             self.python_exe = Path(sys.executable)
-        self.adb_exe = self.download_dir / "adb.exe"
-        self.fastboot_exe = self.download_dir / "fastboot.exe"
-        self.avbtool_py = self.download_dir / "avbtool.py"
+        self.adb_exe = self.tools_dir / "adb.exe"
+        self.fastboot_exe = self.tools_dir / "fastboot.exe"
+        self.avbtool_py = self.tools_dir / "avbtool.py"
         self.qsaharaserver_exe = self.tools_dir / "Qsaharaserver.exe"
         self.edl_exe = self.tools_dir / "fh_loader.exe"
         self.magiskboot_exe = self.tools_dir / "magiskboot.exe"
@@ -165,14 +164,6 @@ class LTBoxConfig:
         return self.image_dir / self.edl_loader_filename
 
     @property
-    def platform_tools_zip_url(self) -> str:
-        return self._get_val("tools", "platform_tools_url")
-
-    @property
-    def avb_archive_url(self) -> str:
-        return self._get_val("tools", "avb_archive_url")
-
-    @property
     def row_pattern_dot(self) -> bytes:
         return bytes.fromhex(self._get_val("patterns", "row_dot"))
 
@@ -193,9 +184,7 @@ class LTBoxConfig:
         self.load()
         try:
             cfg_map = self._config_data.get("key_map", {})
-            return {
-                key: self.download_dir / filename for key, filename in cfg_map.items()
-            }
+            return {key: self.tools_dir / filename for key, filename in cfg_map.items()}
         except KeyError:
             raise RuntimeError(
                 "[!] Critical Error: Missing configuration section: [key_map]"
@@ -226,7 +215,6 @@ def load_settings_raw() -> Dict[str, Any]:
 BASE_DIR = CONF.base_dir
 LTBOX_DIR = CONF.ltbox_dir
 TOOLS_DIR = CONF.tools_dir
-DOWNLOAD_DIR = CONF.download_dir
 PYTHON_DIR = CONF.python_dir
 CONFIG_FILE = CONF.config_file
 
@@ -287,9 +275,6 @@ ANYKERNEL_ZIP_FILENAME = CONF.anykernel_zip_filename
 
 EDL_LOADER_FILENAME = CONF.edl_loader_filename
 EDL_LOADER_FILE = CONF.edl_loader_file
-
-PLATFORM_TOOLS_ZIP_URL = CONF.platform_tools_zip_url
-AVB_ARCHIVE_URL = CONF.avb_archive_url
 
 ROW_PATTERN_DOT = CONF.row_pattern_dot
 PRC_PATTERN_DOT = CONF.prc_pattern_dot

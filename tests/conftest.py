@@ -2,7 +2,7 @@ import sys
 import pytest
 from pathlib import Path
 from unittest.mock import patch
-from ltbox import downloader, i18n
+from ltbox import i18n
 from tests.scripts import cache_fw
 from tests.actions.integration.fixtures import firmware_file_getter  # noqa: F401
 
@@ -47,8 +47,6 @@ def integration_tools(request):
 
     print("\n[INFO] Setting up external tools for integration tests...", flush=True)
     try:
-        downloader.ensure_avb_tools()
-
         from tests.scripts.build_tools import build
 
         build()

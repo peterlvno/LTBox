@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, List, Optional, Tuple
 
-from . import downloader, i18n, update_service, utils
+from . import i18n, update_service, utils
 from .app_state import AppState
 from .i18n import get_string
 from .logger import logging_context
@@ -290,7 +290,6 @@ def _resolve_language_code(
 def _initialize_runtime(
     lang_code: str,
 ) -> Tuple["DeviceControllerFactoryProtocol", CommandRegistry, Any, Any]:
-    downloader.install_base_tools(lang_code)
     utils.check_dependencies()
 
     from . import constants, device

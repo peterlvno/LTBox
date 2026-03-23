@@ -5,22 +5,13 @@ setlocal
 set "SKIP_ADB=0"
 set "SKIP_ADB_STATE=OFF"
 
-:: --- 1. Initialization and Dependency Check ---
-echo --- Initializing LTBox... ---
-call "%~dp0bin\ltbox\install.bat"
-if errorlevel 1 (
-    echo [!] Dependency installation failed. Please check ltbox\install.bat.
-    pause
-    goto :eof
-)
-
-:: --- 2. Set Python and Main Script Paths ---
+:: --- 1. Set Python and Main Script Paths ---
 set "PYTHON_EXE=%~dp0bin\python3\python.exe"
 set "MAIN_PY=%~dp0bin\run.py"
 
 if not exist "%PYTHON_EXE%" (
     echo [!] Python not found at: %PYTHON_EXE%
-    echo [!] Please run ltbox\install.bat first.
+    echo [!] Please re-download or re-extract the LTBox release package.
     pause
     goto :eof
 )

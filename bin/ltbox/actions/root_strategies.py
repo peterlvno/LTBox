@@ -399,7 +399,6 @@ class APatchStrategy(GkiRootStrategy):
         _cleanup_manager_apk(show_message=False)
         utils.recreate_dir(self._staging_dir)
         try:
-            downloader.download_kptools(const.DOWNLOAD_DIR)
             if self.is_nightly and self.workflow_id:
                 downloader.download_apatch_nightly(
                     self.workflow_id,
