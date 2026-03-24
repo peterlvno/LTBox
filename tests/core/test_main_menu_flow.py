@@ -97,6 +97,7 @@ def test_build_task_kwargs_uses_app_state_for_patch_actions():
     assert extras == {
         "modify_region_code": False,
         "target_region": "ROW",
+        "modify_rollback_index": "ON",
     }
     assert menu_router.build_task_kwargs("menu_root", state) == {}
 
@@ -147,7 +148,7 @@ def test_resolve_settings_preset_label():
     )
     assert (
         menu_router._resolve_settings_preset_label(AppState(preset_code="3"))
-        == "Install Stock Firmware without any modifications"
+        == "Stock Firmware Install/Restore"
     )
     assert menu_router._resolve_settings_preset_label(AppState(preset_code="-")) == "-"
 
@@ -161,6 +162,7 @@ def test_resolve_settings_preset_label():
                 "preset_code": "2",
                 "target_region": "ROW",
                 "modify_region_code": True,
+                "modify_rollback_index": "ON",
             },
             id="default_to_preset_2",
         ),
@@ -174,6 +176,7 @@ def test_resolve_settings_preset_label():
                 "preset_code": "3",
                 "target_region": "ROW",
                 "modify_region_code": False,
+                "modify_rollback_index": "AUTO",
             },
             id="preset_2_to_3",
         ),
@@ -187,6 +190,7 @@ def test_resolve_settings_preset_label():
                 "preset_code": "3",
                 "target_region": "PRC",
                 "modify_region_code": False,
+                "modify_rollback_index": "AUTO",
             },
             id="preset_3_keeps_region",
         ),
@@ -200,6 +204,7 @@ def test_resolve_settings_preset_label():
                 "preset_code": "1",
                 "target_region": "PRC",
                 "modify_region_code": True,
+                "modify_rollback_index": "ON",
             },
             id="dash_to_preset_1",
         ),
@@ -222,6 +227,7 @@ def test_settings_menu_preset_selection_cycle(monkeypatch, initial_state, expect
     assert next_state.preset_code == expected["preset_code"]
     assert next_state.target_region == expected["target_region"]
     assert next_state.modify_region_code is expected["modify_region_code"]
+    assert next_state.modify_rollback_index == expected["modify_rollback_index"]
     assert action == menu_router.LoopAction.BACK
 
 
@@ -234,10 +240,11 @@ def test_settings_menu_data_orders_modify_region_before_skip_adb():
     )
     option_actions = [i.action for i in items if i.item_type == "option"]
 
-    assert option_actions[:4] == [
+    assert option_actions[:5] == [
         "select_preset",
         "toggle_modify_region_code",
         "toggle_region",
+        "cycle_rollback",
         "toggle_adb",
     ]
 
@@ -254,7 +261,7 @@ def test_settings_menu_hides_region_toggle_when_modify_region_off():
     option_keys = [i.key for i in option_items if i.key.isdigit()]
 
     assert "toggle_region" not in option_actions
-    assert option_keys == ["1", "2", "4", "5", "6"]
+    assert option_keys == ["1", "2", "4", "5", "6", "7"]
 
 
 def test_main_menu_hides_region_name_when_modify_region_off():

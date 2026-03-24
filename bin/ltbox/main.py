@@ -41,9 +41,11 @@ class AppSettings:
     target_region: str = "PRC"
     modify_region_code: bool = True
     preset_code: str = "1"
+    modify_rollback_index: str = "ON"
 
     _ALLOWED_TARGET_REGIONS: ClassVar[set[str]] = {"PRC", "ROW"}
     _ALLOWED_PRESET_CODES: ClassVar[set[str]] = {"1", "2", "3", "-"}
+    _ALLOWED_MODIFY_RB: ClassVar[set[str]] = {"ON", "AUTO", "OFF"}
 
     @staticmethod
     def validate_language(value: Any) -> Optional[str]:
@@ -60,11 +62,15 @@ class AppSettings:
         preset_code = data.get("preset_code", "1")
         if preset_code not in cls._ALLOWED_PRESET_CODES:
             preset_code = "1"
+        modify_rollback_index = data.get("modify_rollback_index", "ON")
+        if modify_rollback_index not in cls._ALLOWED_MODIFY_RB:
+            modify_rollback_index = "ON"
         return cls(
             language=cls.validate_language(data.get("language")),
             target_region=target_region,
             modify_region_code=modify_region_code,
             preset_code=preset_code,
+            modify_rollback_index=modify_rollback_index,
         )
 
 
@@ -74,6 +80,7 @@ class SettingsStore:
         "target_region": lambda value: value in AppSettings._ALLOWED_TARGET_REGIONS,
         "modify_region_code": lambda value: isinstance(value, bool),
         "preset_code": lambda value: value in AppSettings._ALLOWED_PRESET_CODES,
+        "modify_rollback_index": lambda value: value in AppSettings._ALLOWED_MODIFY_RB,
     }
 
     def __init__(self, path: Path):
@@ -339,6 +346,7 @@ def _run_entry_mode(
                 target_region=settings.target_region,
                 modify_region_code=settings.modify_region_code,
                 preset_code=settings.preset_code,
+                modify_rollback_index=settings.modify_rollback_index,
                 language=settings.language,
             ),
         )
@@ -346,6 +354,7 @@ def _run_entry_mode(
             target_region=final_state.target_region,
             modify_region_code=final_state.modify_region_code,
             preset_code=final_state.preset_code,
+            modify_rollback_index=final_state.modify_rollback_index,
             language=final_state.language,
         )
 

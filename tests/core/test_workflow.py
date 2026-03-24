@@ -17,7 +17,7 @@ def test_patch_all_flow_standard(mock_env):
         patch("ltbox.workflow._wait_for_input_images"),
         patch("ltbox.workflow._cleanup_previous_outputs"),
     ):
-        mock_actions.read_anti_rollback.return_value = ("OK", "PASS")
+        mock_actions.read_anti_rollback.return_value = ("MATCH", 0, 0)
 
         workflow.patch_all(
             dev=mock_dev, wipe=0, target_region="PRC", modify_region_code=True
@@ -41,7 +41,7 @@ def test_patch_all_passes_modify_region_code_flag():
         patch("ltbox.workflow._wait_for_input_images"),
         patch("ltbox.workflow._cleanup_previous_outputs"),
     ):
-        mock_actions.read_anti_rollback.return_value = ("OK", "PASS")
+        mock_actions.read_anti_rollback.return_value = ("MATCH", 0, 0)
 
         workflow.patch_all(dev=mock_dev, modify_region_code=False)
 

@@ -307,6 +307,7 @@ def get_settings_menu_data(
     skip_adb_state: str,
     modify_region_code_enabled: bool,
     target_region: str,
+    modify_rollback_index: str = "ON",
 ) -> List[MenuItem]:
     region_label = (
         get_string("menu_settings_device_row")
@@ -338,10 +339,18 @@ def get_settings_menu_data(
 
     specs.extend(
         [
-            MenuSpec("separator"),
             MenuSpec(
                 "option",
                 key="4",
+                text=lambda: get_string("menu_settings_modify_rb").format(
+                    state=modify_rollback_index
+                ),
+                action="cycle_rollback",
+            ),
+            MenuSpec("separator"),
+            MenuSpec(
+                "option",
+                key="5",
                 text=lambda: get_string("menu_settings_skip_adb").format(
                     state=skip_adb_state
                 ),
@@ -350,7 +359,7 @@ def get_settings_menu_data(
             MenuSpec("separator"),
             MenuSpec(
                 "option",
-                key="5",
+                key="6",
                 text=lambda: (
                     f"{get_string('menu_settings_lang')}: [{get_string('_lang')}]"
                 ),
@@ -358,7 +367,7 @@ def get_settings_menu_data(
             ),
             MenuSpec(
                 "option",
-                key="6",
+                key="7",
                 text=lambda: get_string("menu_settings_check_update"),
                 action="check_update",
             ),

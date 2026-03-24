@@ -311,6 +311,7 @@ def settings_menu(
                 next_state,
                 target_region="PRC",
                 modify_region_code=True,
+                modify_rollback_index="ON",
                 preset_code="1",
             )
         elif preset_choice == "2":
@@ -318,12 +319,14 @@ def settings_menu(
                 next_state,
                 target_region="ROW",
                 modify_region_code=True,
+                modify_rollback_index="ON",
                 preset_code="2",
             )
         elif preset_choice == "3":
             next_state = replace(
                 next_state,
                 modify_region_code=False,
+                modify_rollback_index="AUTO",
                 preset_code="3",
             )
 
@@ -359,6 +362,16 @@ def settings_menu(
             preset_code="-",
         )
 
+    def _cycle_rollback():
+        nonlocal next_state
+        cycle = {"ON": "AUTO", "AUTO": "OFF", "OFF": "ON"}
+        new_val = cycle.get(next_state.modify_rollback_index, "ON")
+        next_state = replace(
+            next_state,
+            modify_rollback_index=new_val,
+            preset_code="-",
+        )
+
     def _change_lang():
         cmd_info = registry.get("change_language")
         if cmd_info:
@@ -371,6 +384,7 @@ def settings_menu(
         "toggle_region": _toggle_region,
         "toggle_adb": _toggle_adb,
         "toggle_modify_region_code": _toggle_modify_region_code,
+        "cycle_rollback": _cycle_rollback,
         "change_lang": _change_lang,
         "check_update": _handle_update_check,
     }
@@ -386,6 +400,7 @@ def settings_menu(
             "ON" if next_state.skip_adb else "OFF",
             next_state.modify_region_code,
             next_state.target_region,
+            next_state.modify_rollback_index,
         ),
         "menu_settings_title",
         lambda: get_string("menu_main_title"),
@@ -400,6 +415,7 @@ def build_task_kwargs(action: str, state: AppState) -> Dict[str, Any]:
     if action in [MainMenuAction.PATCH_ALL, MainMenuAction.PATCH_ALL_WIPE]:
         extras["target_region"] = state.target_region
         extras["modify_region_code"] = state.modify_region_code
+        extras["modify_rollback_index"] = state.modify_rollback_index
     return extras
 
 

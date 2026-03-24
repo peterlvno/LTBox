@@ -68,6 +68,11 @@ def _decrypt_and_modify_xml(ctx: TaskContext) -> None:
 
 
 def _detect_anti_rollback(ctx: TaskContext) -> None:
+    if ctx.modify_rollback_index == "OFF":
+        ctx.skip_rollback = True
+        ctx.on_log(get_string("wf_arb_detect_skipped"))
+        return
+
     ctx.on_log(get_string("wf_arb_detect_start"))
 
     ctx.dev.ensure_fastboot_mode()
@@ -126,7 +131,13 @@ def _check_and_patch_arb(ctx: TaskContext) -> None:
 
     from .actions.arb import ArbStatus
 
-    if arb_status_result[0] == ArbStatus.NEEDS_PATCH:
+    status, boot_rb, vbmeta_rb = arb_status_result
+
+    if ctx.modify_rollback_index == "ON" and status == ArbStatus.MATCH:
+        status = ArbStatus.NEEDS_PATCH
+        arb_status_result = (status, boot_rb, vbmeta_rb)
+
+    if status == ArbStatus.NEEDS_PATCH:
         ctx.arb_patched = True
 
     actions.patch_anti_rollback(comparison_result=arb_status_result)
@@ -218,10 +229,12 @@ def patch_all(
     wipe: int = 0,
     modify_region_code: bool = True,
     target_region: str = "PRC",
+    modify_rollback_index: str = "ON",
 ) -> str:
     ctx = TaskContext(
         dev=dev,
         wipe=wipe,
+        modify_rollback_index=modify_rollback_index,
         modify_region_code=modify_region_code,
         target_region=target_region,
         on_log=lambda s: utils.ui.info(s),

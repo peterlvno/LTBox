@@ -9,6 +9,7 @@ class TaskContext:
     dev: DeviceController
     wipe: int = 0
     skip_rollback: bool = False
+    modify_rollback_index: str = "ON"
     modify_region_code: bool = True
     target_region: str = "PRC"
     device_model: Optional[str] = None
