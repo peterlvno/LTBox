@@ -2,6 +2,24 @@
 chcp 65001 > nul
 setlocal
 
+:: --- 0. Validate installation path ---
+setlocal enabledelayedexpansion
+set "LTBOX_CHECK_PATH=%~dp0"
+set "LTBOX_CHECK_NOSPACE=!LTBOX_CHECK_PATH: =!"
+if not "!LTBOX_CHECK_PATH!"=="!LTBOX_CHECK_NOSPACE!" (
+    echo.
+    echo [!] Error: The installation path contains spaces.
+    echo     Path: !LTBOX_CHECK_PATH!
+    echo.
+    echo [!] Please move LTBox to a path without spaces.
+    echo     Example: D:\LTBox
+    echo.
+    pause
+    endlocal
+    goto :eof
+)
+endlocal
+
 set "SKIP_ADB=0"
 set "SKIP_ADB_STATE=OFF"
 
