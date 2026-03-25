@@ -406,12 +406,39 @@ def dump_partitions(
     utils.ui.echo(get_string("act_dump_saved").format(dir=const.BACKUP_DIR.name))
 
 
-def flash_partitions(
-    dev: device.DeviceController, skip_reset: bool = False, skip_reset_edl: bool = False
-) -> None:
-    utils.ui.echo(get_string("act_start_write"))
+def _format_dp_folder_label(folder: Path) -> str:
+    from ..patch.region import detect_country_codes
 
-    if not const.OUTPUT_DP_DIR.exists():
+    codes = detect_country_codes(source_dir=folder)
+    parts = []
+    for fname in ["devinfo.img", "persist.img"]:
+        code = codes.get(fname)
+        label = Path(fname).stem
+        parts.append(f"{label}: {code.upper() if code else '?'}")
+    return f"{folder.name} [{', '.join(parts)}]"
+
+
+def _find_dp_source_folders() -> List[Path]:
+    backup_dirs = sorted(
+        [
+            d
+            for d in const.BASE_DIR.iterdir()
+            if d.is_dir()
+            and d.name.startswith("backup_critical")
+            and any(d.glob("*.img"))
+        ],
+        key=lambda d: d.name,
+    )
+    folders = list(backup_dirs)
+    if const.OUTPUT_DP_DIR.exists() and any(const.OUTPUT_DP_DIR.glob("*.img")):
+        folders.append(const.OUTPUT_DP_DIR)
+    return folders
+
+
+def _select_dp_source_folder() -> Path:
+    folders = _find_dp_source_folders()
+
+    if not folders:
         utils.ui.error(
             get_string("act_err_dp_folder").format(dir=const.OUTPUT_DP_DIR.name)
         )
@@ -419,16 +446,55 @@ def flash_partitions(
         raise FileNotFoundError(
             get_string("act_err_dp_folder_nf").format(dir=const.OUTPUT_DP_DIR.name)
         )
-    utils.ui.echo(
-        get_string("act_found_patched_folder").format(dir=const.OUTPUT_DP_DIR.name)
-    )
+
+    if len(folders) == 1:
+        chosen = folders[0]
+        utils.ui.echo(get_string("act_found_patched_folder").format(dir=chosen.name))
+        return chosen
+
+    utils.ui.clear()
+    has_backup = any(f.name.startswith("backup_critical") for f in folders)
+    if has_backup:
+        utils.ui.echo(get_string("act_dp_backup_exists"))
+    utils.ui.echo("")
+
+    width = utils.ui.get_term_width()
+    utils.ui.echo("=" * width)
+    for i, folder in enumerate(folders, 1):
+        label = _format_dp_folder_label(folder)
+        utils.ui.echo(f"  {i}. {label}")
+    utils.ui.echo("=" * width)
+    utils.ui.echo("")
+
+    while True:
+        choice = utils.ui.prompt(get_string("prompt_select")).strip()
+        try:
+            idx = int(choice)
+            if 1 <= idx <= len(folders):
+                chosen = folders[idx - 1]
+                utils.ui.clear()
+                utils.ui.echo(
+                    get_string("act_found_patched_folder").format(dir=chosen.name)
+                )
+                return chosen
+        except ValueError:
+            pass
+        utils.ui.error(get_string("err_invalid_selection"))
+
+
+def flash_partitions(
+    dev: device.DeviceController, skip_reset: bool = False, skip_reset_edl: bool = False
+) -> None:
+    utils.ui.echo(get_string("act_start_write"))
+
+    source_dir = _select_dp_source_folder()
 
     ensure_edl_requirements()
     with dev.edl_session(auto_reset=not skip_reset) as port:
         targets = ["devinfo", "persist"]
 
         for target in targets:
-            image_path = const.OUTPUT_DP_DIR / f"{target}.img"
+            image_path = source_dir / f"{target}.img"
 
             if not image_path.exists():
                 utils.ui.echo(get_string(f"act_skip_{target}"))

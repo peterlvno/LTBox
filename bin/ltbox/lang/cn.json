@@ -49,6 +49,7 @@
   "act_detect_result": "\n[+] 检测结果: {res}",
   "act_detect_status_found": "{display_name}: {code}",
   "act_detect_status_null": "{display_name}: 空",
+  "act_dp_backup_exists": "[*] backup_critical 文件夹已存在。要刷写哪个文件?",
   "act_dp_moved": "\n[*] 镜像已移动到 '{dir}'。",
   "act_dp_ready": "  修改后的镜像已在 '{dir}' 就绪。",
   "act_dump_failed": "\n[!] 导出失败: {targets}",

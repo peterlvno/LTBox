@@ -116,16 +116,19 @@ def edit_vendor_boot(
     return success
 
 
-def detect_country_codes() -> Dict[str, Optional[str]]:
+def detect_country_codes(
+    source_dir: Optional[Path] = None,
+) -> Dict[str, Optional[str]]:
     results: Dict[str, Optional[str]] = {}
     files_to_check = ["devinfo.img", "persist.img"]
+    base = source_dir if source_dir is not None else const.BASE_DIR
 
     if not const.COUNTRY_CODES:
         utils.ui.error(get_string("img_det_warn_empty"))
         return {f: None for f in files_to_check}
 
     for filename in files_to_check:
-        file_path = const.BASE_DIR / filename
+        file_path = base / filename
         results[filename] = None
 
         if not file_path.exists():
