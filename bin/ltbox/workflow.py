@@ -73,17 +73,7 @@ def _detect_anti_rollback(ctx: TaskContext) -> None:
         ctx.on_log(get_string("wf_arb_detect_skipped"))
         return
 
-    ctx.on_log(get_string("wf_arb_detect_start"))
-
-    ctx.dev.ensure_fastboot_mode()
-
-    has_arb = ctx.dev.fastboot.check_anti_rollback()
-
-    if has_arb:
-        ctx.on_log(get_string("wf_arb_detect_enabled"))
-    else:
-        ctx.skip_rollback = True
-        ctx.on_log(get_string("wf_arb_detect_disabled"))
+    # ON/AUTO: anti-rollback is checked from dumped images in the ARB step.
 
 
 def _dump_images(ctx: TaskContext) -> None:
@@ -132,6 +122,11 @@ def _check_and_patch_arb(ctx: TaskContext) -> None:
     from .actions.arb import ArbStatus
 
     status, boot_rb, vbmeta_rb = arb_status_result
+
+    if vbmeta_rb == 0:
+        ctx.skip_rollback = True
+        ctx.on_log(get_string("wf_arb_no_protection"))
+        return
 
     if ctx.modify_rollback_index == "ON" and status == ArbStatus.MATCH:
         status = ArbStatus.NEEDS_PATCH

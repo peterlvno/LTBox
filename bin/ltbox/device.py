@@ -313,20 +313,6 @@ class FastbootManager(BaseDeviceManager):
                 get_string("device_err_get_model_fastboot").format(e=e), e
             )
 
-    def check_anti_rollback(self) -> bool:
-        try:
-            result = utils.run_command(
-                [str(const.FASTBOOT_EXE), "getvar", "anti"],
-                capture=True,
-                check=False,
-            )
-            output = utils.format_command_output(result)
-            if "FAILED" in output or "not found" in output.lower():
-                return False
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
-            raise DeviceCommandError(get_string("device_err_check_arb").format(e=e), e)
-
     def continue_boot(self) -> None:
         try:
             utils.run_command(
