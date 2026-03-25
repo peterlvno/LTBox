@@ -45,10 +45,10 @@ class _LiveStatusText:
                     get_app().exit(result=_REFRESH_SENTINEL)
                 except Exception:
                     pass
-        return self._status_fn()
+        return f"■ {self._status_fn()}"
 
     def __str__(self) -> str:
-        return self._status_fn()
+        return f"■ {self._status_fn()}"
 
 
 class TerminalMenu:
@@ -107,8 +107,7 @@ class TerminalMenu:
         self._render_header()
 
         if self._status_fn:
-            ui.echo(f"   {self._status_fn()}")
-            ui.echo("")
+            ui.echo(f"   ■ {self._status_fn()}")
             ui.echo("")
 
         for key, text, is_selectable in self.options:
@@ -133,6 +132,7 @@ class TerminalMenu:
 
             if self._status_fn:
                 initial_key = self._status_key_fn() if self._status_key_fn else None
+                choices.append(Separator(" "))
                 choices.append(
                     Separator(
                         _LiveStatusText(  # type: ignore[arg-type]
@@ -140,7 +140,6 @@ class TerminalMenu:
                         )
                     )
                 )
-                choices.append(Separator(" "))
                 choices.append(Separator(" "))
                 extra_kwargs["refresh_interval"] = 3.0
             else:
