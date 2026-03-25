@@ -394,6 +394,51 @@ def _prompt_kpm_selection(kpm_files: List[Path]) -> List[Path]:
             selected.add(i)
 
 
+def _prompt_nightly_workflow(
+    root_name: str,
+    repo: str,
+    workflow_file: str,
+    default_id: str,
+    breadcrumbs: Optional[str] = None,
+) -> str:
+    menu = TerminalMenu(
+        get_string("prompt_workflow_source_title"),
+        breadcrumbs=breadcrumbs,
+    )
+    menu.add_option(
+        "1",
+        get_string("prompt_workflow_retrieve_latest").format(file=workflow_file),
+    )
+    menu.add_option("2", get_string("prompt_workflow_manual_input"))
+    choice = menu.ask(get_string("prompt_select"), get_string("err_invalid_selection"))
+
+    if choice == "1" and repo and workflow_file:
+        utils.ui.clear()
+        utils.ui.echo(get_string("prompt_workflow_retrieving"))
+        try:
+            run_id = downloader.get_latest_successful_workflow_run(repo, workflow_file)
+            if run_id:
+                utils.ui.info(get_string("prompt_workflow_retrieved").format(id=run_id))
+                input(get_string("press_enter_to_continue"))
+                return run_id
+            else:
+                utils.ui.error(get_string("prompt_workflow_retrieve_failed"))
+        except Exception:
+            utils.ui.error(get_string("prompt_workflow_retrieve_failed"))
+
+    utils.ui.clear()
+    display_id = default_id if default_id else get_string("act_root_auto_detect")
+    width = utils.ui.get_term_width()
+    utils.ui.echo("-" * width)
+    utils.ui.echo(get_string("prompt_workflow_id").format(name=root_name))
+    utils.ui.echo(get_string("prompt_workflow_default").format(id=display_id))
+    utils.ui.echo("-" * width)
+    val = input(get_string("prompt_input_arrow")).strip()
+    if not val:
+        return default_id
+    return val
+
+
 class APatchStrategy(GkiRootStrategy):
     spec = RootStrategySpec(
         image_name=const.FN_BOOT,
@@ -426,12 +471,10 @@ class APatchStrategy(GkiRootStrategy):
         settings = const.load_settings_raw()
         self.repo_config = settings.get(self.root_type, {})
 
-        bc = breadcrumbs or get_string("apatch_menu_breadcrumbs").format(
-            name=self.source_name
-        )
+        bc = breadcrumbs
 
         menu = TerminalMenu(
-            get_string("apatch_menu_version_title").format(name=self.source_name),
+            get_string("menu_root_subtype_title").format(name=self.source_name),
             breadcrumbs=bc,
         )
         menu.add_option("1", get_string("menu_root_subtype_release"))
@@ -443,7 +486,7 @@ class APatchStrategy(GkiRootStrategy):
         if choice == "2":
             self.is_nightly = True
             self.source_label = get_string("menu_root_subtype_nightly")
-            self.workflow_id = self._prompt_nightly_workflow(
+            self.workflow_id = _prompt_nightly_workflow(
                 self.source_name,
                 self.repo_config.get("repo", ""),
                 NIGHTLY_WORKFLOW_FILES.get(self.root_type, ""),
@@ -453,57 +496,6 @@ class APatchStrategy(GkiRootStrategy):
         else:
             self.is_nightly = False
             self.source_label = get_string("menu_root_subtype_release")
-
-    def _prompt_nightly_workflow(
-        self,
-        root_name: str,
-        repo: str,
-        workflow_file: str,
-        default_id: str,
-        breadcrumbs: Optional[str] = None,
-    ) -> str:
-        menu = TerminalMenu(
-            get_string("prompt_workflow_source_title"),
-            breadcrumbs=breadcrumbs,
-        )
-        menu.add_option(
-            "1",
-            get_string("prompt_workflow_retrieve_latest").format(file=workflow_file),
-        )
-        menu.add_option("2", get_string("prompt_workflow_manual_input"))
-        choice = menu.ask(
-            get_string("prompt_select"), get_string("err_invalid_selection")
-        )
-
-        if choice == "1" and repo and workflow_file:
-            utils.ui.clear()
-            utils.ui.echo(get_string("prompt_workflow_retrieving"))
-            try:
-                run_id = downloader.get_latest_successful_workflow_run(
-                    repo, workflow_file
-                )
-                if run_id:
-                    utils.ui.info(
-                        get_string("prompt_workflow_retrieved").format(id=run_id)
-                    )
-                    input(get_string("press_enter_to_continue"))
-                    return run_id
-                else:
-                    utils.ui.error(get_string("prompt_workflow_retrieve_failed"))
-            except Exception:
-                utils.ui.error(get_string("prompt_workflow_retrieve_failed"))
-
-        utils.ui.clear()
-        width = utils.ui.get_term_width()
-        utils.ui.echo("-" * width)
-        utils.ui.echo(get_string("apatch_prompt_workflow_id").format(name=root_name))
-        if default_id:
-            utils.ui.echo(get_string("prompt_workflow_default").format(id=default_id))
-        utils.ui.echo("-" * width)
-        val = input(get_string("prompt_input_arrow")).strip()
-        if not val:
-            return default_id
-        return val
 
     def download_resources(self, kernel_version: Optional[str] = None) -> bool:
         _cleanup_manager_apk(show_message=False)
@@ -668,62 +660,6 @@ class LkmRootStrategy(InitBootRootStrategy):
         }
         return mapping.get(major_minor)
 
-    def _prompt_nightly_workflow(
-        self,
-        root_name: str,
-        repo: str,
-        workflow_file: str,
-        default_id: str,
-        breadcrumbs: Optional[str] = None,
-    ) -> str:
-        menu = TerminalMenu(
-            get_string("prompt_workflow_source_title"),
-            breadcrumbs=breadcrumbs,
-        )
-        menu.add_option(
-            "1",
-            get_string("prompt_workflow_retrieve_latest").format(file=workflow_file),
-        )
-        menu.add_option("2", get_string("prompt_workflow_manual_input"))
-        choice = menu.ask(
-            get_string("prompt_select"), get_string("err_invalid_selection")
-        )
-
-        if choice == "1" and repo and workflow_file:
-            utils.ui.clear()
-            utils.ui.echo(get_string("prompt_workflow_retrieving"))
-            try:
-                run_id = downloader.get_latest_successful_workflow_run(
-                    repo, workflow_file
-                )
-                if run_id:
-                    utils.ui.info(
-                        get_string("prompt_workflow_retrieved").format(id=run_id)
-                    )
-                    input(get_string("press_enter_to_continue"))
-                    return run_id
-                else:
-                    utils.ui.error(get_string("prompt_workflow_retrieve_failed"))
-            except Exception:
-                utils.ui.error(get_string("prompt_workflow_retrieve_failed"))
-
-        utils.ui.clear()
-        msg_enter = get_string("prompt_workflow_id").replace("{name}", root_name)
-
-        display_id = default_id if default_id else get_string("act_root_auto_detect")
-        msg_default = get_string("prompt_workflow_default").replace("{id}", display_id)
-
-        width = utils.ui.get_term_width()
-        utils.ui.echo("-" * width)
-        utils.ui.echo(msg_enter)
-        utils.ui.echo(msg_default)
-        utils.ui.echo("-" * width)
-
-        val = input(get_string("prompt_input_arrow")).strip()
-        if not val:
-            return default_id
-        return val
-
     def configure_source(self, breadcrumbs: Optional[str] = None) -> None:
         settings = const.load_settings_raw()
 
@@ -748,7 +684,7 @@ class LkmRootStrategy(InitBootRootStrategy):
             self.is_nightly = True
             self.is_tagged_build = False
             self.source_label = get_string("menu_root_subtype_nightly")
-            self.workflow_id = self._prompt_nightly_workflow(
+            self.workflow_id = _prompt_nightly_workflow(
                 root_name,
                 repo,
                 workflow_file,
@@ -757,7 +693,7 @@ class LkmRootStrategy(InitBootRootStrategy):
             )
         else:
             menu = TerminalMenu(
-                get_string("menu_root_subtype_title"),
+                get_string("menu_root_subtype_title").format(name=root_name),
                 breadcrumbs=bc,
             )
             menu.add_option("1", get_string("menu_root_subtype_release"))
@@ -771,7 +707,7 @@ class LkmRootStrategy(InitBootRootStrategy):
                 self.is_nightly = True
                 self.is_tagged_build = False
                 self.source_label = get_string("menu_root_subtype_nightly")
-                self.workflow_id = self._prompt_nightly_workflow(
+                self.workflow_id = _prompt_nightly_workflow(
                     root_name,
                     repo,
                     workflow_file,
