@@ -134,8 +134,8 @@ class TerminalMenu:
             if self._status_fn:
                 initial_key = self._status_key_fn() if self._status_key_fn else None
                 choices.append(
-                    Separator(  # type: ignore[arg-type]
-                        _LiveStatusText(
+                    Separator(
+                        _LiveStatusText(  # type: ignore[arg-type]
                             self._status_fn, self._status_key_fn, initial_key
                         )
                     )

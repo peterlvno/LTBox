@@ -73,17 +73,16 @@ def test_patch_all_writes_flash_log_under_log_directory(tmp_path):
 
 def test_patch_all_skip_arb_when_device_has_no_arb():
     mock_dev = make_device_mock()
+    mock_dev.fastboot.get_model.return_value = "TB322FC"
     with (
         patch("ltbox.workflow.actions") as mock_actions,
         patch("ltbox.workflow.utils.ui"),
         patch("ltbox.workflow._wait_for_input_images"),
         patch("ltbox.workflow._cleanup_previous_outputs"),
     ):
-        mock_actions.read_anti_rollback.return_value = ("MATCH", 0, 0)
+        workflow.patch_all(dev=mock_dev, modify_rollback_index="AUTO")
 
-        workflow.patch_all(dev=mock_dev)
-
-        mock_actions.read_anti_rollback.assert_called_once()
+        mock_actions.read_anti_rollback.assert_not_called()
         mock_actions.patch_anti_rollback.assert_not_called()
 
 
