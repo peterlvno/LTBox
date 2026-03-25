@@ -76,8 +76,68 @@ def _detect_anti_rollback(ctx: TaskContext) -> None:
     # ON/AUTO: anti-rollback is checked from dumped images in the ARB step.
 
 
+def _check_backup_critical(ctx: TaskContext) -> None:
+    if ctx.modify_region_code:
+        return
+
+    from .actions.edl import _format_dp_folder_label
+
+    backup_dirs = sorted(
+        [
+            d
+            for d in const.BASE_DIR.iterdir()
+            if d.is_dir()
+            and d.name.startswith("backup_critical")
+            and any(d.glob("*.img"))
+        ],
+        key=lambda d: d.name,
+    )
+
+    if not backup_dirs:
+        return
+
+    utils.ui.clear()
+    utils.ui.echo(get_string("wf_backup_critical_found"))
+    utils.ui.echo("")
+
+    width = utils.ui.get_term_width()
+    utils.ui.echo("=" * width)
+    for i, folder in enumerate(backup_dirs, 1):
+        label = _format_dp_folder_label(folder)
+        utils.ui.echo(f"  {i}. {label}")
+    dump_option = len(backup_dirs) + 1
+    utils.ui.echo(f"  {dump_option}. {get_string('wf_backup_critical_dump')}")
+    utils.ui.echo("=" * width)
+    utils.ui.echo("")
+
+    while True:
+        choice = utils.ui.prompt(get_string("prompt_select")).strip()
+        try:
+            idx = int(choice)
+            if 1 <= idx <= dump_option:
+                break
+        except ValueError:
+            pass
+        utils.ui.error(get_string("err_invalid_selection"))
+
+    utils.ui.clear()
+
+    if idx == dump_option:
+        ctx.force_dp_workflow = True
+    else:
+        chosen = backup_dirs[idx - 1]
+        ctx.on_log(get_string("act_found_patched_folder").format(dir=chosen.name))
+        if const.OUTPUT_DP_DIR.exists():
+            shutil.rmtree(const.OUTPUT_DP_DIR)
+        const.OUTPUT_DP_DIR.mkdir(exist_ok=True)
+        for img in chosen.glob("*.img"):
+            shutil.copy(img, const.OUTPUT_DP_DIR / img.name)
+        ctx.use_backup_dp = True
+        ctx.backup_dir_name = chosen.name
+
+
 def _dump_images(ctx: TaskContext) -> None:
-    ctx.skip_dp_workflow = ctx.wipe == 0
+    ctx.skip_dp_workflow = ctx.wipe == 0 and not ctx.force_dp_workflow
 
     suffix = ctx.active_slot_suffix if ctx.active_slot_suffix else ""
     ctx.boot_target = f"boot{suffix}"
@@ -139,9 +199,8 @@ def _check_and_patch_arb(ctx: TaskContext) -> None:
 
 
 def _flash_images(ctx: TaskContext) -> None:
-    actions.flash_full_firmware(
-        dev=ctx.dev, skip_reset_edl=True, skip_dp=ctx.skip_dp_workflow
-    )
+    skip_dp = ctx.skip_dp_workflow and not ctx.use_backup_dp
+    actions.flash_full_firmware(dev=ctx.dev, skip_reset_edl=True, skip_dp=skip_dp)
 
 
 def _log_workflow_halt() -> None:
@@ -203,6 +262,7 @@ def _build_steps(ctx: TaskContext) -> list[WorkflowStep]:
         WorkflowStep("wf_step4_convert", lambda: _convert_region_images(ctx)),
         WorkflowStep("wf_step5_modify_xml", lambda: _decrypt_and_modify_xml(ctx)),
         WorkflowStep(None, lambda: _detect_anti_rollback(ctx)),
+        WorkflowStep(None, lambda: _check_backup_critical(ctx)),
         WorkflowStep("wf_step6_dump", lambda: _run_dump_step(ctx)),
         WorkflowStep(None, lambda: _run_patch_dp_step(ctx)),
         WorkflowStep(None, lambda: _run_arb_step(ctx)),

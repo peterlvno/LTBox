@@ -757,6 +757,8 @@
   "wf_arb_detect_skipped": "[*] 롤백 인덱스 변경이 OFF입니다. 안티 롤백 감지를 건너뜁니다.",
   "wf_arb_no_protection": "[*] 기기의 vbmeta 롤백 인덱스가 0입니다. 이 기기에는 안티 롤백 보호가 없습니다.\n  롤백 인덱스 패치를 건너뜁니다.",
   "wf_arb_patched_warning": "  [!] 안티 롤백을 우회하기 위해 롤백 인덱스가 수정된 이미지를 플래싱했습니다.\n  대부분의 시스템 업데이트(증분 OTA)는 설치 시 실패합니다.",
+  "wf_backup_critical_dump": "기기에서 추출 후 패치",
+  "wf_backup_critical_found": "[*] backup_critical 폴더가 존재합니다. 저장된 파일을 사용하시겠습니까, 아니면 기기에서 추출하시겠습니까?",
   "wf_backup_notice": "  '{dir}' 폴더에 기기 고유 정보가 담긴\n  원본 devinfo/persist.img가 저장되었습니다.\n  여러 기기 작업 시 파일이 섞이지 않게\n  일련번호 등으로 구분하여 보관하세요.",
   "wf_err_fastboot_model": "치명적인 오류: Fastboot를 통해 기기 모델을 확인하지 못했습니다. 중단합니다.",
   "wf_err_get_model": "치명적인 오류: 기기 모델 확인 오류: {e}",

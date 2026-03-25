@@ -19,5 +19,7 @@ class TaskContext:
     vbmeta_target: Optional[str] = None
     backup_dir_name: Optional[str] = None
     arb_patched: bool = False
+    use_backup_dp: bool = False
+    force_dp_workflow: bool = False
 
     on_log: Callable[[str], None] = field(default_factory=lambda: lambda s: print(s))

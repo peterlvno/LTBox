@@ -757,6 +757,8 @@
   "wf_arb_detect_skipped": "[*] 修改回滚索引已关闭。跳过防回滚检测。",
   "wf_arb_no_protection": "[*] 设备 vbmeta 回滚索引为 0。此设备没有防回滚保护。\n  将跳过回滚索引修补。",
   "wf_arb_patched_warning": "  [!] 已刷入修改了回滚索引的镜像以绕过防回滚保护。\n  大多数系统更新（增量 OTA）将在安装时失败。",
+  "wf_backup_critical_dump": "从设备提取并修补",
+  "wf_backup_critical_found": "[*] backup_critical 文件夹已存在。使用已保存的文件还是从设备提取?",
   "wf_backup_notice": "  包含唯一设备信息的原始 devinfo.img/persist.img\n  已保存在 '{dir}' 中。请妥善保管。\n  如果您在多台设备上使用此工具，请记录序列号\n  以防混淆。",
   "wf_err_fastboot_model": "关键错误：无法通过 Fastboot 获取设备型号。正在中止。",
   "wf_err_get_model": "关键错误：获取设备型号出错: {e}",

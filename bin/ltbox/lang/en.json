@@ -757,6 +757,8 @@
   "wf_arb_detect_skipped": "[*] Modify Rollback Index is OFF. Skipping anti-rollback detection.",
   "wf_arb_no_protection": "[*] Device vbmeta rollback index is 0. This device does not have anti-rollback protection.\n  Rollback index patching will be skipped.",
   "wf_arb_patched_warning": "  [!] Flashed an image with a modified rollback index to bypass anti-rollback.\n  Most system updates (Incremental OTA) will fail upon installation attempt.",
+  "wf_backup_critical_dump": "Dump from device and patch",
+  "wf_backup_critical_found": "[*] backup_critical exists. Use saved files or dump from device?",
   "wf_backup_notice": "  Original devinfo/persist images are saved in '{dir}'.\n  Keep them safe (note serial number if using multiple devices).",
   "wf_err_fastboot_model": "CRITICAL: Failed to get device model via fastboot. Aborting.",
   "wf_err_get_model": "CRITICAL: Error getting device model: {e}",
