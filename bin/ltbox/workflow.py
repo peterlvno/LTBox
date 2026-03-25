@@ -73,6 +73,11 @@ def _detect_anti_rollback(ctx: TaskContext) -> None:
         ctx.on_log(get_string("wf_arb_detect_skipped"))
         return
 
+    if ctx.modify_rollback_index == "AUTO" and ctx.device_model == "TB322FC":
+        ctx.skip_rollback = True
+        ctx.on_log(get_string("wf_arb_detect_skipped_tb322fc"))
+        return
+
     # ON/AUTO: anti-rollback is checked from dumped images in the ARB step.
 
 
@@ -182,11 +187,6 @@ def _check_and_patch_arb(ctx: TaskContext) -> None:
     from .actions.arb import ArbStatus
 
     status, boot_rb, vbmeta_rb = arb_status_result
-
-    if vbmeta_rb == 0:
-        ctx.skip_rollback = True
-        ctx.on_log(get_string("wf_arb_no_protection"))
-        return
 
     if ctx.modify_rollback_index == "ON" and status == ArbStatus.MATCH:
         status = ArbStatus.NEEDS_PATCH
@@ -325,6 +325,9 @@ def patch_all(
 
             if ctx.arb_patched:
                 success_msg += f"\n\n{get_string('wf_arb_patched_warning')}"
+
+            if ctx.modify_rollback_index == "OFF":
+                success_msg += f"\n\n{get_string('wf_arb_off_notice')}"
 
             success_msg += f"\n\n{get_string('wf_notice_widevine')}"
             return success_msg
