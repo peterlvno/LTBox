@@ -17,3 +17,13 @@ repos:
         files: ^(bin|tests)/
       - id: ruff-format
         files: ^(bin|tests)/
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        language: system
+        entry: python
+        args: ["-m", "pytest", "-q", "tests/", "-m", "not integration"]
+        pass_filenames: false
+        files: ^(bin|tests)/.*\.py$
