@@ -4,6 +4,7 @@ import ctypes
 import re
 import subprocess
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
@@ -341,6 +342,9 @@ class FastbootManager(BaseDeviceManager):
 
 
 class EdlManager(BaseDeviceManager):
+    _FHLOADER_ERASE_FILENAME = "FHLoaderErase.xml"
+    _FHLOADER_ERASE_LABELS = frozenset({"userdata", "metadata", "frp"})
+
     @contextlib.contextmanager
     def _prevent_sleep_during_flash(self):
         if os.name != "nt":
@@ -450,6 +454,78 @@ class EdlManager(BaseDeviceManager):
         ui.info(get_string("device_upload_programmer").format(port=port))
         self.load_programmer(port, loader_path)
         time.sleep(2)
+
+    def _build_fhloader_erase_entries(self, raw_xmls: List[Path]) -> List[ET.Element]:
+        erase_entries: List[ET.Element] = []
+        seen_entries: set[tuple[tuple[str, str], ...]] = set()
+
+        for xml_path in raw_xmls:
+            try:
+                tree = ET.parse(xml_path)
+            except (ET.ParseError, OSError) as e:
+                raise RuntimeError(
+                    f"Failed to parse '{xml_path.name}' while building "
+                    f"{self._FHLOADER_ERASE_FILENAME}: {e}"
+                ) from e
+
+            for prog in tree.getroot().findall("program"):
+                if (
+                    prog.get("label", "").strip().lower()
+                    not in self._FHLOADER_ERASE_LABELS
+                ):
+                    continue
+
+                physical_partition_number = prog.get(
+                    "physical_partition_number", ""
+                ).strip()
+                start_sector = prog.get("start_sector", "").strip()
+                num_partition_sectors = prog.get("num_partition_sectors", "").strip()
+
+                if not (
+                    physical_partition_number and start_sector and num_partition_sectors
+                ):
+                    raise RuntimeError(
+                        f"'{prog.get('label', 'unknown')}' entry in '{xml_path.name}' "
+                        f"is missing erase geometry required to build "
+                        f"{self._FHLOADER_ERASE_FILENAME}."
+                    )
+
+                erase_attrib_items = tuple(
+                    (key, value)
+                    for key, value in prog.attrib.items()
+                    if key != "filename"
+                )
+                if not erase_attrib_items:
+                    continue
+                if erase_attrib_items in seen_entries:
+                    continue
+                seen_entries.add(erase_attrib_items)
+
+                erase = ET.Element("erase")
+                for key, value in prog.attrib.items():
+                    if key == "filename":
+                        continue
+                    erase.set(key, value)
+                erase_entries.append(erase)
+
+        if erase_entries:
+            return erase_entries
+
+        raise FileNotFoundError(
+            f"Missing userdata/metadata/frp erase spans required to build "
+            f"{self._FHLOADER_ERASE_FILENAME}."
+        )
+
+    def _build_fhloader_erase_xml(self, work_dir: Path, raw_xmls: List[Path]) -> Path:
+        erase_root = ET.Element("data")
+        for erase_entry in self._build_fhloader_erase_entries(raw_xmls):
+            erase_root.append(erase_entry)
+
+        erase_xml = work_dir / self._FHLOADER_ERASE_FILENAME
+        erase_tree = ET.ElementTree(erase_root)
+        ET.indent(erase_tree, space="  ")
+        erase_tree.write(erase_xml, encoding="utf-8", xml_declaration=True)
+        return erase_xml
 
     def read_partition(
         self,
@@ -570,13 +646,16 @@ class EdlManager(BaseDeviceManager):
         patch_xml_str = ",".join([p.name for p in patch_xmls])
 
         try:
+            if pre_erase:
+                self._build_fhloader_erase_xml(loader_path.parent, raw_xmls)
+
             with self._prevent_sleep_during_flash():
                 if pre_erase:
                     cmd_erase = [
                         str(const.EDL_EXE),
                         f"--port={port_str}",
                         f"--search_path={search_path}",
-                        "--sendxml=FHLoaderErase.xml",
+                        f"--sendxml={self._FHLOADER_ERASE_FILENAME}",
                         f"--memoryname={memory_type}",
                         "--showpercentagecomplete",
                         "--zlpawarehost=1",
@@ -601,7 +680,7 @@ class EdlManager(BaseDeviceManager):
                     cmd_fh.append("--reset")
 
                 utils.run_command(cmd_fh)
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
             raise DeviceCommandError(
                 get_string("device_err_rawprogram_fail").format(e=e), e
             )
