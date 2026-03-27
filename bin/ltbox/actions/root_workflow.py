@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import shutil
 import subprocess
 from pathlib import Path
@@ -23,6 +24,70 @@ from .system import get_slot_suffix
 
 def _partition_service() -> EdlPartitionService:
     return EdlPartitionService(resolve_params=require_partition_params)
+
+
+@dataclass(frozen=True)
+class RootWorkflowSession:
+    strategy: RootStrategy
+    gki: bool
+    lkm_kernel_version: Optional[str]
+
+    def resolve_partition_map(self, dev: device.DeviceController) -> Dict[str, str]:
+        suffix = get_slot_suffix(dev)
+        partition_map = self.strategy.get_partition_map(suffix)
+
+        if suffix:
+            utils.ui.echo(get_string("act_active_slot").format(slot=suffix))
+            return partition_map
+
+        utils.ui.echo(get_string("act_warn_root_slot"))
+        if self.gki:
+            partition_map["main"] = "boot"
+            if const.FN_VBMETA in self.strategy.required_files:
+                partition_map["vbmeta"] = "vbmeta"
+        else:
+            partition_map["main"] = "init_boot"
+            partition_map["vbmeta"] = "vbmeta"
+
+        return partition_map
+
+
+def _resolve_strategy(
+    gki: bool,
+    root_type: str,
+    strategy: Optional[RootStrategy] = None,
+) -> RootStrategy:
+    if strategy is not None:
+        return strategy
+
+    strategy = get_root_strategy(gki, root_type)
+    if hasattr(strategy, "configure_source"):
+        strategy.configure_source()
+        utils.ui.clear()
+    return strategy
+
+
+def _prepare_root_output_dir(strategy: RootStrategy) -> None:
+    utils.ui.echo(get_string("act_clean_dir").format(dir=strategy.log_output_dir_name))
+    utils.recreate_dir(strategy.output_dir)
+    utils.ui.echo("")
+
+
+def _create_root_workflow_session(
+    dev: device.DeviceController,
+    *,
+    gki: bool,
+    strategy: RootStrategy,
+    wait_for_adb: bool = False,
+) -> RootWorkflowSession:
+    if wait_for_adb and not dev.skip_adb:
+        dev.adb.wait_for_device()
+
+    return RootWorkflowSession(
+        strategy=strategy,
+        gki=gki,
+        lkm_kernel_version=_get_lkm_kernel_version(dev, strategy),
+    )
 
 
 def _patch_root_from_folder(
@@ -139,15 +204,8 @@ def _patch_root_from_folder(
 def patch_root_image_file(
     gki: bool = False, root_type: str = "ksu", strategy=None
 ) -> None:
-    if strategy is None:
-        strategy = get_root_strategy(gki, root_type)
-        if hasattr(strategy, "configure_source"):
-            strategy.configure_source()
-            utils.ui.clear()
-
-    utils.ui.echo(get_string("act_clean_dir").format(dir=strategy.log_output_dir_name))
-    utils.recreate_dir(strategy.output_dir)
-    utils.ui.echo("")
+    strategy = _resolve_strategy(gki, root_type, strategy)
+    _prepare_root_output_dir(strategy)
 
     _patch_root_from_folder(strategy, gki)
 
@@ -158,28 +216,22 @@ def patch_and_flash_root(
     root_type: str = "ksu",
     strategy=None,
 ) -> None:
-    if strategy is None:
-        strategy = get_root_strategy(gki, root_type)
-        if hasattr(strategy, "configure_source"):
-            strategy.configure_source()
-            utils.ui.clear()
+    strategy = _resolve_strategy(gki, root_type, strategy)
 
     cleanup_manager_apk()
-
-    utils.ui.echo(get_string("act_clean_dir").format(dir=strategy.log_output_dir_name))
-    utils.recreate_dir(strategy.output_dir)
-    utils.ui.echo("")
-
-    if not dev.skip_adb:
-        dev.adb.wait_for_device()
-
-    lkm_kernel_version = _get_lkm_kernel_version(dev, strategy)
+    _prepare_root_output_dir(strategy)
+    session = _create_root_workflow_session(
+        dev,
+        gki=gki,
+        strategy=strategy,
+        wait_for_adb=True,
+    )
 
     if not _patch_root_from_folder(
-        strategy,
-        gki,
+        session.strategy,
+        session.gki,
         dev=dev,
-        lkm_kernel_version=lkm_kernel_version,
+        lkm_kernel_version=session.lkm_kernel_version,
         show_manual_flash_notice=False,
     ):
         return
@@ -192,29 +244,18 @@ def patch_and_flash_root(
         return
 
     edl.ensure_edl_requirements()
-
-    suffix = get_slot_suffix(dev)
-    partition_map = strategy.get_partition_map(suffix)
-
-    if suffix:
-        utils.ui.echo(get_string("act_active_slot").format(slot=suffix))
-    else:
-        utils.ui.echo(get_string("act_warn_root_slot"))
-        if gki:
-            partition_map["main"] = "boot"
-            if const.FN_VBMETA in strategy.required_files:
-                partition_map["vbmeta"] = "vbmeta"
-        else:
-            partition_map["main"] = "init_boot"
-            partition_map["vbmeta"] = "vbmeta"
-
-    _flash_root_image(dev, strategy, partition_map, gki)
+    _flash_root_image(
+        dev,
+        session.strategy,
+        session.resolve_partition_map(dev),
+        session.gki,
+    )
 
 
 def _prepare_root_env(strategy: RootStrategy):
     utils.ui.echo(get_string("act_start_root"))
 
-    utils.recreate_dir(strategy.output_dir)
+    _prepare_root_output_dir(strategy)
     strategy.backup_dir.mkdir(exist_ok=True)
 
     utils.check_dependencies()
@@ -405,49 +446,37 @@ def root_device(
     root_type: str = "ksu",
     strategy=None,
 ) -> None:
-    if strategy is None:
-        strategy = get_root_strategy(gki, root_type)
-        if hasattr(strategy, "configure_source"):
-            strategy.configure_source()
-            utils.ui.clear()
+    strategy = _resolve_strategy(gki, root_type, strategy)
 
     cleanup_manager_apk()
 
     _prepare_root_env(strategy)
-
     utils.ui.echo(get_string("act_root_step1"))
-    if not dev.skip_adb:
-        dev.adb.wait_for_device()
+    session = _create_root_workflow_session(
+        dev,
+        gki=gki,
+        strategy=strategy,
+        wait_for_adb=True,
+    )
 
-    lkm_kernel_version = _get_lkm_kernel_version(dev, strategy)
-
-    if not strategy.download_resources(lkm_kernel_version):
+    if not session.strategy.download_resources(session.lkm_kernel_version):
         utils.ui.error(get_string("err_download_resources_abort"))
         return
 
     apk_installed = _install_manager_apk(dev)
 
-    suffix = get_slot_suffix(dev)
-
-    partition_map = strategy.get_partition_map(suffix)
-
-    if suffix:
-        utils.ui.echo(get_string("act_active_slot").format(slot=suffix))
-    else:
-        utils.ui.echo(get_string("act_warn_root_slot"))
-        if gki:
-            partition_map["main"] = "boot"
-            if const.FN_VBMETA in strategy.required_files:
-                partition_map["vbmeta"] = "vbmeta"
-        else:
-            partition_map["main"] = "init_boot"
-            partition_map["vbmeta"] = "vbmeta"
-
     utils.ui.echo(get_string("act_root_step2"))
+    partition_map = session.resolve_partition_map(dev)
 
-    _generate_root_image(dev, strategy, partition_map, gki, lkm_kernel_version)
+    _generate_root_image(
+        dev,
+        session.strategy,
+        partition_map,
+        session.gki,
+        session.lkm_kernel_version,
+    )
 
-    _flash_root_image(dev, strategy, partition_map, gki)
+    _flash_root_image(dev, session.strategy, partition_map, session.gki)
 
     width = utils.ui.get_term_width()
     utils.ui.echo("\n" + "!" * width)
