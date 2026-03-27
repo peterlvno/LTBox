@@ -10,11 +10,11 @@ from ..i18n import get_string
 from ..menu import TerminalMenu
 from ..partition import require_partition_params
 from . import edl
+from .root_strategy_downloads import cleanup_manager_apk
 from .root_strategies import (
     GkiRootStrategy,
     LkmRootStrategy,
     RootStrategy,
-    _cleanup_manager_apk,
     get_root_strategy,
 )
 from .system import get_slot_suffix
@@ -159,7 +159,7 @@ def patch_and_flash_root(
             strategy.configure_source()
             utils.ui.clear()
 
-    _cleanup_manager_apk()
+    cleanup_manager_apk()
 
     utils.ui.echo(get_string("act_clean_dir").format(dir=strategy.log_output_dir_name))
     utils.recreate_dir(strategy.output_dir)
@@ -427,7 +427,7 @@ def root_device(
             strategy.configure_source()
             utils.ui.clear()
 
-    _cleanup_manager_apk()
+    cleanup_manager_apk()
 
     _prepare_root_env(strategy)
 
