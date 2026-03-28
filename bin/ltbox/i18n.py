@@ -1,3 +1,4 @@
+import functools
 import json
 import sys
 from pathlib import Path
@@ -8,29 +9,49 @@ LANG_DIR = APP_DIR / "lang"
 
 _lang_data: Dict[str, Any] = {}
 _fallback_data: Dict[str, Any] = {}
+LanguageEntry = Tuple[str, str]
+LanguageCacheKey = Tuple[str, Tuple[Tuple[str, int, int], ...]]
 
 
-def get_available_languages() -> List[Tuple[str, str]]:
+def _available_language_cache_key() -> LanguageCacheKey:
     if not LANG_DIR.is_dir():
         raise RuntimeError(f"Language directory not found: {LANG_DIR}")
 
-    lang_files = sorted(list(LANG_DIR.glob("*.json")))
+    lang_files = sorted(LANG_DIR.glob("*.json"))
     if not lang_files:
         raise RuntimeError(f"No language files (*.json) found in: {LANG_DIR}")
 
-    languages = []
-    for f in lang_files:
-        lang_code = f.stem
+    file_signature = []
+    for lang_file in lang_files:
+        stat_result = lang_file.stat()
+        file_signature.append(
+            (lang_file.name, stat_result.st_mtime_ns, stat_result.st_size)
+        )
+    return str(LANG_DIR.resolve()), tuple(file_signature)
+
+
+@functools.lru_cache(maxsize=4)
+def _load_available_languages(cache_key: LanguageCacheKey) -> Tuple[LanguageEntry, ...]:
+    lang_dir = Path(cache_key[0])
+    languages: List[LanguageEntry] = []
+
+    for file_name, _, _ in cache_key[1]:
+        lang_file = lang_dir / file_name
+        lang_code = lang_file.stem
         try:
-            with open(f, "r", encoding="utf-8") as lang_file:
-                temp_lang = json.load(lang_file)
+            with open(lang_file, "r", encoding="utf-8") as handle:
+                temp_lang = json.load(handle)
                 lang_name = temp_lang.get("_lang", lang_code)
                 languages.append((lang_code, lang_name))
         except (json.JSONDecodeError, OSError):
             languages.append((lang_code, lang_code))
 
-    languages.sort(key=lambda x: (0 if x[0] == "en" else 1, x[1].lower()))
-    return languages
+    languages.sort(key=lambda item: (0 if item[0] == "en" else 1, item[1].lower()))
+    return tuple(languages)
+
+
+def get_available_languages() -> List[LanguageEntry]:
+    return list(_load_available_languages(_available_language_cache_key()))
 
 
 def load_lang(lang_code: str = "en"):
