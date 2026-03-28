@@ -86,11 +86,10 @@ class TestUtils:
         }
 
         with (
-            patch("requests.get") as m_get,
+            patch("ltbox.github_client.net.get_session") as get_session,
             patch("ltbox.downloader.download_resource") as m_dl,
         ):
-            m_get.return_value.json.return_value = resp
-            m_get.return_value.status_code = 200
+            get_session.return_value.get.return_value.json.return_value = resp
 
             downloader._download_github_asset("r", "t", ".*windows.*", Path("."))
 
@@ -189,11 +188,12 @@ class TestUtils:
         ]
 
         with (
-            patch("requests.get") as m_get,
+            patch("ltbox.github_client.net.get_session") as get_session,
             patch("ltbox.downloader.download_resource") as m_dl,
         ):
-            m_get.return_value.json.return_value = releases
-            m_get.return_value.raise_for_status.return_value = None
+            session = get_session.return_value
+            session.get.return_value.json.return_value = releases
+            session.get.return_value.raise_for_status.return_value = None
 
             downloader._download_github_asset(
                 "WildKernels/GKI_KernelSU_SUSFS",
@@ -345,9 +345,13 @@ class TestUtils:
         }
 
         with (
-            patch("requests.get", side_effect=[releases_response, latest_response]),
+            patch("ltbox.github_client.net.get_session") as get_session,
             patch("ltbox.downloader.download_resource") as m_dl,
         ):
+            get_session.return_value.get.side_effect = [
+                releases_response,
+                latest_response,
+            ]
             downloader._download_github_asset(
                 "WildKernels/GKI_KernelSU_SUSFS",
                 "latest",

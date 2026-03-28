@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import requests  # type: ignore[import-untyped]
 
-from . import utils
+from . import net, utils
 from .errors import ToolError
 from .i18n import get_string
 
@@ -39,7 +39,7 @@ class GitHubClient:
     ) -> Any:
         api_url = f"https://api.github.com/repos/{self.owner_repo}/{path}"
         try:
-            response = requests.get(api_url, params=params, timeout=timeout)
+            response = net.get_session().get(api_url, params=params, timeout=timeout)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as error:
@@ -131,7 +131,9 @@ class GitHubClient:
             None,
         )
         if not target_asset:
-            raise ToolError(get_string("dl_err_download_tool").format(name=asset_pattern))
+            raise ToolError(
+                get_string("dl_err_download_tool").format(name=asset_pattern)
+            )
         return target_asset
 
     def latest_release_tag(self) -> str:
@@ -170,9 +172,9 @@ class GitHubClient:
         raise ToolError(get_string("dl_err_workflow_run_for_tag").format(tag=tag))
 
     def workflow_run_artifacts(self, run_id: str) -> list[str]:
-        artifacts = self._request_object(
-            f"actions/runs/{run_id}/artifacts"
-        ).get("artifacts", [])
+        artifacts = self._request_object(f"actions/runs/{run_id}/artifacts").get(
+            "artifacts", []
+        )
         if not isinstance(artifacts, list):
             return []
         return [
