@@ -1,6 +1,7 @@
 import re
 import subprocess
-from typing import Callable, Optional
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Optional
 
 from . import constants as const
 from . import utils
@@ -9,6 +10,52 @@ from .errors import DeviceCommandError
 from .i18n import get_string
 from .process_runner import CommandResult
 from .ui import ui
+
+
+@dataclass(frozen=True)
+class FastbootVars:
+    model: Optional[str] = None
+    slot_suffix: Optional[str] = None
+    serialno: Optional[str] = None
+    stored_rollback_indices: Dict[int, int] = field(default_factory=dict)
+
+
+def _parse_getvar_all(output: str) -> FastbootVars:
+    model: Optional[str] = None
+    slot_suffix: Optional[str] = None
+    serialno: Optional[str] = None
+    stored_indices: Dict[int, int] = {}
+
+    model_match = re.search(r"modelname:\s*(.+)", output)
+    if model_match:
+        value = model_match.group(1).strip()
+        if value:
+            model = value
+
+    slot_match = re.search(r"current-slot:\s*([a-z]+)", output)
+    if slot_match:
+        slot = slot_match.group(1).strip()
+        if slot in ("a", "b"):
+            slot_suffix = f"_{slot}"
+
+    serial_match = re.search(r"(?<!\w)serialno:\s*(\S+)", output)
+    if serial_match:
+        serialno = serial_match.group(1).strip()
+
+    for m in re.finditer(r"stored_rollback_index:(\d+)\s*=\s*(\S+)", output):
+        slot_num = int(m.group(1))
+        try:
+            value = int(m.group(2), 16)
+        except ValueError:
+            continue
+        stored_indices[slot_num] = value
+
+    return FastbootVars(
+        model=model,
+        slot_suffix=slot_suffix,
+        serialno=serialno,
+        stored_rollback_indices=stored_indices,
+    )
 
 
 class FastbootManager(BaseDeviceManager):
@@ -123,6 +170,20 @@ class FastbootManager(BaseDeviceManager):
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             raise DeviceCommandError(
                 get_string("device_err_get_model_fastboot").format(e=e),
+                e,
+            )
+
+    def get_all_vars(self) -> FastbootVars:
+        try:
+            result = self._run_command(
+                [str(const.FASTBOOT_EXE), "getvar", "all"],
+                check=False,
+            )
+            output = utils.format_command_output(result)
+            return _parse_getvar_all(output)
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise DeviceCommandError(
+                get_string("device_err_getvar_all").format(e=e),
                 e,
             )
 

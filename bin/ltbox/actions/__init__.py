@@ -1,5 +1,7 @@
 # flake8: noqa: F401
 from .arb import (
+    check_image_folder_arb,
+    compute_device_rollback_index,
     patch_anti_rollback,
     patch_rom_anti_rollback,
     read_anti_rollback,

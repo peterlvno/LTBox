@@ -15,6 +15,9 @@ class TaskContext:
     target_region: str = "PRC"
     device_model: Optional[str] = None
     active_slot_suffix: Optional[str] = None
+    serialno: Optional[str] = None
+    device_rollback_index: Optional[int] = None
+    tb320fc_arb_fallback: bool = False
     skip_dp_workflow: bool = False
     boot_target: Optional[str] = None
     vbmeta_target: Optional[str] = None

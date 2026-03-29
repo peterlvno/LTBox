@@ -1,4 +1,7 @@
+from typing import Dict, Optional
 from unittest.mock import MagicMock
+
+from ltbox.device_fastboot import FastbootVars
 
 
 def make_device_mock(
@@ -6,6 +9,8 @@ def make_device_mock(
     skip_adb: bool = False,
     active_slot: str = "_a",
     model: str = "TestModel",
+    serialno: str = "QX947M3L",
+    stored_rollback_indices: Optional[Dict[int, int]] = None,
 ) -> MagicMock:
     dev = MagicMock()
     dev.skip_adb = skip_adb
@@ -13,4 +18,10 @@ def make_device_mock(
     dev.adb = MagicMock()
     dev.fastboot = MagicMock()
     dev.adb.get_model.return_value = model
+    dev.fastboot.get_all_vars.return_value = FastbootVars(
+        model=model,
+        slot_suffix=active_slot,
+        serialno=serialno,
+        stored_rollback_indices=stored_rollback_indices or {},
+    )
     return dev

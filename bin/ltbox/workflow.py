@@ -3,6 +3,11 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from . import actions
+from .actions.arb import (
+    ArbStatus,
+    check_image_folder_arb,
+    compute_device_rollback_index,
+)
 from .backup_sources import find_backup_critical_dirs
 from . import constants as const
 from . import device, utils
@@ -44,14 +49,24 @@ def _cleanup_previous_outputs(ctx: TaskContext) -> None:
 
 
 def _populate_device_info(ctx: TaskContext) -> None:
-    ctx.active_slot_suffix = ctx.dev.detect_active_slot()
+    ctx.dev.ensure_fastboot_mode()
 
     try:
-        ctx.device_model = ctx.dev.fastboot.get_model()
-        if not ctx.device_model:
-            raise DeviceError(get_string("wf_err_fastboot_model"))
+        fb_vars = ctx.dev.fastboot.get_all_vars()
     except DeviceCommandError as e:
         raise DeviceError(get_string("wf_err_get_model").format(e=e), e)
+
+    ctx.active_slot_suffix = fb_vars.slot_suffix
+    ctx.device_model = fb_vars.model
+    ctx.serialno = fb_vars.serialno
+
+    if not ctx.device_model:
+        raise DeviceError(get_string("wf_err_fastboot_model"))
+
+    if fb_vars.stored_rollback_indices:
+        ctx.device_rollback_index = compute_device_rollback_index(
+            fb_vars.stored_rollback_indices
+        )
 
 
 def _wait_for_input_images(ctx: TaskContext) -> None:
@@ -80,12 +95,21 @@ def _detect_anti_rollback(ctx: TaskContext) -> None:
         ctx.on_log(get_string("wf_arb_detect_skipped"))
         return
 
-    if ctx.modify_rollback_index == "AUTO" and ctx.device_model == "TB322FC":
-        ctx.skip_rollback = True
-        ctx.on_log(get_string("wf_arb_detect_skipped_tb322fc"))
+    if ctx.device_rollback_index is not None:
+        ctx.on_log(
+            get_string("wf_arb_detected_device_index").format(
+                index=ctx.device_rollback_index
+            )
+        )
         return
 
-    # ON/AUTO: anti-rollback is checked from dumped images in the ARB step.
+    if ctx.device_model == "TB320FC":
+        ctx.tb320fc_arb_fallback = True
+        ctx.on_log(get_string("wf_arb_tb320fc_fallback"))
+        return
+
+    ctx.skip_rollback = True
+    ctx.on_log(get_string("wf_arb_no_stored_indices"))
 
 
 def _check_backup_critical(ctx: TaskContext) -> None:
@@ -123,7 +147,7 @@ def _dump_images(ctx: TaskContext) -> None:
     ctx.boot_target = f"boot{suffix}"
     ctx.vbmeta_target = f"vbmeta_system{suffix}"
     extra_dumps = []
-    if not ctx.skip_rollback:
+    if ctx.tb320fc_arb_fallback:
         extra_dumps = [ctx.boot_target, ctx.vbmeta_target]
 
     if (not ctx.skip_dp_workflow) or extra_dumps:
@@ -145,26 +169,37 @@ def _patch_devinfo(ctx: TaskContext) -> None:
 
 
 def _check_and_patch_arb(ctx: TaskContext) -> None:
-    if not ctx.boot_target or not ctx.vbmeta_target:
-        raise LTBoxError(get_string("wf_err_halted"))
+    if ctx.tb320fc_arb_fallback:
+        if not ctx.boot_target or not ctx.vbmeta_target:
+            raise LTBoxError(get_string("wf_err_halted"))
 
-    dumped_boot = const.BACKUP_DIR / f"{ctx.boot_target}.img"
-    dumped_vbmeta = const.BACKUP_DIR / f"{ctx.vbmeta_target}.img"
+        dumped_boot = const.BACKUP_DIR / f"{ctx.boot_target}.img"
+        dumped_vbmeta = const.BACKUP_DIR / f"{ctx.vbmeta_target}.img"
 
-    arb_status_result = actions.read_anti_rollback(
-        dumped_boot_path=dumped_boot, dumped_vbmeta_path=dumped_vbmeta
-    )
+        arb_status_result = actions.read_anti_rollback(
+            dumped_boot_path=dumped_boot, dumped_vbmeta_path=dumped_vbmeta
+        )
 
-    if arb_status_result[0] == "ERROR":
-        raise LTBoxError(get_string("wf_step8_err_arb_abort"))
+        if arb_status_result[0] == "ERROR":
+            raise LTBoxError(get_string("wf_step8_err_arb_abort"))
 
-    from .actions.arb import ArbStatus
+        status, boot_rb, vbmeta_rb = arb_status_result
 
-    status, boot_rb, vbmeta_rb = arb_status_result
+        if ctx.modify_rollback_index == "ON" and status == ArbStatus.MATCH:
+            status = ArbStatus.NEEDS_PATCH
+            arb_status_result = (status, boot_rb, vbmeta_rb)
+    else:
+        if ctx.device_rollback_index is None:
+            raise LTBoxError(get_string("wf_err_halted"))
 
-    if ctx.modify_rollback_index == "ON" and status == ArbStatus.MATCH:
-        status = ArbStatus.NEEDS_PATCH
-        arb_status_result = (status, boot_rb, vbmeta_rb)
+        arb_status_result = check_image_folder_arb(
+            ctx.device_rollback_index, ctx.modify_rollback_index
+        )
+
+        if arb_status_result[0] == "ERROR":
+            raise LTBoxError(get_string("wf_step8_err_arb_abort"))
+
+        status = arb_status_result[0]
 
     if status == ArbStatus.NEEDS_PATCH:
         ctx.arb_patched = True

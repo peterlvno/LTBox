@@ -3,7 +3,7 @@ import shutil
 import subprocess
 from enum import Enum
 from pathlib import Path
-from typing import Tuple
+from typing import Dict, Optional, Tuple
 
 from .. import constants as const
 from .. import device, utils
@@ -22,6 +22,60 @@ class ArbStatus(str, Enum):
     NEEDS_PATCH = "NEEDS_PATCH"
     MISSING_NEW = "MISSING_NEW"
     ERROR = "ERROR"
+
+
+def compute_device_rollback_index(
+    stored_indices: Dict[int, int],
+) -> Optional[int]:
+    meaningful = [v for v in stored_indices.values() if v > 1]
+    return max(meaningful) if meaningful else None
+
+
+def check_image_folder_arb(
+    device_rollback_index: int,
+    mode: str,
+) -> Tuple[ArbStatus, int, int]:
+    utils.ui.echo(get_string("act_start_arb"))
+    utils.check_dependencies()
+
+    new_boot_img = const.IMAGE_DIR / const.FN_BOOT
+    new_vbmeta_img = const.IMAGE_DIR / const.FN_VBMETA_SYSTEM
+
+    if not new_boot_img.exists() or not new_vbmeta_img.exists():
+        utils.ui.echo(
+            get_string("act_err_new_rom_missing").format(dir=const.IMAGE_DIR.name)
+        )
+        utils.ui.echo(get_string("act_arb_missing_new"))
+        return ArbStatus.MISSING_NEW, 0, 0
+
+    try:
+        new_boot_info = extract_image_avb_info(new_boot_img)
+        new_boot_rb = int(new_boot_info.get("rollback", "0"))
+
+        new_vbmeta_info = extract_image_avb_info(new_vbmeta_img)
+        new_vbmeta_rb = int(new_vbmeta_info.get("rollback", "0"))
+    except (ValueError, subprocess.CalledProcessError) as e:
+        utils.ui.error(get_string("act_err_read_new_info").format(e=e))
+        utils.ui.echo(get_string("act_arb_error"))
+        return ArbStatus.ERROR, 0, 0
+
+    utils.ui.echo(get_string("act_curr_boot_idx").format(idx=device_rollback_index))
+    utils.ui.echo(get_string("act_curr_vbmeta_idx").format(idx=device_rollback_index))
+    utils.ui.echo(get_string("act_new_boot_idx").format(idx=new_boot_rb))
+    utils.ui.echo(get_string("act_new_vbmeta_idx").format(idx=new_vbmeta_rb))
+
+    if mode == "ON":
+        utils.ui.echo(get_string("act_arb_patch_req"))
+        status = ArbStatus.NEEDS_PATCH
+    elif new_boot_rb < device_rollback_index or new_vbmeta_rb < device_rollback_index:
+        utils.ui.echo(get_string("act_arb_patch_req"))
+        status = ArbStatus.NEEDS_PATCH
+    else:
+        utils.ui.echo(get_string("act_arb_match"))
+        status = ArbStatus.MATCH
+
+    utils.ui.echo(get_string("act_arb_complete").format(status=status.value))
+    return status, device_rollback_index, device_rollback_index
 
 
 def read_anti_rollback(
