@@ -246,6 +246,7 @@ def edit_devinfo_persist(
     on_log: Callable[[str], None] = lambda s: None,
     on_confirm: Callable[[str], bool] = lambda msg: True,
     on_select: Callable[[List[Tuple[str, str]], str], str] = _default_select_callback,
+    serialno: Optional[str] = None,
 ) -> Optional[str]:
     on_log(get_string("act_start_dp_patch"))
 
@@ -275,6 +276,8 @@ def edit_devinfo_persist(
         shutil.copy(devinfo_img, backup_critical_dir)
     if persist_img.exists():
         shutil.copy(persist_img, backup_critical_dir)
+    if serialno:
+        (backup_critical_dir / "serialno.txt").write_text(serialno, encoding="utf-8")
     on_log(get_string("act_files_backed_up").format(dir=backup_critical_dir.name))
 
     on_log(get_string("act_clean_dir").format(dir=const.OUTPUT_DP_DIR.name))

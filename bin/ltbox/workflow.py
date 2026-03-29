@@ -165,6 +165,7 @@ def _patch_devinfo(ctx: TaskContext) -> None:
         ctx.backup_dir_name = actions.edit_devinfo_persist(
             on_log=ctx.on_log,
             on_confirm=prompts.confirm,
+            serialno=ctx.serialno,
         )
 
 

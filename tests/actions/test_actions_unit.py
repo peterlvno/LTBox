@@ -398,3 +398,81 @@ def test_edit_devinfo_prompt_is_highlighted_with_separator_and_color(tmp_path):
     assert any("\033[96m" in message and "=" in message for message in logged_messages)
     assert any("Play Integrity" in message for message in logged_messages)
     assert captured["prompt"].startswith("\033[93m")
+
+
+def test_edit_devinfo_persist_saves_serialno_txt(tmp_path):
+    backup_dir = tmp_path / "backup"
+    image_dir = tmp_path / "image"
+    output_dp_dir = tmp_path / "output_dp"
+    base_dir = tmp_path / "base"
+    backup_dir.mkdir()
+    image_dir.mkdir()
+    output_dp_dir.mkdir()
+    base_dir.mkdir()
+
+    (backup_dir / "devinfo.img").write_bytes(b"devinfo")
+    (backup_dir / "persist.img").write_bytes(b"persist")
+
+    with (
+        patch.multiple(
+            "ltbox.actions.region.const",
+            BACKUP_DIR=backup_dir,
+            IMAGE_DIR=image_dir,
+            OUTPUT_DP_DIR=output_dp_dir,
+            BASE_DIR=base_dir,
+            FN_DEVINFO="devinfo.img",
+            FN_PERSIST="persist.img",
+        ),
+        patch(
+            "ltbox.actions.region.detect_country_codes",
+            return_value={"devinfo.img": "ROW", "persist.img": "ROW"},
+        ),
+    ):
+        dir_name = region.edit_devinfo_persist(
+            on_log=lambda _: None,
+            on_confirm=lambda _: False,
+            serialno="MX726W4T",
+        )
+
+    assert dir_name is not None
+    backup_critical = base_dir / dir_name
+    serialno_file = backup_critical / "serialno.txt"
+    assert serialno_file.exists()
+    assert serialno_file.read_text(encoding="utf-8") == "MX726W4T"
+
+
+def test_edit_devinfo_persist_no_serialno_no_file(tmp_path):
+    backup_dir = tmp_path / "backup"
+    image_dir = tmp_path / "image"
+    output_dp_dir = tmp_path / "output_dp"
+    base_dir = tmp_path / "base"
+    backup_dir.mkdir()
+    image_dir.mkdir()
+    output_dp_dir.mkdir()
+    base_dir.mkdir()
+
+    (backup_dir / "devinfo.img").write_bytes(b"devinfo")
+
+    with (
+        patch.multiple(
+            "ltbox.actions.region.const",
+            BACKUP_DIR=backup_dir,
+            IMAGE_DIR=image_dir,
+            OUTPUT_DP_DIR=output_dp_dir,
+            BASE_DIR=base_dir,
+            FN_DEVINFO="devinfo.img",
+            FN_PERSIST="persist.img",
+        ),
+        patch(
+            "ltbox.actions.region.detect_country_codes",
+            return_value={"devinfo.img": "ROW"},
+        ),
+    ):
+        dir_name = region.edit_devinfo_persist(
+            on_log=lambda _: None,
+            on_confirm=lambda _: False,
+        )
+
+    assert dir_name is not None
+    backup_critical = base_dir / dir_name
+    assert not (backup_critical / "serialno.txt").exists()
