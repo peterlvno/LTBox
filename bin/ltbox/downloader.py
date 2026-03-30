@@ -3,7 +3,7 @@ import shutil
 import tarfile
 import zipfile
 from pathlib import Path
-from typing import Dict, NamedTuple, Optional, Set
+from typing import IO, Dict, NamedTuple, Optional, Set
 
 import httpx
 
@@ -51,6 +51,32 @@ def _github_client(repo_url: str) -> GitHubClient:
     return GitHubClient(_get_owner_repo(repo_url))
 
 
+def _write_stream(
+    response: "httpx.Response",
+    file: "IO[bytes]",
+    total_size: int,
+    show_progress: bool,
+) -> None:
+    if show_progress and tqdm and total_size > 0:
+        with tqdm(
+            total=total_size,
+            unit="B",
+            unit_scale=True,
+            unit_divisor=1024,
+            leave=False,
+            ncols=80,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
+        ) as pbar:
+            for chunk in response.iter_bytes(chunk_size=8192):
+                if chunk:
+                    file.write(chunk)
+                    pbar.update(len(chunk))
+    else:
+        for chunk in response.iter_bytes(chunk_size=8192):
+            if chunk:
+                file.write(chunk)
+
+
 def download_resource(
     url: str,
     dest_path: Path,
@@ -71,29 +97,9 @@ def download_resource(
             backoff=backoff,
         ) as response:
             total_size = int(response.headers.get("content-length", 0))
-            downloaded = 0
 
             with open(dest_path, "wb") as f:
-                if show_progress and tqdm and total_size > 0:
-                    with tqdm(
-                        total=total_size,
-                        unit="B",
-                        unit_scale=True,
-                        unit_divisor=1024,
-                        leave=False,
-                        ncols=80,
-                        bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]",
-                    ) as pbar:
-                        for chunk in response.iter_bytes(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                downloaded += len(chunk)
-                                pbar.update(len(chunk))
-                else:
-                    for chunk in response.iter_bytes(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            downloaded += len(chunk)
+                _write_stream(response, f, total_size, show_progress)
 
         msg_success = get_string("dl_download_success").format(filename=dest_path.name)
         utils.ui.echo(msg_success)
