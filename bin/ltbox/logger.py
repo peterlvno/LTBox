@@ -1,50 +1,52 @@
 import logging
-import sys
 from contextlib import contextmanager
 from typing import Optional
 
-try:
-    import colorama
-
-    colorama.init()
-except ImportError:
-    pass
+from rich.console import Console
 
 LOGGER_NAME = "ltbox"
 _logger = logging.getLogger(LOGGER_NAME)
 _logger.setLevel(logging.INFO)
 
+console = Console(highlight=False)
 
-class ColoredConsoleFormatter(logging.Formatter):
-    GREEN = "\033[92m"
-    CYAN = "\033[96m"
-    YELLOW = "\033[93m"
-    RED = "\033[91m"
-    RESET = "\033[0m"
 
-    def format(self, record: logging.LogRecord) -> str:
-        msg = super().format(record)
-        stripped_msg = msg.lstrip()
+class RichConsoleHandler(logging.Handler):
+    """Logging handler that routes messages through rich.Console."""
 
-        if stripped_msg.startswith("[+]"):
-            return f"{self.GREEN}{msg}{self.RESET}"
-        elif stripped_msg.startswith("[*]"):
-            return f"{self.CYAN}{msg}{self.RESET}"
-        elif stripped_msg.startswith("[!]"):
-            return (
-                f"{self.RED}{msg}{self.RESET}"
-                if record.levelno >= logging.ERROR
-                else f"{self.YELLOW}{msg}{self.RESET}"
-            )
-        elif record.levelno >= logging.ERROR:
-            return f"{self.RED}{msg}{self.RESET}"
-        return msg
+    STYLE_MAP = {
+        "[+]": "green",
+        "[*]": "cyan",
+    }
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            style = self._detect_style(msg, record)
+            if style:
+                console.print(msg, style=style, highlight=False)
+            else:
+                console.print(msg, highlight=False)
+        except Exception:
+            self.handleError(record)
+
+    @staticmethod
+    def _detect_style(msg: str, record: logging.LogRecord) -> Optional[str]:
+        stripped = msg.lstrip()
+        for prefix, style in RichConsoleHandler.STYLE_MAP.items():
+            if stripped.startswith(prefix):
+                return style
+        if stripped.startswith("[!]"):
+            return "red" if record.levelno >= logging.ERROR else "yellow"
+        if record.levelno >= logging.ERROR:
+            return "red"
+        return None
 
 
 if not _logger.handlers:
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(ColoredConsoleFormatter("%(message)s"))
-    _logger.addHandler(console_handler)
+    _rich_handler = RichConsoleHandler()
+    _rich_handler.setFormatter(logging.Formatter("%(message)s"))
+    _logger.addHandler(_rich_handler)
 
 
 def get_logger() -> logging.Logger:

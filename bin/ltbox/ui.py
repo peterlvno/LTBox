@@ -1,15 +1,13 @@
-import os
-import shutil
 from typing import List
 
-from .logger import get_logger
+from .logger import console, get_logger
 
 logger = get_logger()
 
 
 class ConsoleUI:
     def get_term_width(self, max_width: int = 78) -> int:
-        return min(max_width, shutil.get_terminal_size((80, 24)).columns)
+        return min(max_width, console.width)
 
     def echo(self, message: str = "", err: bool = False) -> None:
         if err:
@@ -26,9 +24,6 @@ class ConsoleUI:
     def error(self, message: str) -> None:
         self.echo(f"\033[91m{message}\033[0m", err=True)
 
-    def banner(self, char: str = "=", indent: str = "  ") -> str:
-        return f"{indent}{char * self.get_term_width()}"
-
     def box_output(self, lines: List[str], err: bool = False) -> None:
         self.echo("", err=err)
         for line in lines:
@@ -39,7 +34,7 @@ class ConsoleUI:
         return input(message)
 
     def clear(self) -> None:
-        os.system("cls")
+        console.clear()
 
 
 ui = ConsoleUI()

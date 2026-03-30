@@ -4,7 +4,7 @@ pyserial
 adbutils
 apkutils
 cachetools
-colorama
+rich
 tqdm
 questionary
 py7zr
