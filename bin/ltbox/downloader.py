@@ -109,6 +109,9 @@ def _resolve_extract_target(
     member_name: str, extract_map: Dict[str, Path]
 ) -> Optional[Path]:
     normalized = member_name.lstrip("./")
+    if ".." in normalized.split("/"):
+        return None
+
     if normalized in extract_map:
         return extract_map[normalized]
 
