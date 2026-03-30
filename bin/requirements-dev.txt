@@ -9,6 +9,7 @@ pypdl
 # Linting & Formatting
 ruff
 mypy
+types-cachetools
 types-setuptools
 
 # Utilities / CI

@@ -11,6 +11,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterable, List, NamedTuple, Optional, Union
 
+from cachetools import TTLCache, cached
+
 from . import constants as const
 from .i18n import get_string
 from .logger import get_logger
@@ -25,6 +27,12 @@ class ReleaseVersions(NamedTuple):
     latest_prerelease: Optional[str]
 
 
+_release_cache: TTLCache[tuple[str, str], ReleaseVersions] = TTLCache(
+    maxsize=8, ttl=300
+)
+
+
+@cached(_release_cache)
 def get_latest_release_versions(repo_owner: str, repo_name: str) -> ReleaseVersions:
     url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases?per_page=100"
     latest_release = None

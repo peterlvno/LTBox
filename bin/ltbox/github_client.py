@@ -3,12 +3,17 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
+from cachetools import TTLCache
 
 from . import net, utils
 from .errors import ToolError
 from .i18n import get_string
 
 GitHubPayload = dict[str, Any]
+
+_api_cache: TTLCache[
+    tuple[str, str, Optional[tuple[tuple[str, str | int], ...]]], Any
+] = TTLCache(maxsize=64, ttl=300)
 
 
 def _select_workflow_run_for_tag(
@@ -37,14 +42,23 @@ class GitHubClient:
         params: Optional[dict[str, str | int]] = None,
         timeout: int = 15,
     ) -> Any:
+        frozen_params = tuple(sorted(params.items())) if params else None
+        cache_key = (self.owner_repo, path, frozen_params)
+        cached = _api_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         api_url = f"https://api.github.com/repos/{self.owner_repo}/{path}"
         try:
             response = net.get_client().get(api_url, params=params, timeout=timeout)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
         except httpx.HTTPError as error:
             utils.ui.error(get_string("dl_err_check_network"))
             raise ToolError(get_string("dl_github_failed").format(e=error))
+
+        _api_cache[cache_key] = data
+        return data
 
     def _request_list(
         self,

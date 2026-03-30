@@ -3,6 +3,7 @@ cryptography
 pyserial
 adbutils
 apkutils
+cachetools
 colorama
 tqdm
 questionary

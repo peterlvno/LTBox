@@ -55,6 +55,15 @@ def integration_tools(request):
         print(f"\n[WARN] Failed to setup tools: {e}", flush=True)
 
 
+@pytest.fixture(autouse=True)
+def _clear_api_caches():
+    from ltbox.github_client import _api_cache
+    from ltbox.utils import _release_cache
+
+    _api_cache.clear()
+    _release_cache.clear()
+
+
 @pytest.fixture
 def mock_python_executable():
     with patch("ltbox.constants.PYTHON_EXE", sys.executable):
