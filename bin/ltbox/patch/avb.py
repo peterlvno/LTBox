@@ -105,6 +105,8 @@ def extract_image_avb_info(image_path: Path) -> Dict[str, Any]:
     for line in output.split("\n"):
         if line.strip().startswith("Prop:"):
             parts = line.split("->")
+            if len(parts) < 2:
+                continue
             key = parts[0].split(":")[-1].strip()
             val = parts[1].strip()[1:-1]
             info[key] = val
