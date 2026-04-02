@@ -232,12 +232,20 @@ def patch_chained_image_rollback(
 
         shutil.copy(new_image_path, patched_image_path)
 
-        _apply_avb_integrity_footer(
-            image_path=patched_image_path,
-            image_info=info,
-            key_file=key_file,
-            new_rollback_index=str(current_rb_index),
-        )
+        if key_file and info["algorithm"] != "NONE":
+            _resign_avb_image(
+                image_path=patched_image_path,
+                key_file=key_file,
+                algorithm=info["algorithm"],
+                rollback_index=current_rb_index,
+            )
+        else:
+            _apply_avb_integrity_footer(
+                image_path=patched_image_path,
+                image_info=info,
+                key_file=key_file,
+                new_rollback_index=str(current_rb_index),
+            )
 
     except (KeyError, subprocess.CalledProcessError, FileNotFoundError) as e:
         utils.ui.error(get_string("img_err_processing").format(name=image_name, e=e))
