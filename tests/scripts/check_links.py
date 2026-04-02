@@ -95,13 +95,8 @@ def main() -> None:
     print("--- Static Tools ---")
     if not check_url(tools.get("platform_tools_url"), "Platform Tools"):
         has_error = True
-    avb_archive_ok = check_url(tools.get("avb_archive_url"), "AVB Archive")
-    if not avb_archive_ok:
-        fallback_url = tools.get("avb_fallback_archive_url")
-        if fallback_url and check_url(fallback_url, "AVB Fallback Archive"):
-            print("AVB archive check failed, but fallback repository is reachable.")
-        else:
-            has_error = True
+    if not check_url(tools.get("avb_archive_url"), "AVB Archive"):
+        has_error = True
 
     # 2. KernelSU-Next (GitHub Release)
     print("\n--- KernelSU-Next ---")

@@ -49,7 +49,7 @@ def bundle_platform_tools(url: str) -> None:
     temp_zip.unlink()
 
 
-def bundle_avb_tools(primary_url: str, fallback_url: str) -> None:
+def bundle_avb_tools(url: str) -> None:
     avbtool = TOOLS_DIR / "avbtool.py"
     key1 = TOOLS_DIR / "testkey_rsa4096.pem"
     key2 = TOOLS_DIR / "testkey_rsa2048.pem"
@@ -65,22 +65,12 @@ def bundle_avb_tools(primary_url: str, fallback_url: str) -> None:
     }
 
     temp_tar = TOOLS_DIR / "avb.tar.gz"
-    temp_zip = TOOLS_DIR / "avb.zip"
-
     try:
-        _download(primary_url, temp_tar, "AVB archive (AOSP)")
+        _download(url, temp_tar, "AVB archive")
         _extract_archive(temp_tar, extract_map)
-    except Exception as e:
-        print(f"[bundle-tools] Primary AVB download failed ({e}), trying fallback...")
-        try:
-            _download(fallback_url, temp_zip, "AVB archive (fallback)")
-            _extract_archive(temp_zip, extract_map)
-        except Exception as e2:
-            raise RuntimeError(f"Both AVB downloads failed: {e2}") from e2
     finally:
-        for f in (temp_tar, temp_zip):
-            if f.exists():
-                f.unlink()
+        if temp_tar.exists():
+            temp_tar.unlink()
 
     missing = [p.name for p in extract_map.values() if not p.exists()]
     if missing:
@@ -185,7 +175,7 @@ def main() -> None:
 
     tools = config["tools"]
     bundle_platform_tools(tools["platform_tools_url"])
-    bundle_avb_tools(tools["avb_archive_url"], tools["avb_fallback_archive_url"])
+    bundle_avb_tools(tools["avb_archive_url"])
 
     kp = config["kptools"]
     bundle_kptools(kp["repo"], kp["asset_name"])

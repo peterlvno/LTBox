@@ -6,8 +6,7 @@
   },
   "tools": {
     "platform_tools_url": "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
-    "avb_archive_url": "https://android.googlesource.com/platform/external/avb/+archive/refs/heads/main-kernel.tar.gz",
-    "avb_fallback_archive_url": "https://github.com/LineageOS/android_external_avb/archive/refs/heads/lineage-23.2.zip"
+    "avb_archive_url": "https://android.googlesource.com/platform/external/avb/+archive/refs/heads/main-kernel.tar.gz"
   },
   "kptools": {
     "repo": "bmax121/KernelPatch",
