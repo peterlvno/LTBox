@@ -389,20 +389,25 @@ def rebuild_vbmeta_with_chained_images(
     original_vbmeta_path: Path,
     chained_images: List[Path],
     padding_size: str = "8192",
+    key_file: Optional[Path] = None,
+    algorithm: Optional[str] = None,
 ) -> None:
     utils.ui.info(get_string("act_remake_vbmeta"))
     vbmeta_info = extract_image_avb_info(original_vbmeta_path)
+    resolved_key_file = key_file
+    if resolved_key_file is None:
+        vbmeta_pubkey = vbmeta_info.get("pubkey_sha1")
+        resolved_key_file = const.KEY_MAP.get(str(vbmeta_pubkey))
 
-    vbmeta_pubkey = vbmeta_info.get("pubkey_sha1")
-    key_file = const.KEY_MAP.get(str(vbmeta_pubkey))
+        utils.ui.info(get_string("act_verify_vbmeta_key"))
+        if not resolved_key_file:
+            utils.ui.info(
+                get_string("act_err_vbmeta_key_mismatch").format(key=vbmeta_pubkey)
+            )
+            raise KeyError(get_string("act_err_unknown_key").format(key=vbmeta_pubkey))
+        utils.ui.info(get_string("img_key_matched").format(name=resolved_key_file.name))
 
-    utils.ui.info(get_string("act_verify_vbmeta_key"))
-    if not key_file:
-        utils.ui.info(
-            get_string("act_err_vbmeta_key_mismatch").format(key=vbmeta_pubkey)
-        )
-        raise KeyError(get_string("act_err_unknown_key").format(key=vbmeta_pubkey))
-    utils.ui.info(get_string("img_key_matched").format(name=key_file.name))
+    resolved_algorithm = algorithm or vbmeta_info["algorithm"]
 
     utils.ui.info(get_string("act_remaking_vbmeta"))
 
@@ -412,8 +417,8 @@ def rebuild_vbmeta_with_chained_images(
                 output_path=output_path,
                 original_vbmeta_path=original_vbmeta_path,
                 partition_image=chained_images[0],
-                key_file=key_file,
-                algorithm=vbmeta_info["algorithm"],
+                key_file=resolved_key_file,
+                algorithm=resolved_algorithm,
                 rollback_index=vbmeta_info.get("rollback", "0"),
                 flags=vbmeta_info.get("flags", "0"),
             )
@@ -427,9 +432,9 @@ def rebuild_vbmeta_with_chained_images(
         "--output",
         output_path,
         "--key",
-        key_file,
+        resolved_key_file,
         "--algorithm",
-        vbmeta_info["algorithm"],
+        resolved_algorithm,
         "--padding_size",
         padding_size,
         "--flags",

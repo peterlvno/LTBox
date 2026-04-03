@@ -536,6 +536,10 @@ def test_resign_incremental_ota_outputs_rebuilds_vbmeta_images_from_updated_chil
             return {"algorithm": "NONE"}
         if path == vbmeta_system_img:
             return {"algorithm": "SHA256_RSA2048"}
+        if path == working_dir / "vbmeta_rebuild" / "vbmeta_system.img":
+            return {"algorithm": "SHA256_RSA4096"}
+        if path == vbmeta_img:
+            return {"algorithm": "SHA256_RSA4096"}
         raise AssertionError(f"unexpected path: {path}")
 
     with (
@@ -578,11 +582,15 @@ def test_resign_incremental_ota_outputs_rebuilds_vbmeta_images_from_updated_chil
             output_path=output_dir / "vbmeta_system.img",
             original_vbmeta_path=working_dir / "vbmeta_rebuild" / "vbmeta_system.img",
             chained_images=[system_img],
+            key_file=key_file_4096,
+            algorithm="SHA256_RSA4096",
         ),
         call(
             output_path=output_dir / "vbmeta.img",
             original_vbmeta_path=vbmeta_img,
             chained_images=[boot_img, output_dir / "vbmeta_system.img"],
+            key_file=key_file_4096,
+            algorithm="SHA256_RSA4096",
         ),
     ]
     assert not (working_dir / "vbmeta_rebuild" / "vbmeta_system.img").exists()
@@ -605,13 +613,27 @@ def test_resign_incremental_ota_outputs_rebuilds_vbmeta_system_from_source(
     for path in (system_img, vbmeta_img, vbmeta_system_img):
         path.write_bytes(b"img")
 
+    key_file_4096 = tmp_path / "testkey_rsa4096.pem"
+    key_file_4096.write_text("key4096", encoding="utf-8")
+
+    def _fake_info(path):
+        if path == system_img:
+            return {"algorithm": "NONE"}
+        if path in (vbmeta_img, vbmeta_system_img):
+            return {"algorithm": "SHA256_RSA4096"}
+        raise AssertionError(f"unexpected path: {path}")
+
     with (
+        patch(
+            "ltbox.actions.ota._resolve_ota_testkey_path",
+            return_value=key_file_4096,
+        ),
         patch("ltbox.actions.ota.const.IMAGE_DIR", image_dir),
         patch("ltbox.actions.ota.const.IMAGE_NEW_DIR", output_dir),
         patch("ltbox.actions.ota.const.OTA_WORKING_DIR", working_dir),
         patch(
             "ltbox.actions.ota.extract_image_avb_info",
-            return_value={"algorithm": "NONE"},
+            side_effect=_fake_info,
         ),
         patch("ltbox.actions.ota.resign_avb_image") as mock_resign,
         patch(
@@ -627,11 +649,15 @@ def test_resign_incremental_ota_outputs_rebuilds_vbmeta_system_from_source(
             output_path=output_dir / "vbmeta_system.img",
             original_vbmeta_path=vbmeta_system_img,
             chained_images=[system_img],
+            key_file=key_file_4096,
+            algorithm="SHA256_RSA4096",
         ),
         call(
             output_path=output_dir / "vbmeta.img",
             original_vbmeta_path=vbmeta_img,
             chained_images=[output_dir / "vbmeta_system.img"],
+            key_file=key_file_4096,
+            algorithm="SHA256_RSA4096",
         ),
     ]
 
@@ -1165,6 +1191,55 @@ def test_rebuild_vbmeta_with_multiple_images_falls_back_to_make_vbmeta(tmp_path)
         img1,
         "--include_descriptors_from_image",
         img2,
+    )
+
+
+def test_rebuild_vbmeta_with_override_key_skips_pubkey_validation(tmp_path):
+    output_path = tmp_path / "vbmeta.out.img"
+    original_vbmeta = tmp_path / "vbmeta.img"
+    original_vbmeta.write_bytes(b"vbmeta")
+    partition_image = tmp_path / "boot.img"
+    partition_image.write_bytes(b"boot")
+    key_file = tmp_path / "testkey_rsa4096.pem"
+    key_file.write_text("key", encoding="utf-8")
+
+    vbmeta_info = {
+        "pubkey_sha1": "unknown-key",
+        "algorithm": "SHA256_RSA2048",
+        "rollback": "7",
+        "flags": "0",
+    }
+
+    with (
+        patch("ltbox.patch.avb.extract_image_avb_info", return_value=vbmeta_info),
+        patch("ltbox.patch.avb.utils.AvbToolWrapper") as mock_avbtool,
+    ):
+        from ltbox.patch.avb import rebuild_vbmeta_with_chained_images
+
+        rebuild_vbmeta_with_chained_images(
+            output_path,
+            original_vbmeta,
+            [partition_image],
+            key_file=key_file,
+            algorithm="SHA256_RSA4096",
+        )
+
+    mock_avbtool.return_value.run.assert_called_once_with(
+        "update_partition_descriptor",
+        "--image",
+        original_vbmeta,
+        "--partition_image",
+        partition_image,
+        "--output",
+        output_path,
+        "--key",
+        key_file,
+        "--algorithm",
+        "SHA256_RSA4096",
+        "--rollback_index",
+        "7",
+        "--flags",
+        "0",
     )
 
 

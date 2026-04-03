@@ -427,11 +427,18 @@ def _rebuild_ota_vbmeta_image(
 
     output_path = const.IMAGE_NEW_DIR / f"{partition_name}.img"
     base_path, temp_copy = _prepare_ota_vbmeta_rebuild_base(output_path)
+    base_vbmeta_info = extract_image_avb_info(base_path)
+    key_path, rebuild_algorithm = _resolve_ota_resign_policy(
+        partition_name,
+        str(base_vbmeta_info.get("algorithm", "NONE")).upper(),
+    )
     try:
         rebuild_vbmeta_with_chained_images(
             output_path=output_path,
             original_vbmeta_path=base_path,
             chained_images=chained_images,
+            key_file=key_path,
+            algorithm=rebuild_algorithm,
         )
     finally:
         if temp_copy is not None and temp_copy.exists():
