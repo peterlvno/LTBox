@@ -72,6 +72,12 @@ class LTBoxConfig:
         self.qsaharaserver_exe = self.tools_dir / "Qsaharaserver.exe"
         self.edl_exe = self.tools_dir / "fh_loader.exe"
         self.magiskboot_exe = self.tools_dir / "magiskboot.exe"
+        self.otatools_dir = self.tools_dir / "otatools"
+        self.otatools_linux_dir = self.otatools_dir / "linux"
+        self.otatools_linux_bin_dir = self.otatools_linux_dir / "bin"
+        self.otatools_linux_lib_dir = self.otatools_linux_dir / "lib"
+        self.otatools_linux_lib64_dir = self.otatools_linux_dir / "lib64"
+        self.otatools_lpmake = self.otatools_linux_bin_dir / "lpmake"
 
     def load(self) -> None:
         if self._loaded:
@@ -271,6 +277,12 @@ AVBTOOL_PY = CONF.avbtool_py
 QSAHARASERVER_EXE = CONF.qsaharaserver_exe
 EDL_EXE = CONF.edl_exe
 MAGISKBOOT_EXE = CONF.magiskboot_exe
+OTATOOLS_DIR = CONF.otatools_dir
+OTATOOLS_LINUX_DIR = CONF.otatools_linux_dir
+OTATOOLS_LINUX_BIN_DIR = CONF.otatools_linux_bin_dir
+OTATOOLS_LINUX_LIB_DIR = CONF.otatools_linux_lib_dir
+OTATOOLS_LINUX_LIB64_DIR = CONF.otatools_linux_lib64_dir
+OTATOOLS_LPMAKE = CONF.otatools_lpmake
 
 KSU_APK_REPO = CONF.ksu_apk_repo
 KSU_APK_TAG = CONF.ksu_apk_tag

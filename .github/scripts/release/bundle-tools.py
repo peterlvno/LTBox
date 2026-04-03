@@ -1,4 +1,4 @@
-"""CI script: download platform-tools, AVB tools, and kptools into bin/tools/."""
+"""CI script: download packaged tools into bin/tools/."""
 
 import json
 import re
@@ -14,6 +14,8 @@ import requests
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CI_TOOLS_CONFIG = REPO_ROOT / ".github" / "ci-tools.json"
 TOOLS_DIR = REPO_ROOT / "bin" / "tools"
+OTATOOLS_LINUX_DIR = TOOLS_DIR / "otatools" / "linux"
+_CI_ANDROID_JS_VARS = re.compile(r"var JSVariables = (\{.*?\});", re.S)
 
 
 def _download(url: str, dest: Path, description: str) -> None:
@@ -25,6 +27,15 @@ def _download(url: str, dest: Path, description: str) -> None:
             if chunk:
                 f.write(chunk)
     print(f"[bundle-tools] Downloaded {dest.name}")
+
+
+def _load_ci_android_variables(url: str) -> dict:
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    match = _CI_ANDROID_JS_VARS.search(response.text)
+    if not match:
+        raise RuntimeError(f"Unable to parse ci.android.com metadata from {url}")
+    return json.loads(match.group(1))
 
 
 def bundle_platform_tools(url: str) -> None:
@@ -75,6 +86,134 @@ def bundle_avb_tools(url: str) -> None:
     missing = [p.name for p in extract_map.values() if not p.exists()]
     if missing:
         raise RuntimeError(f"AVB extraction incomplete, missing: {missing}")
+
+
+def _resolve_otatools_metadata(
+    branch: str, target: str, artifact_name: str
+) -> dict[str, str]:
+    grid_url = f"https://ci.android.com/builds/branches/{branch}/grid"
+    grid_data = _load_ci_android_variables(grid_url)
+
+    build_id = None
+    for build in grid_data.get("builds", []):
+        for target_entry in build.get("targets", []):
+            target_info = target_entry.get("target", {})
+            if target_info.get("name") != target:
+                continue
+            if target_entry.get("successful") is True:
+                build_id = target_entry.get("buildId") or build.get("buildId")
+                break
+        if build_id:
+            break
+
+    if not build_id:
+        raise RuntimeError(
+            f"No successful ci.android.com build found for {branch}/{target}"
+        )
+
+    artifact_page_url = (
+        f"https://ci.android.com/builds/submitted/{build_id}/{target}/latest"
+    )
+    artifact_page = _load_ci_android_variables(artifact_page_url)
+    artifact = next(
+        (
+            item
+            for item in artifact_page.get("artifacts", [])
+            if item.get("name") == artifact_name
+        ),
+        None,
+    )
+    if artifact is None:
+        raise RuntimeError(
+            f"{artifact_name} not found for ci.android.com build {build_id}/{target}"
+        )
+
+    return {
+        "branch": branch,
+        "target": target,
+        "build_id": str(build_id),
+        "artifact_name": artifact_name,
+        "artifact_size": str(artifact.get("size", "")),
+        "artifact_md5": str(artifact.get("md5", "")),
+        "download_url": (
+            f"https://ci.android.com/builds/submitted/{build_id}/{target}/latest/raw/{artifact_name}"
+        ),
+    }
+
+
+def _resolve_otatools_member_target(member_name: str) -> Path | None:
+    normalized = member_name.lstrip("./").replace("\\", "/")
+    if not normalized:
+        return None
+
+    parts = [part for part in normalized.split("/") if part]
+    if (
+        len(parts) >= 2
+        and parts[-2] == "bin"
+        and parts[-1]
+        in {
+            "lpmake",
+            "lpdump",
+            "lpunpack",
+        }
+    ):
+        return Path("bin") / parts[-1]
+
+    for anchor in ("lib64", "lib"):
+        if anchor in parts:
+            anchor_index = parts.index(anchor)
+            tail = parts[anchor_index + 1 :]
+            if tail:
+                return Path(anchor).joinpath(*tail)
+
+    return None
+
+
+def bundle_otatools(branch: str, target: str, artifact_name: str) -> None:
+    bundled_lpmake = OTATOOLS_LINUX_DIR / "bin" / "lpmake"
+    metadata_path = OTATOOLS_LINUX_DIR / "otatools-metadata.json"
+    if bundled_lpmake.exists() and metadata_path.exists():
+        print("[bundle-tools] otatools already present, skipping.")
+        return
+
+    metadata = _resolve_otatools_metadata(branch, target, artifact_name)
+    temp_zip = TOOLS_DIR / artifact_name
+    extracted_files: list[str] = []
+
+    try:
+        _download(
+            metadata["download_url"],
+            temp_zip,
+            f"otatools ({metadata['build_id']}/{target})",
+        )
+
+        if OTATOOLS_LINUX_DIR.exists():
+            shutil.rmtree(OTATOOLS_LINUX_DIR)
+        OTATOOLS_LINUX_DIR.mkdir(parents=True, exist_ok=True)
+
+        with zipfile.ZipFile(temp_zip, "r") as zf:
+            for member in zf.infolist():
+                if member.is_dir():
+                    continue
+                relative_target = _resolve_otatools_member_target(member.filename)
+                if relative_target is None:
+                    continue
+                destination = OTATOOLS_LINUX_DIR / relative_target
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(member) as src, open(destination, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                extracted_files.append(relative_target.as_posix())
+                print(f"[bundle-tools] Extracted {relative_target.as_posix()}")
+    finally:
+        if temp_zip.exists():
+            temp_zip.unlink()
+
+    if not bundled_lpmake.exists():
+        raise RuntimeError("otatools extraction incomplete, missing: bin/lpmake")
+
+    metadata["extracted_files"] = extracted_files
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    print("[bundle-tools] otatools ready.")
 
 
 def _extract_archive(archive_path: Path, extract_map: dict[str, Path]) -> None:
@@ -176,6 +315,12 @@ def main() -> None:
     tools = config["tools"]
     bundle_platform_tools(tools["platform_tools_url"])
     bundle_avb_tools(tools["avb_archive_url"])
+    otatools = config["otatools"]
+    bundle_otatools(
+        otatools["branch"],
+        otatools["target"],
+        otatools["artifact_name"],
+    )
 
     kp = config["kptools"]
     bundle_kptools(kp["repo"], kp["asset_name"])

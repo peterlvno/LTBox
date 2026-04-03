@@ -1,5 +1,3 @@
-import os
-import shlex
 import shutil
 import subprocess
 import zipfile
@@ -292,20 +290,39 @@ def _run_differential_patch(
 
 
 def _resolve_lpmake_command() -> list[str]:
-    configured_cmd = os.environ.get("LTBOX_LPMAKE_CMD", "").strip()
-    if configured_cmd:
-        return shlex.split(configured_cmd, posix=False)
+    bundled_lpmake = const.OTATOOLS_LPMAKE
+    if not bundled_lpmake.exists():
+        raise ToolError(
+            "Required OTA tool missing: "
+            f"{bundled_lpmake}. Re-download or re-extract the LTBox release package."
+        )
 
-    configured_path = os.environ.get("LTBOX_LPMAKE", "").strip()
-    if configured_path:
-        return [configured_path]
+    wsl_exe = shutil.which("wsl.exe")
+    if not wsl_exe:
+        raise ToolError(
+            "WSL is required for OTA super rebuilding. Install WSL and re-run LTBox."
+        )
 
-    for candidate in ("lpmake.exe", "lpmake"):
-        resolved = shutil.which(candidate)
-        if resolved:
-            return [resolved]
+    ld_library_paths = []
+    for lib_dir in (const.OTATOOLS_LINUX_LIB64_DIR, const.OTATOOLS_LINUX_LIB_DIR):
+        if lib_dir.exists():
+            ld_library_paths.append(_windows_to_wsl_path(lib_dir))
 
-    raise ToolError("lpmake not found. Set LTBOX_LPMAKE or LTBOX_LPMAKE_CMD.")
+    command = [wsl_exe, "--exec", "/usr/bin/env"]
+    if ld_library_paths:
+        command.append(f"LD_LIBRARY_PATH={':'.join(ld_library_paths)}")
+    command.append(_windows_to_wsl_path(bundled_lpmake))
+    return command
+
+
+def _windows_to_wsl_path(path: Path) -> str:
+    resolved = str(Path(path).resolve())
+    if len(resolved) < 2 or resolved[1] != ":":
+        raise ToolError(f"Unable to translate non-Windows path for WSL: {resolved}")
+
+    drive = resolved[0].lower()
+    tail = resolved[2:].replace("\\", "/").lstrip("/")
+    return f"/mnt/{drive}/{tail}"
 
 
 def _copy_flash_xmls(output_dir: Path, rawprogram_paths: List[Path]) -> None:
@@ -346,6 +363,7 @@ def _rebuild_dynamic_super(
             dynamic_build_dir,
             rebuilt_super,
             lpmake_parts[-1],
+            _windows_to_wsl_path,
         ),
     ]
 

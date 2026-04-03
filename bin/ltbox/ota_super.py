@@ -5,7 +5,7 @@ import struct
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Callable, Iterable, Optional, Sequence
 
 from .errors import MissingFileError, ToolError
 from .xml_catalog import PartitionRecord
@@ -438,16 +438,18 @@ def build_lpmake_command(
     layout: SuperLayout,
     image_dir: Path,
     output_path: Path,
-    lpmake_executable: str,
+    lpmake_executable: Optional[str] = None,
+    path_resolver: Callable[[Path], str] = str,
 ) -> list[str]:
     if not layout.block_devices:
         raise ToolError("super metadata does not define any block devices")
 
     command = [
-        lpmake_executable,
         f"--metadata-size={layout.geometry.metadata_max_size}",
         f"--metadata-slots={layout.geometry.metadata_slot_count}",
     ]
+    if lpmake_executable is not None:
+        command.insert(0, lpmake_executable)
 
     for group in layout.groups:
         command.append(f"--group={group.name}:{group.maximum_size}")
@@ -474,9 +476,9 @@ def build_lpmake_command(
             f"--partition={partition.name}:{partition.attribute_name}:{image_size}:{partition.group_name}"
         )
         if image_path is not None:
-            command.append(f"--image={partition.name}={image_path}")
+            command.append(f"--image={partition.name}={path_resolver(image_path)}")
 
-    command.append(f"--output={output_path}")
+    command.append(f"--output={path_resolver(output_path)}")
     return command
 
 

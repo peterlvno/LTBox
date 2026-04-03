@@ -6,8 +6,10 @@ import pytest
 from ltbox import constants as const
 from ltbox import menu_data
 from ltbox.actions import edl
+from ltbox.actions import ota
 from ltbox.actions import region
 from ltbox.actions import xml as xml_action
+from ltbox.errors import ToolError
 from ltbox.actions.root.strategies import GkiRootStrategy
 from ltbox.patch.avb import (
     patch_chained_image_rollback,
@@ -64,6 +66,63 @@ def test_xml_select_prefers_ota_keep_data_xml(mock_env):
 
     assert "rawprogram_save_persist_ota_unsparse0.xml" in r_names
     assert "rawprogram_save_persist_unsparse0.xml" not in r_names
+
+
+def test_resolve_lpmake_command_uses_bundled_tool(tmp_path):
+    otatools_linux_dir = tmp_path / "tools" / "otatools" / "linux"
+    bin_dir = otatools_linux_dir / "bin"
+    lib64_dir = otatools_linux_dir / "lib64"
+    bin_dir.mkdir(parents=True)
+    lib64_dir.mkdir(parents=True)
+    lpmake_path = bin_dir / "lpmake"
+    lpmake_path.write_text("stub", encoding="utf-8")
+
+    with (
+        patch("ltbox.actions.ota.const.OTATOOLS_LPMAKE", lpmake_path),
+        patch("ltbox.actions.ota.const.OTATOOLS_LINUX_LIB64_DIR", lib64_dir),
+        patch(
+            "ltbox.actions.ota.const.OTATOOLS_LINUX_LIB_DIR", otatools_linux_dir / "lib"
+        ),
+        patch(
+            "ltbox.actions.ota.shutil.which",
+            return_value="C:\\Windows\\System32\\wsl.exe",
+        ),
+    ):
+        command = ota._resolve_lpmake_command()
+
+    assert command[:3] == ["C:\\Windows\\System32\\wsl.exe", "--exec", "/usr/bin/env"]
+    assert command[3].startswith("LD_LIBRARY_PATH=/mnt/")
+    assert command[4].endswith("/tools/otatools/linux/bin/lpmake")
+
+
+def test_resolve_lpmake_command_requires_bundled_tool(tmp_path):
+    missing_lpmake = tmp_path / "tools" / "otatools" / "linux" / "bin" / "lpmake"
+
+    with patch("ltbox.actions.ota.const.OTATOOLS_LPMAKE", missing_lpmake):
+        with pytest.raises(ToolError, match="Required OTA tool missing"):
+            ota._resolve_lpmake_command()
+
+
+def test_resolve_lpmake_command_requires_wsl(tmp_path):
+    otatools_linux_dir = tmp_path / "tools" / "otatools" / "linux"
+    bin_dir = otatools_linux_dir / "bin"
+    bin_dir.mkdir(parents=True)
+    lpmake_path = bin_dir / "lpmake"
+    lpmake_path.write_text("stub", encoding="utf-8")
+
+    with (
+        patch("ltbox.actions.ota.const.OTATOOLS_LPMAKE", lpmake_path),
+        patch(
+            "ltbox.actions.ota.const.OTATOOLS_LINUX_LIB64_DIR",
+            otatools_linux_dir / "lib64",
+        ),
+        patch(
+            "ltbox.actions.ota.const.OTATOOLS_LINUX_LIB_DIR", otatools_linux_dir / "lib"
+        ),
+        patch("ltbox.actions.ota.shutil.which", return_value=None),
+    ):
+        with pytest.raises(ToolError, match="WSL is required"):
+            ota._resolve_lpmake_command()
 
 
 def test_flash_args(mock_env):

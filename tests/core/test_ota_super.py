@@ -183,6 +183,28 @@ def test_build_lpmake_command_uses_layout_metadata(tmp_path):
     assert not any(item.startswith("--image=system_b=") for item in command)
 
 
+def test_build_lpmake_command_uses_custom_path_resolver(tmp_path):
+    records, image_dir = _build_test_super_layout(tmp_path)
+    layout = parse_super_layout(records, image_dir)
+
+    dynamic_dir = tmp_path / "images"
+    dynamic_dir.mkdir()
+    (dynamic_dir / "system.img").write_bytes(b"S" * (2 * LP_SECTOR_SIZE))
+    (dynamic_dir / "vendor.img").write_bytes(b"V" * (3 * LP_SECTOR_SIZE))
+
+    command = build_lpmake_command(
+        layout,
+        dynamic_dir,
+        tmp_path / "super.img",
+        "lpmake",
+        lambda path: f"/mnt/test/{path.name}",
+    )
+
+    assert "--image=system_a=/mnt/test/system.img" in command
+    assert "--image=vendor_a=/mnt/test/vendor.img" in command
+    assert "--output=/mnt/test/super.img" in command
+
+
 def test_split_rebuilt_super_uses_original_chunk_layout(tmp_path):
     records, image_dir = _build_test_super_layout(tmp_path)
     layout = parse_super_layout(records, image_dir)

@@ -56,6 +56,7 @@ jobs:
             'bin/tools/fastboot.exe',
             'bin/tools/avbtool.py',
             'bin/tools/kptools.exe',
+            'bin/tools/otatools/linux/bin/lpmake',
             'bin/tools/testkey_rsa4096.pem',
             'bin/tools/testkey_rsa2048.pem',
             'bin/python3/python.exe'
