@@ -7,6 +7,12 @@ from ltbox.ota_super import (
     LP_METADATA_GEOMETRY_MAGIC,
     LP_METADATA_HEADER_MAGIC,
     LP_SECTOR_SIZE,
+    SuperBlockDevice,
+    SuperExtent,
+    SuperGeometry,
+    SuperGroup,
+    SuperLayout,
+    SuperPartition,
     build_lpmake_command,
     create_keep_data_ota_xml,
     extract_partition_images,
@@ -339,6 +345,46 @@ def test_build_lpmake_command_uses_custom_path_resolver(tmp_path):
     assert "--image=system_a=/mnt/test/system.img" in command
     assert "--image=vendor_a=/mnt/test/vendor.img" in command
     assert "--output=/mnt/test/super.img" in command
+
+
+def test_build_lpmake_command_skips_implicit_default_group(tmp_path):
+    dynamic_dir = tmp_path / "images"
+    dynamic_dir.mkdir()
+    (dynamic_dir / "system.img").write_bytes(b"S" * (2 * LP_SECTOR_SIZE))
+
+    layout = SuperLayout(
+        geometry=SuperGeometry(
+            metadata_max_size=4096,
+            metadata_slot_count=3,
+            logical_block_size=4096,
+        ),
+        header_flags=0,
+        block_devices=(SuperBlockDevice(name="super", size=4096),),
+        groups=(
+            SuperGroup(name="default", maximum_size=0),
+            SuperGroup(name="dynamic_a", maximum_size=2048),
+        ),
+        partitions=(
+            SuperPartition(
+                name="system_a",
+                attributes=1,
+                group_name="default",
+                extents=(SuperExtent(2, 0, 0, 0),),
+            ),
+        ),
+        chunks=(),
+    )
+
+    command = build_lpmake_command(
+        layout,
+        dynamic_dir,
+        tmp_path / "super.img",
+        "lpmake",
+    )
+
+    assert "--group=default:0" not in command
+    assert "--group=dynamic_a:2048" in command
+    assert "--partition=system_a:readonly:1024:default" in command
 
 
 def test_split_rebuilt_super_uses_original_chunk_layout(tmp_path):

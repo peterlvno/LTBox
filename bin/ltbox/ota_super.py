@@ -476,6 +476,9 @@ def build_lpmake_command(
         command.insert(0, lpmake_executable)
 
     for group in layout.groups:
+        # lpmake provides the implicit "default" group on its own.
+        if group.name.strip().lower() == "default":
+            continue
         command.append(f"--group={group.name}:{group.maximum_size}")
 
     for device in layout.block_devices:
