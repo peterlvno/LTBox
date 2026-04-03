@@ -35,7 +35,7 @@ jobs:
         run: ./.github/scripts/release/install-tools-from-cache.ps1
 
       - name: Download tools artifact from test job
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: tools-exe
           path: bin/tools/
