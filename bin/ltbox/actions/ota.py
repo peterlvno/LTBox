@@ -2,30 +2,15 @@ import shutil
 import subprocess
 import zipfile
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Optional
 
 from .. import constants as const
-from .. import downloader, ota_super, partition, utils
-from ..errors import MissingFileError, ToolError, UserCancelError
+from .. import ota_super, partition, update_engine_payload, utils
+from ..errors import MissingFileError, ToolError
 from ..i18n import get_string
 from ..process_runner import CommandRunner, RunOptions
 from ..prompt_helpers import prompt_yes_no
 from ..xml_catalog import PartitionGroup, XmlCatalog
-
-
-def _payload_dumper_cmd(args: List[str]) -> List[str]:
-    """Build command to run payload_dumper.py with its directory on sys.path.
-
-    The bundled Python runs in isolated mode (safe_path=True, ignore_environment=True),
-    so PYTHONPATH and automatic sys.path insertion are both disabled. We inject
-    the payload_dumper directory into sys.path explicitly via -c.
-    """
-    script = const.PAYLOAD_DUMPER_PY
-    bootstrap = (
-        f"import sys; sys.path.insert(0, {str(const.PAYLOAD_DUMPER_DIR)!r}); "
-        f"exec(open({str(script)!r}, encoding='utf-8').read())"
-    )
-    return [str(const.PYTHON_EXE), "-c", bootstrap, *args]
 
 
 def _find_zip_files() -> List[Path]:
@@ -71,94 +56,13 @@ def _extract_payload_bin(zip_path: Path, working_dir: Path) -> Path:
     return payload_bin
 
 
-def _get_diff_partition_names(payload_bin: Path) -> List[str]:
-    runner = CommandRunner()
-    result = runner.run(
-        _payload_dumper_cmd([str(payload_bin), "--diffpartname"]),
-        options=RunOptions(capture=True, check=True),
-    )
-
-    partitions = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    if not partitions:
+def _get_payload_partition_infos(
+    payload_bin: Path,
+) -> List[update_engine_payload.PayloadPartitionInfo]:
+    partition_infos = update_engine_payload.get_partition_infos(payload_bin)
+    if not partition_infos:
         raise ToolError(get_string("ota_err_no_diff_partitions"))
-
-    return sorted(partitions)
-
-
-def _prompt_partition_selection(labels: List[str]) -> List[str]:
-    utils.ui.echo("")
-    utils.ui.echo(get_string("ota_partition_choice_title"))
-    utils.ui.echo(f"   1. {get_string('ota_partition_all')}")
-    utils.ui.echo(f"   2. {get_string('ota_partition_select')}")
-    utils.ui.echo(f"   c. {get_string('cancel')}")
-    utils.ui.echo("")
-
-    while True:
-        choice = utils.ui.prompt(get_string("prompt_select")).strip().lower()
-        if choice == "1":
-            return labels[:]
-        if choice == "2":
-            break
-        if choice == "c":
-            raise UserCancelError(get_string("act_op_cancel"))
-        utils.ui.error(get_string("err_invalid_selection"))
-
-    # Individual toggle-based selection (adapted from edl.py)
-    selected: Set[str] = set()
-
-    while True:
-        utils.ui.clear()
-        width = utils.ui.get_term_width()
-        utils.ui.echo("\n" + "=" * width)
-        utils.ui.echo(f"   {get_string('ota_select_partitions_title')}")
-        utils.ui.echo("=" * width + "\n")
-
-        count = len(labels)
-        for i in range(0, count, 2):
-            label1 = labels[i]
-            mark1 = " [v]" if label1 in selected else ""
-            item1 = f" {i + 1:3d}. {label1}{mark1}"
-
-            if i + 1 < count:
-                label2 = labels[i + 1]
-                mark2 = " [v]" if label2 in selected else ""
-                item2 = f"{i + 2:3d}. {label2}{mark2}"
-                utils.ui.echo(f"  {item1:<38} {item2}")
-            else:
-                utils.ui.echo(f"  {item1}")
-
-        utils.ui.echo(f"   f. {get_string('act_flash_partitions_select_done')}")
-        utils.ui.echo(f"   c. {get_string('cancel')}")
-        utils.ui.echo("\n" + "=" * width + "\n")
-
-        choice = utils.ui.prompt(get_string("prompt_select")).strip().lower()
-        if choice == "f":
-            result = [label for label in labels if label in selected]
-            if not result:
-                utils.ui.error(get_string("ota_err_none_selected"))
-                input(get_string("press_enter_to_continue"))
-                continue
-            return result
-        if choice == "c":
-            raise UserCancelError(get_string("act_op_cancel"))
-
-        try:
-            idx = int(choice)
-        except ValueError:
-            utils.ui.error(get_string("err_invalid_selection"))
-            input(get_string("press_enter_to_continue"))
-            continue
-
-        if not 1 <= idx <= len(labels):
-            utils.ui.error(get_string("err_invalid_selection"))
-            input(get_string("press_enter_to_continue"))
-            continue
-
-        label = labels[idx - 1]
-        if label in selected:
-            selected.remove(label)
-        else:
-            selected.add(label)
+    return partition_infos
 
 
 def _build_partition_file_map(
@@ -229,57 +133,39 @@ def _resolve_dynamic_partition_sources(
     return layout, dynamic_dir
 
 
-def _stage_old_images(
-    partitions: List[str], file_map: dict[str, Path], staging_dir: Path
-) -> None:
-    """Create a staging directory with <partition>.img symlinks/copies.
-
-    payload_dumper expects files named ``<partition>.img`` in the --old directory,
-    but the actual firmware files may have other extensions (.elf, .mbn, .bin, etc.).
-    """
-    staging_dir.mkdir(parents=True, exist_ok=True)
-    for name in partitions:
-        src = file_map.get(name)
-        if src is None:
-            continue
-        dest = staging_dir / f"{name}.img"
-        if dest.exists():
-            continue
-        if src.suffix == ".img":
-            try:
-                dest.symlink_to(src.resolve())
-            except OSError:
-                shutil.copy2(src, dest)
-        else:
-            shutil.copy2(src, dest)
-
-
 def _run_differential_patch(
     payload_bin: Path,
     partitions: List[str],
     output_dir: Path,
-    old_dir: Path,
+    file_map: dict[str, Path],
+    new_sizes: dict[str, int],
 ) -> None:
     utils.recreate_dir(output_dir)
 
     images_arg = ",".join(partitions)
     utils.ui.echo(get_string("ota_running_patch").format(images=images_arg))
 
+    new_images = []
+    for name in partitions:
+        image_path = output_dir / f"{name}.img"
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(image_path, "wb") as f:
+            f.truncate(new_sizes[name])
+        new_images.append(image_path)
+
     runner = CommandRunner()
     try:
+        delta_generator_command = [
+            *_resolve_delta_generator_command(),
+            f"-in_file={_windows_to_wsl_path(payload_bin)}",
+            f"-partition_names={':'.join(partitions)}",
+            "-new_partitions="
+            + ":".join(_windows_to_wsl_path(path) for path in new_images),
+            "-old_partitions="
+            + ":".join(_windows_to_wsl_path(file_map[name]) for name in partitions),
+        ]
         runner.run(
-            _payload_dumper_cmd(
-                [
-                    str(payload_bin),
-                    "--diff",
-                    "--images",
-                    images_arg,
-                    "--out",
-                    str(output_dir),
-                    "--old",
-                    str(old_dir),
-                ]
-            ),
+            delta_generator_command,
             options=RunOptions(stream=True, check=True),
         )
     except subprocess.CalledProcessError as e:
@@ -290,12 +176,11 @@ def _run_differential_patch(
     utils.ui.echo(get_string("ota_patch_complete").format(dir=output_dir.name))
 
 
-def _resolve_lpmake_command() -> list[str]:
-    bundled_lpmake = const.OTATOOLS_LPMAKE
-    if not bundled_lpmake.exists():
+def _resolve_otatools_linux_command(tool_path: Path) -> list[str]:
+    if not tool_path.exists():
         raise ToolError(
             "Required OTA tool missing: "
-            f"{bundled_lpmake}. Re-download or re-extract the LTBox release package."
+            f"{tool_path}. Re-download or re-extract the LTBox release package."
         )
 
     wsl_exe = shutil.which("wsl.exe")
@@ -312,8 +197,16 @@ def _resolve_lpmake_command() -> list[str]:
     command = [wsl_exe, "--exec", "/usr/bin/env"]
     if ld_library_paths:
         command.append(f"LD_LIBRARY_PATH={':'.join(ld_library_paths)}")
-    command.append(_windows_to_wsl_path(bundled_lpmake))
+    command.append(_windows_to_wsl_path(tool_path))
     return command
+
+
+def _resolve_lpmake_command() -> list[str]:
+    return _resolve_otatools_linux_command(const.OTATOOLS_LPMAKE)
+
+
+def _resolve_delta_generator_command() -> list[str]:
+    return _resolve_otatools_linux_command(const.OTATOOLS_DELTA_GENERATOR)
 
 
 def _windows_to_wsl_path(path: Path) -> str:
@@ -402,61 +295,50 @@ def apply_incremental_ota() -> None:
     # Select zip file
     zip_path = _select_zip_file(zip_files)
 
-    # Ensure payload_dumper is available
-    downloader.ensure_payload_dumper()
     rawprogram_paths, catalog = _load_xml_catalog()
 
     # Extract zip and find payload.bin
     with utils.temporary_workspace(const.OTA_WORKING_DIR):
         payload_bin = _extract_payload_bin(zip_path, const.OTA_WORKING_DIR)
 
-        # Identify differential partitions
+        # Identify payload partitions and apply them all
         utils.ui.echo(get_string("ota_analyzing_payload"))
-        partitions = _get_diff_partition_names(payload_bin)
+        partition_infos = _get_payload_partition_infos(payload_bin)
+        partitions = update_engine_payload.partition_names_from_infos(partition_infos)
+        partition_sizes = {info.name: info.new_size for info in partition_infos}
         utils.ui.echo(
             get_string("ota_found_partitions").format(
                 count=len(partitions), names=", ".join(partitions)
             )
         )
-
-        # Partition selection
-        selected = _prompt_partition_selection(partitions)
         utils.ui.echo(
             get_string("ota_selected_partitions").format(
-                count=len(selected), names=", ".join(selected)
+                count=len(partitions), names=", ".join(partitions)
             )
         )
 
         # Resolve actual filenames from rawprogram XMLs
-        file_map = _build_partition_file_map(selected, catalog)
+        file_map = _build_partition_file_map(partitions, catalog)
         super_layout, extracted_dynamic_dir = _resolve_dynamic_partition_sources(
-            selected,
+            partitions,
             file_map,
             _find_super_group(catalog),
             const.OTA_WORKING_DIR,
         )
 
-        # Stage old images as .img files for payload_dumper
-        old_staging_dir = const.OTA_DIR / "image_old"
-        _stage_old_images(selected, file_map, old_staging_dir)
-
         # Run differential patch
-        try:
-            _run_differential_patch(
-                payload_bin, selected, const.IMAGE_NEW_DIR, old_staging_dir
-            )
-            _copy_flash_xmls(const.IMAGE_NEW_DIR, rawprogram_paths)
-            if super_layout is not None and extracted_dynamic_dir is not None:
-                if not _confirm_dynamic_super_rebuild():
-                    utils.ui.echo(
-                        get_string("ota_super_rebuild_skipped").format(
-                            dir=const.IMAGE_NEW_DIR.name
-                        )
+        _run_differential_patch(
+            payload_bin, partitions, const.IMAGE_NEW_DIR, file_map, partition_sizes
+        )
+        _copy_flash_xmls(const.IMAGE_NEW_DIR, rawprogram_paths)
+        if super_layout is not None and extracted_dynamic_dir is not None:
+            if not _confirm_dynamic_super_rebuild():
+                utils.ui.echo(
+                    get_string("ota_super_rebuild_skipped").format(
+                        dir=const.IMAGE_NEW_DIR.name
                     )
-                    return
-                _rebuild_dynamic_super(super_layout, extracted_dynamic_dir)
-        finally:
-            if old_staging_dir.exists():
-                shutil.rmtree(old_staging_dir)
+                )
+                return
+            _rebuild_dynamic_super(super_layout, extracted_dynamic_dir)
 
     utils.ui.echo(get_string("ota_finished"))

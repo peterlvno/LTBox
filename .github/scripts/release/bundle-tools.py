@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 CI_TOOLS_CONFIG = REPO_ROOT / ".github" / "ci-tools.json"
 TOOLS_DIR = REPO_ROOT / "bin" / "tools"
 OTATOOLS_LINUX_DIR = TOOLS_DIR / "otatools" / "linux"
+UPDATE_ENGINE_DIR = TOOLS_DIR / "update_engine"
 _CI_ANDROID_JS_VARS = re.compile(r"var JSVariables = (\{.*?\});", re.S)
 
 
@@ -152,6 +153,7 @@ def _resolve_otatools_member_target(member_name: str) -> Path | None:
         and parts[-2] == "bin"
         and parts[-1]
         in {
+            "delta_generator",
             "lpmake",
             "lpdump",
             "lpunpack",
@@ -171,8 +173,9 @@ def _resolve_otatools_member_target(member_name: str) -> Path | None:
 
 def bundle_otatools(branch: str, target: str, artifact_name: str) -> None:
     bundled_lpmake = OTATOOLS_LINUX_DIR / "bin" / "lpmake"
+    bundled_delta_generator = OTATOOLS_LINUX_DIR / "bin" / "delta_generator"
     metadata_path = OTATOOLS_LINUX_DIR / "otatools-metadata.json"
-    if bundled_lpmake.exists() and metadata_path.exists():
+    if bundled_lpmake.exists() and bundled_delta_generator.exists() and metadata_path.exists():
         print("[bundle-tools] otatools already present, skipping.")
         return
 
@@ -208,12 +211,88 @@ def bundle_otatools(branch: str, target: str, artifact_name: str) -> None:
         if temp_zip.exists():
             temp_zip.unlink()
 
-    if not bundled_lpmake.exists():
-        raise RuntimeError("otatools extraction incomplete, missing: bin/lpmake")
+    missing_bins = []
+    for required_bin in (bundled_lpmake, bundled_delta_generator):
+        if not required_bin.exists():
+            missing_bins.append(required_bin.relative_to(OTATOOLS_LINUX_DIR).as_posix())
+    if missing_bins:
+        raise RuntimeError(
+            f"otatools extraction incomplete, missing: {', '.join(missing_bins)}"
+        )
 
     metadata["extracted_files"] = extracted_files
     metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print("[bundle-tools] otatools ready.")
+
+
+def bundle_update_engine_scripts(url: str) -> None:
+    package_init = UPDATE_ENGINE_DIR / "scripts" / "update_payload" / "__init__.py"
+    update_metadata_pb2 = UPDATE_ENGINE_DIR / "scripts" / "update_metadata_pb2.py"
+    if package_init.exists() and update_metadata_pb2.exists():
+        print("[bundle-tools] update_engine scripts already present, skipping.")
+        return
+
+    extract_map = {
+        "scripts/update_metadata_pb2.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_metadata_pb2.py",
+        "scripts/update_payload/__init__.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_payload"
+        / "__init__.py",
+        "scripts/update_payload/checker.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_payload"
+        / "checker.py",
+        "scripts/update_payload/common.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_payload"
+        / "common.py",
+        "scripts/update_payload/error.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_payload"
+        / "error.py",
+        "scripts/update_payload/format_utils.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_payload"
+        / "format_utils.py",
+        "scripts/update_payload/histogram.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_payload"
+        / "histogram.py",
+        "scripts/update_payload/payload.py": UPDATE_ENGINE_DIR
+        / "scripts"
+        / "update_payload"
+        / "payload.py",
+    }
+
+    temp_tar = TOOLS_DIR / "update_engine.tar.gz"
+    try:
+        _download(url, temp_tar, "update_engine scripts archive")
+        _extract_archive(temp_tar, extract_map)
+    finally:
+        if temp_tar.exists():
+            temp_tar.unlink()
+
+    missing = [
+        path.relative_to(UPDATE_ENGINE_DIR).as_posix()
+        for path in extract_map.values()
+        if not path.exists()
+    ]
+    if missing:
+        raise RuntimeError(f"update_engine extraction incomplete, missing: {missing}")
+
+    metadata = {
+        "archive_url": url,
+        "extracted_files": [
+            path.relative_to(UPDATE_ENGINE_DIR).as_posix()
+            for path in extract_map.values()
+        ],
+    }
+    metadata_path = UPDATE_ENGINE_DIR / "update-engine-metadata.json"
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    print("[bundle-tools] update_engine scripts ready.")
 
 
 def _extract_archive(archive_path: Path, extract_map: dict[str, Path]) -> None:
@@ -224,6 +303,7 @@ def _extract_archive(archive_path: Path, extract_map: dict[str, Path]) -> None:
             for member in tf:
                 target = _resolve_target(member.name, extract_map)
                 if target:
+                    target.parent.mkdir(parents=True, exist_ok=True)
                     f = tf.extractfile(member)
                     if f:
                         with open(target, "wb") as dst:
@@ -231,11 +311,12 @@ def _extract_archive(archive_path: Path, extract_map: dict[str, Path]) -> None:
                         print(f"[bundle-tools] Extracted {target.name}")
     else:
         with zipfile.ZipFile(archive_path, "r") as zf:
-            for zip_member in zf.infolist():
-                target = _resolve_target(zip_member.filename, extract_map)
-                if target:
-                    with zf.open(zip_member) as src, open(target, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
+                for zip_member in zf.infolist():
+                    target = _resolve_target(zip_member.filename, extract_map)
+                    if target:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with zf.open(zip_member) as src, open(target, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
                     print(f"[bundle-tools] Extracted {target.name}")
 
 
@@ -315,6 +396,7 @@ def main() -> None:
     tools = config["tools"]
     bundle_platform_tools(tools["platform_tools_url"])
     bundle_avb_tools(tools["avb_archive_url"])
+    bundle_update_engine_scripts(config["update_engine"]["archive_url"])
     otatools = config["otatools"]
     bundle_otatools(
         otatools["branch"],

@@ -38,8 +38,8 @@ class LTBoxConfig:
 
         self.ota_dir = self.base_dir / "ota"
         self.ota_working_dir = self.ota_dir / "ota_working"
-        self.payload_dumper_dir = self.download_dir / "payload_dumper"
-        self.payload_dumper_py = self.payload_dumper_dir / "payload_dumper.py"
+        self.update_engine_dir = self.tools_dir / "update_engine"
+        self.update_engine_scripts_dir = self.update_engine_dir / "scripts"
 
         # --- File Name Constants ---
         self.fn_boot = "boot.img"
@@ -78,6 +78,7 @@ class LTBoxConfig:
         self.otatools_linux_lib_dir = self.otatools_linux_dir / "lib"
         self.otatools_linux_lib64_dir = self.otatools_linux_dir / "lib64"
         self.otatools_lpmake = self.otatools_linux_bin_dir / "lpmake"
+        self.otatools_delta_generator = self.otatools_linux_bin_dir / "delta_generator"
 
     def load(self) -> None:
         if self._loaded:
@@ -248,8 +249,8 @@ OUTPUT_XML_DIR = CONF.output_xml_dir
 
 OTA_DIR = CONF.ota_dir
 OTA_WORKING_DIR = CONF.ota_working_dir
-PAYLOAD_DUMPER_DIR = CONF.payload_dumper_dir
-PAYLOAD_DUMPER_PY = CONF.payload_dumper_py
+UPDATE_ENGINE_DIR = CONF.update_engine_dir
+UPDATE_ENGINE_SCRIPTS_DIR = CONF.update_engine_scripts_dir
 
 FN_BOOT = CONF.fn_boot
 FN_INIT_BOOT = CONF.fn_init_boot
@@ -283,6 +284,7 @@ OTATOOLS_LINUX_BIN_DIR = CONF.otatools_linux_bin_dir
 OTATOOLS_LINUX_LIB_DIR = CONF.otatools_linux_lib_dir
 OTATOOLS_LINUX_LIB64_DIR = CONF.otatools_linux_lib64_dir
 OTATOOLS_LPMAKE = CONF.otatools_lpmake
+OTATOOLS_DELTA_GENERATOR = CONF.otatools_delta_generator
 
 KSU_APK_REPO = CONF.ksu_apk_repo
 KSU_APK_TAG = CONF.ksu_apk_tag

@@ -1,4 +1,6 @@
 httpx
+protobuf
+six
 cryptography
 pyserial
 adbutils

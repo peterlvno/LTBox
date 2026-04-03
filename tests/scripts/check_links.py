@@ -97,6 +97,9 @@ def main() -> None:
         has_error = True
     if not check_url(tools.get("avb_archive_url"), "AVB Archive"):
         has_error = True
+    update_engine = ci_tools.get("update_engine", {})
+    if not check_url(update_engine.get("archive_url"), "update_engine Archive"):
+        has_error = True
 
     # 2. KernelSU-Next (GitHub Release)
     print("\n--- KernelSU-Next ---")

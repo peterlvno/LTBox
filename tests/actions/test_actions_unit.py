@@ -125,6 +125,132 @@ def test_resolve_lpmake_command_requires_wsl(tmp_path):
             ota._resolve_lpmake_command()
 
 
+def test_resolve_delta_generator_command_uses_bundled_tool(tmp_path):
+    otatools_linux_dir = tmp_path / "tools" / "otatools" / "linux"
+    bin_dir = otatools_linux_dir / "bin"
+    lib64_dir = otatools_linux_dir / "lib64"
+    bin_dir.mkdir(parents=True)
+    lib64_dir.mkdir(parents=True)
+    delta_generator_path = bin_dir / "delta_generator"
+    delta_generator_path.write_text("stub", encoding="utf-8")
+
+    with (
+        patch("ltbox.actions.ota.const.OTATOOLS_DELTA_GENERATOR", delta_generator_path),
+        patch("ltbox.actions.ota.const.OTATOOLS_LINUX_LIB64_DIR", lib64_dir),
+        patch(
+            "ltbox.actions.ota.const.OTATOOLS_LINUX_LIB_DIR", otatools_linux_dir / "lib"
+        ),
+        patch(
+            "ltbox.actions.ota.shutil.which",
+            return_value="C:\\Windows\\System32\\wsl.exe",
+        ),
+    ):
+        command = ota._resolve_delta_generator_command()
+
+    assert command[:3] == ["C:\\Windows\\System32\\wsl.exe", "--exec", "/usr/bin/env"]
+    assert command[3].startswith("LD_LIBRARY_PATH=/mnt/")
+    assert command[4].endswith("/tools/otatools/linux/bin/delta_generator")
+
+
+def test_run_differential_patch_uses_delta_generator(tmp_path):
+    payload_bin = tmp_path / "payload.bin"
+    payload_bin.write_bytes(b"payload")
+
+    old_boot = tmp_path / "boot.img"
+    old_boot.write_bytes(b"old-boot")
+    old_system = tmp_path / "system.img"
+    old_system.write_bytes(b"old-system")
+
+    output_dir = tmp_path / "image_new"
+    file_map = {"boot": old_boot, "system": old_system}
+    new_sizes = {"boot": 16, "system": 24}
+
+    runner = MagicMock()
+
+    with (
+        patch("ltbox.actions.ota.CommandRunner", return_value=runner),
+        patch(
+            "ltbox.actions.ota._resolve_delta_generator_command",
+            return_value=[
+                "wsl.exe",
+                "--exec",
+                "/usr/bin/env",
+                "/mnt/tool/delta_generator",
+            ],
+        ),
+        patch("ltbox.actions.ota.utils.ui"),
+    ):
+        ota._run_differential_patch(
+            payload_bin, ["boot", "system"], output_dir, file_map, new_sizes
+        )
+
+    command = runner.run.call_args.args[0]
+    assert command[:4] == [
+        "wsl.exe",
+        "--exec",
+        "/usr/bin/env",
+        "/mnt/tool/delta_generator",
+    ]
+    assert "-partition_names=boot:system" in command
+    assert any(
+        arg.endswith("/payload.bin") and arg.startswith("-in_file=/mnt/")
+        for arg in command
+    )
+    assert any(
+        arg.startswith("-old_partitions=/mnt/") and "/boot.img:/mnt/" in arg
+        for arg in command
+    )
+    assert any(
+        arg.startswith("-new_partitions=/mnt/") and "/boot.img:/mnt/" in arg
+        for arg in command
+    )
+    assert (output_dir / "boot.img").stat().st_size == 16
+    assert (output_dir / "system.img").stat().st_size == 24
+
+
+def test_apply_incremental_ota_uses_all_payload_partitions(tmp_path):
+    payload_bin = tmp_path / "payload.bin"
+    payload_bin.write_bytes(b"payload")
+    zip_path = tmp_path / "update.zip"
+    zip_path.write_bytes(b"zip")
+
+    partition_infos = [
+        ota.update_engine_payload.PayloadPartitionInfo(name="boot", new_size=16),
+        ota.update_engine_payload.PayloadPartitionInfo(name="system", new_size=24),
+    ]
+
+    with (
+        patch("ltbox.actions.ota.utils.ui"),
+        patch("ltbox.actions.ota._find_zip_files", return_value=[zip_path]),
+        patch("ltbox.actions.ota._select_zip_file", return_value=zip_path),
+        patch("ltbox.actions.ota._load_xml_catalog", return_value=([], MagicMock())),
+        patch("ltbox.actions.ota._extract_payload_bin", return_value=payload_bin),
+        patch(
+            "ltbox.actions.ota._get_payload_partition_infos",
+            return_value=partition_infos,
+        ),
+        patch(
+            "ltbox.actions.ota._build_partition_file_map",
+            return_value={
+                "boot": tmp_path / "boot.img",
+                "system": tmp_path / "system.img",
+            },
+        ) as mock_build_map,
+        patch(
+            "ltbox.actions.ota._resolve_dynamic_partition_sources",
+            return_value=(None, None),
+        ),
+        patch("ltbox.actions.ota._run_differential_patch") as mock_patch,
+        patch("ltbox.actions.ota._copy_flash_xmls"),
+    ):
+        ota.apply_incremental_ota()
+
+    mock_build_map.assert_called_once()
+    assert mock_build_map.call_args.args[0] == ["boot", "system"]
+    assert mock_patch.call_args.args[1] == ["boot", "system"]
+    assert mock_patch.call_args.args[4] == {"boot": 16, "system": 24}
+
+
 def test_confirm_dynamic_super_rebuild_accepts_yes():
     with (
         patch("ltbox.actions.ota.utils.ui") as mock_ui,

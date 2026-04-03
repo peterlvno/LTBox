@@ -8,6 +8,9 @@
     "platform_tools_url": "https://dl.google.com/android/repository/platform-tools-latest-windows.zip",
     "avb_archive_url": "https://android.googlesource.com/platform/external/avb/+archive/refs/heads/main-kernel.tar.gz"
   },
+  "update_engine": {
+    "archive_url": "https://android.googlesource.com/platform/system/update_engine/+archive/refs/heads/android16-release.tar.gz"
+  },
   "otatools": {
     "branch": "aosp-android-latest-release",
     "target": "aosp_cf_arm64_only_phone-userdebug",
