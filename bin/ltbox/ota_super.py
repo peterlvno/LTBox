@@ -830,7 +830,6 @@ def create_keep_data_ota_xml(output_dir: Path) -> Path:
     if source_xml is None:
         raise MissingFileError("rawprogram XML not found for OTA keep-data generation")
 
-    target_xml = output_dir / "rawprogram_save_persist_ota_unsparse0.xml"
     tree = ET.parse(source_xml)
     root = tree.getroot()
 
@@ -839,5 +838,5 @@ def create_keep_data_ota_xml(output_dir: Path) -> Path:
         if label.startswith("metadata") or label.startswith("userdata"):
             program.set("filename", "")
 
-    tree.write(target_xml, encoding="utf-8", xml_declaration=True)
-    return target_xml
+    tree.write(source_xml, encoding="utf-8", xml_declaration=True)
+    return source_xml

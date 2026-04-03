@@ -312,7 +312,7 @@ def test_apply_incremental_ota_uses_all_payload_partitions(tmp_path):
     }
 
 
-def test_copy_flash_xmls_replaces_legacy_keep_data_xml(mock_env, tmp_path):
+def test_copy_flash_xmls_updates_keep_data_xml_in_place(mock_env, tmp_path):
     image_dir = mock_env["IMAGE_DIR"]
     output_dir = tmp_path / "image_new"
     output_dir.mkdir()
@@ -355,8 +355,16 @@ def test_copy_flash_xmls_replaces_legacy_keep_data_xml(mock_env, tmp_path):
 
     assert (output_dir / "rawprogram1.xml").exists()
     assert (output_dir / "patch0.xml").exists()
-    assert (output_dir / "rawprogram_save_persist_ota_unsparse0.xml").exists()
-    assert not (output_dir / "rawprogram_save_persist_unsparse0.xml").exists()
+    keep_data_xml = output_dir / "rawprogram_save_persist_unsparse0.xml"
+    assert keep_data_xml.exists()
+    root = ET.parse(keep_data_xml).getroot()
+    files = {
+        program.get("label"): program.get("filename")
+        for program in root.findall("program")
+    }
+    assert files["system"] == "system.img"
+    assert files["userdata"] == ""
+    assert files["metadata"] == ""
 
 
 def test_resolve_ota_resign_targets_filters_existing_requested_images(tmp_path):

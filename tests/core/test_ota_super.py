@@ -630,6 +630,7 @@ def test_create_keep_data_ota_xml_blanks_userdata_and_metadata(tmp_path):
     )
 
     target_xml = create_keep_data_ota_xml(output_dir)
+    assert target_xml == source_xml
     root = ET.parse(target_xml).getroot()
     files = {
         program.get("label"): program.get("filename")

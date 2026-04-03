@@ -281,10 +281,6 @@ def _copy_flash_xmls(
     ota_super.rewrite_xml_filenames(copied_xmls, xml_filename_updates)
     ota_super.create_keep_data_ota_xml(output_dir)
 
-    legacy_keep_data_xml = output_dir / "rawprogram_save_persist_unsparse0.xml"
-    if legacy_keep_data_xml.exists():
-        legacy_keep_data_xml.unlink()
-
 
 def _resolve_ota_resign_targets(
     output_dir: Path,
