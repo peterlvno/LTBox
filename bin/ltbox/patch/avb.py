@@ -70,7 +70,7 @@ def _get_avbtool_module() -> ModuleType:
     module = _load_avbtool_module(str(source_path))
     openssl_binary = _resolve_avbtool_openssl_binary(source_path)
     if openssl_binary:
-        module.AVB_OPENSSL = openssl_binary
+        setattr(module, "AVB_OPENSSL", openssl_binary)
         mldsa_cls = getattr(module, "MLDSAPublicKey", None)
         if mldsa_cls is not None:
             mldsa_cls._IS_SUPPORTED = None
