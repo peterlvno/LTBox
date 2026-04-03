@@ -104,15 +104,14 @@ class SuperChunk:
     path: Path
     start_sector: int
     num_sectors: int
-    relative_start_sector: int
+    sector_size_bytes: int
+    start_byte: int
+    size_bytes: int
+    relative_start_byte: int
 
     @property
-    def size_bytes(self) -> int:
-        return self.num_sectors * LP_SECTOR_SIZE
-
-    @property
-    def relative_end_sector(self) -> int:
-        return self.relative_start_sector + self.num_sectors
+    def relative_end_byte(self) -> int:
+        return self.relative_start_byte + self.size_bytes
 
 
 @dataclass(frozen=True)
@@ -151,12 +150,29 @@ class SuperLayout:
         return None
 
 
+def _find_geometry_offset(data: bytes) -> int:
+    for offset in (0x1000, 0x2000, 0):
+        if len(data) >= offset + _GEOMETRY_STRUCT.size:
+            magic = struct.unpack_from("<I", data, offset)[0]
+            if magic == LP_METADATA_GEOMETRY_MAGIC:
+                return offset
+
+    header_offset = _find_header_offset(data)
+    geometry_magic = struct.pack("<I", LP_METADATA_GEOMETRY_MAGIC)
+    geometry_offset = data.rfind(geometry_magic, 0, header_offset)
+    if geometry_offset < 0:
+        raise ToolError("LP metadata geometry not found in super chunk")
+    return geometry_offset
+
+
 def _parse_geometry(primary_chunk: Path) -> SuperGeometry:
     data = primary_chunk.read_bytes()
     if len(data) < _GEOMETRY_STRUCT.size:
         raise ToolError(
             f"super chunk too small to contain geometry: {primary_chunk.name}"
         )
+
+    geometry_offset = _find_geometry_offset(data)
 
     (
         magic,
@@ -165,7 +181,7 @@ def _parse_geometry(primary_chunk: Path) -> SuperGeometry:
         metadata_max_size,
         slot_count,
         logical_block_size,
-    ) = _GEOMETRY_STRUCT.unpack_from(data, 0)
+    ) = _GEOMETRY_STRUCT.unpack_from(data, geometry_offset)
     if magic != LP_METADATA_GEOMETRY_MAGIC:
         raise ToolError(f"invalid super geometry in {primary_chunk.name}")
 
@@ -334,29 +350,37 @@ def parse_super_layout(
         super_records,
         key=lambda record: int(record.start_sector or "0"),
     )
-    first_start_sector = int(ordered_records[0].start_sector or "0")
+    usable_records = [record for record in ordered_records if record.filename]
+    if not usable_records:
+        raise MissingFileError("no usable super chunks were found")
+
+    first_sector_size_bytes = int(usable_records[0].sector_size_bytes or LP_SECTOR_SIZE)
+    first_start_byte = (
+        int(usable_records[0].start_sector or "0") * first_sector_size_bytes
+    )
 
     chunks: list[SuperChunk] = []
-    for record in ordered_records:
-        if not record.filename:
-            continue
+    for record in usable_records:
         chunk_path = image_dir / record.filename
         if not chunk_path.exists():
             raise MissingFileError(f"missing super chunk: {chunk_path.name}")
         start_sector = int(record.start_sector or "0")
         num_sectors = int(record.num_sectors or "0")
+        sector_size_bytes = int(record.sector_size_bytes or LP_SECTOR_SIZE)
+        start_byte = start_sector * sector_size_bytes
+        size_bytes = num_sectors * sector_size_bytes
         chunks.append(
             SuperChunk(
                 filename=record.filename,
                 path=chunk_path,
                 start_sector=start_sector,
                 num_sectors=num_sectors,
-                relative_start_sector=start_sector - first_start_sector,
+                sector_size_bytes=sector_size_bytes,
+                start_byte=start_byte,
+                size_bytes=size_bytes,
+                relative_start_byte=start_byte - first_start_byte,
             )
         )
-
-    if not chunks:
-        raise MissingFileError("no usable super chunks were found")
 
     geometry = _parse_geometry(chunks[0].path)
     header_flags, block_devices, groups, partitions = _parse_metadata(chunks[0].path)
@@ -371,11 +395,11 @@ def parse_super_layout(
     )
 
 
-def _find_chunk(layout: SuperLayout, logical_sector: int) -> SuperChunk:
+def _find_chunk(layout: SuperLayout, logical_byte: int) -> SuperChunk:
     for chunk in layout.chunks:
-        if chunk.relative_start_sector <= logical_sector < chunk.relative_end_sector:
+        if chunk.relative_start_byte <= logical_byte < chunk.relative_end_byte:
             return chunk
-    raise ToolError(f"no super chunk covers logical sector {logical_sector}")
+    raise ToolError(f"no super chunk covers logical byte offset {logical_byte}")
 
 
 def extract_partition_images(
@@ -407,17 +431,17 @@ def extract_partition_images(
                         f"unsupported super extent type {extent.target_type} for {partition.name}"
                     )
 
-                remaining_sectors = extent.num_sectors
-                current_sector = extent.target_data
-                while remaining_sectors > 0:
-                    chunk = _find_chunk(layout, current_sector)
-                    sector_offset = current_sector - chunk.relative_start_sector
-                    readable_sectors = min(
-                        remaining_sectors,
-                        chunk.num_sectors - sector_offset,
+                remaining_bytes = extent_size_bytes
+                current_byte = extent.target_data * LP_SECTOR_SIZE
+                while remaining_bytes > 0:
+                    chunk = _find_chunk(layout, current_byte)
+                    byte_offset = current_byte - chunk.relative_start_byte
+                    readable_bytes = min(
+                        remaining_bytes,
+                        chunk.size_bytes - byte_offset,
                     )
-                    read_offset = sector_offset * LP_SECTOR_SIZE
-                    read_size = readable_sectors * LP_SECTOR_SIZE
+                    read_offset = byte_offset
+                    read_size = readable_bytes
                     with open(chunk.path, "rb") as source:
                         source.seek(read_offset)
                         chunk_bytes = source.read(read_size)
@@ -426,8 +450,8 @@ def extract_partition_images(
                             f"unexpected EOF while reading {chunk.filename} for {partition.name}"
                         )
                     target.write(chunk_bytes)
-                    remaining_sectors -= readable_sectors
-                    current_sector += readable_sectors
+                    remaining_bytes -= readable_bytes
+                    current_byte += readable_bytes
 
         extracted[partition.base_name] = output_path
 

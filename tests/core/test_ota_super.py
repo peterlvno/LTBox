@@ -134,6 +134,129 @@ def _build_test_super_layout(tmp_path: Path) -> tuple[list[PartitionRecord], Pat
     return records, tmp_path
 
 
+def _build_realistic_super_layout(tmp_path: Path) -> tuple[list[PartitionRecord], Path]:
+    flash_sector_size = 4096
+    chunk1 = tmp_path / "super_1.img"
+    chunk2 = tmp_path / "super_2.img"
+
+    chunk1_bytes = bytearray(32 * flash_sector_size)
+    chunk2_bytes = bytearray(32 * flash_sector_size)
+
+    for geometry_offset in (0x1000, 0x2000):
+        struct.pack_into(
+            "<II32sIII",
+            chunk1_bytes,
+            geometry_offset,
+            LP_METADATA_GEOMETRY_MAGIC,
+            52,
+            b"\x00" * 32,
+            4096,
+            3,
+            4096,
+        )
+
+    partitions = [
+        struct.pack("<36sIIII", b"system_a", 1, 0, 1, 0),
+        struct.pack("<36sIIII", b"vendor_a", 1, 1, 1, 0),
+    ]
+    extents = [
+        struct.pack("<QIQI", 6, 0, 32, 0),
+        struct.pack("<QIQI", 10, 0, 250, 0),
+    ]
+    groups = [struct.pack("<36sIQ", b"dynamic_a", 0, 65536)]
+    block_devices = [
+        struct.pack("<QIIQ36sI", 6, 4096, 0, 64 * flash_sector_size, b"super", 0),
+    ]
+
+    header_size = 256
+    partitions_table = b"".join(partitions)
+    extents_table = b"".join(extents)
+    groups_table = b"".join(groups)
+    block_devices_table = b"".join(block_devices)
+
+    partitions_offset = 0
+    extents_offset = partitions_offset + len(partitions_table)
+    groups_offset = extents_offset + len(extents_table)
+    block_devices_offset = groups_offset + len(groups_table)
+    tables_size = (
+        len(partitions_table)
+        + len(extents_table)
+        + len(groups_table)
+        + len(block_devices_table)
+    )
+
+    header_prefix = struct.pack(
+        "<IHHI32sI32sIIIIIIIIIIII",
+        LP_METADATA_HEADER_MAGIC,
+        10,
+        2,
+        header_size,
+        b"\x00" * 32,
+        tables_size,
+        b"\x00" * 32,
+        partitions_offset,
+        len(partitions),
+        52,
+        extents_offset,
+        len(extents),
+        24,
+        groups_offset,
+        len(groups),
+        48,
+        block_devices_offset,
+        len(block_devices),
+        64,
+    )
+    header = bytearray(header_size)
+    header[: len(header_prefix)] = header_prefix
+    struct.pack_into("<I", header, 128, LP_HEADER_FLAG_VIRTUAL_AB_DEVICE)
+
+    header_offset = 0x3000
+    chunk1_bytes[header_offset : header_offset + header_size] = header
+    table_offset = header_offset + header_size
+    cursor = table_offset
+    for table in (partitions_table, extents_table, groups_table, block_devices_table):
+        chunk1_bytes[cursor : cursor + len(table)] = table
+        cursor += len(table)
+
+    system_offset = 32 * LP_SECTOR_SIZE
+    system_bytes = 6 * LP_SECTOR_SIZE
+    vendor_offset = 250 * LP_SECTOR_SIZE
+    vendor_bytes = 10 * LP_SECTOR_SIZE
+    chunk1_bytes[system_offset : system_offset + system_bytes] = b"S" * system_bytes
+    vendor_in_chunk1 = len(chunk1_bytes) - vendor_offset
+    chunk1_bytes[vendor_offset:] = b"V" * vendor_in_chunk1
+    remaining_vendor = vendor_bytes - vendor_in_chunk1
+    chunk2_bytes[0:remaining_vendor] = b"V" * remaining_vendor
+
+    chunk1.write_bytes(chunk1_bytes)
+    chunk2.write_bytes(chunk2_bytes)
+
+    records = [
+        PartitionRecord(
+            label="super",
+            filename="super_1.img",
+            lun="0",
+            start_sector="90504",
+            num_sectors=str(len(chunk1_bytes) // flash_sector_size),
+            source_xml="rawprogram_unsparse0.xml",
+            size_in_kb=None,
+            sector_size_bytes=str(flash_sector_size),
+        ),
+        PartitionRecord(
+            label="super",
+            filename="super_2.img",
+            lun="0",
+            start_sector=str(90504 + (len(chunk1_bytes) // flash_sector_size)),
+            num_sectors=str(len(chunk2_bytes) // flash_sector_size),
+            source_xml="rawprogram_unsparse0.xml",
+            size_in_kb=None,
+            sector_size_bytes=str(flash_sector_size),
+        ),
+    ]
+    return records, tmp_path
+
+
 def test_parse_super_layout_extracts_dynamic_images_across_chunk_boundaries(tmp_path):
     records, image_dir = _build_test_super_layout(tmp_path)
 
@@ -145,6 +268,19 @@ def test_parse_super_layout_extracts_dynamic_images_across_chunk_boundaries(tmp_
     assert layout.dynamic_partition_names == {"system", "vendor"}
     assert extracted["system"].read_bytes() == b"S" * (2 * LP_SECTOR_SIZE)
     assert extracted["vendor"].read_bytes() == b"V" * (3 * LP_SECTOR_SIZE)
+
+
+def test_parse_super_layout_handles_realistic_geometry_offsets_and_4k_xml_sectors(
+    tmp_path,
+):
+    records, image_dir = _build_realistic_super_layout(tmp_path)
+
+    layout = parse_super_layout(records, image_dir)
+    extracted = extract_partition_images(layout, tmp_path / "dynamic")
+
+    assert layout.dynamic_partition_names == {"system", "vendor"}
+    assert extracted["system"].read_bytes() == b"S" * (6 * LP_SECTOR_SIZE)
+    assert extracted["vendor"].read_bytes() == b"V" * (10 * LP_SECTOR_SIZE)
 
 
 def test_build_lpmake_command_uses_layout_metadata(tmp_path):

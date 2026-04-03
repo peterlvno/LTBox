@@ -56,6 +56,7 @@ def _parse_xml_records(
                 num_sectors=program.get("num_partition_sectors"),
                 source_xml=xml_path.name,
                 size_in_kb=program.get("size_in_KB"),
+                sector_size_bytes=program.get("SECTOR_SIZE_IN_BYTES"),
             )
         )
 
@@ -71,6 +72,7 @@ class PartitionRecord:
     num_sectors: Optional[str]
     source_xml: str
     size_in_kb: Optional[str]
+    sector_size_bytes: Optional[str] = None
 
     @property
     def slot_suffix(self) -> Optional[str]:
@@ -97,6 +99,7 @@ class PartitionRecord:
             "filename": self.filename,
             "source_xml": self.source_xml,
             "size_in_kb": self.size_in_kb,
+            "sector_size_bytes": self.sector_size_bytes,
         }
 
 
