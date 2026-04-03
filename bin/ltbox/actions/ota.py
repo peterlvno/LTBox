@@ -35,9 +35,6 @@ _OTA_AVB_RESIGN_TARGETS = (
 )
 _OTA_AVB_DEFAULT_RESIGN_KEY_NAME = "testkey_rsa4096.pem"
 _OTA_AVB_DEFAULT_RSA_BITS = 4096
-_OTA_AVB_SPECIAL_RESIGN_KEYS = {
-    "vbmeta_system": ("testkey_rsa2048.pem", 2048),
-}
 _OTA_VBMETA_SYSTEM_DESCRIPTOR_PARTITIONS = (
     "pvmfw",
     "product",
@@ -384,13 +381,11 @@ def _resolve_testkey_resign_algorithm(
 def _resolve_ota_resign_policy(
     partition_name: str, original_algorithm: str
 ) -> tuple[Path, str]:
-    key_name, rsa_bits = _OTA_AVB_SPECIAL_RESIGN_KEYS.get(
-        partition_name,
-        (_OTA_AVB_DEFAULT_RESIGN_KEY_NAME, _OTA_AVB_DEFAULT_RSA_BITS),
-    )
     return (
-        _resolve_ota_testkey_path(key_name),
-        _resolve_testkey_resign_algorithm(original_algorithm, rsa_bits),
+        _resolve_ota_testkey_path(_OTA_AVB_DEFAULT_RESIGN_KEY_NAME),
+        _resolve_testkey_resign_algorithm(
+            original_algorithm, _OTA_AVB_DEFAULT_RSA_BITS
+        ),
     )
 
 

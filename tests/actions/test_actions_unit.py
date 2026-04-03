@@ -424,13 +424,11 @@ def test_resolve_testkey_resign_algorithm_upgrades_rsa_key_size():
         ota._resolve_testkey_resign_algorithm("MLDSA87", 4096)
 
 
-def test_resolve_ota_resign_policy_uses_2048_key_for_vbmeta_system(tmp_path):
+def test_resolve_ota_resign_policy_uses_default_4096_key(tmp_path):
     tools_dir = tmp_path / "tools"
     tools_dir.mkdir()
     key_4096 = tools_dir / "testkey_rsa4096.pem"
-    key_2048 = tools_dir / "testkey_rsa2048.pem"
     key_4096.write_text("4096", encoding="utf-8")
-    key_2048.write_text("2048", encoding="utf-8")
 
     with patch("ltbox.actions.ota.const.TOOLS_DIR", tools_dir):
         key_path, algorithm = ota._resolve_ota_resign_policy(
@@ -442,8 +440,8 @@ def test_resolve_ota_resign_policy_uses_2048_key_for_vbmeta_system(tmp_path):
             "SHA256_RSA2048",
         )
 
-    assert key_path == key_2048
-    assert algorithm == "SHA256_RSA2048"
+    assert key_path == key_4096
+    assert algorithm == "SHA256_RSA4096"
     assert default_key_path == key_4096
     assert default_algorithm == "SHA256_RSA4096"
 
@@ -459,9 +457,7 @@ def test_resign_incremental_ota_outputs_resigns_signed_images_only(tmp_path):
         path.write_bytes(b"img")
 
     key_file_4096 = tmp_path / "testkey_rsa4096.pem"
-    key_file_2048 = tmp_path / "testkey_rsa2048.pem"
     key_file_4096.write_text("key4096", encoding="utf-8")
-    key_file_2048.write_text("key2048", encoding="utf-8")
 
     def _fake_info(path):
         if path == boot_img:
@@ -477,10 +473,7 @@ def test_resign_incremental_ota_outputs_resigns_signed_images_only(tmp_path):
     with (
         patch(
             "ltbox.actions.ota._resolve_ota_testkey_path",
-            side_effect=lambda key_name: {
-                "testkey_rsa4096.pem": key_file_4096,
-                "testkey_rsa2048.pem": key_file_2048,
-            }[key_name],
+            return_value=key_file_4096,
         ),
         patch("ltbox.actions.ota.extract_image_avb_info", side_effect=_fake_info),
         patch("ltbox.actions.ota.resign_avb_image") as mock_resign,
@@ -509,8 +502,8 @@ def test_resign_incremental_ota_outputs_resigns_signed_images_only(tmp_path):
         ),
         call(
             image_path=vbmeta_system_img,
-            key_file=key_file_2048,
-            algorithm="SHA256_RSA2048",
+            key_file=key_file_4096,
+            algorithm="SHA256_RSA4096",
         ),
     ]
 
@@ -534,9 +527,7 @@ def test_resign_incremental_ota_outputs_rebuilds_vbmeta_images_from_updated_chil
         path.write_bytes(b"img")
 
     key_file_4096 = tmp_path / "testkey_rsa4096.pem"
-    key_file_2048 = tmp_path / "testkey_rsa2048.pem"
     key_file_4096.write_text("key4096", encoding="utf-8")
-    key_file_2048.write_text("key2048", encoding="utf-8")
 
     def _fake_info(path):
         if path == boot_img:
@@ -550,10 +541,7 @@ def test_resign_incremental_ota_outputs_rebuilds_vbmeta_images_from_updated_chil
     with (
         patch(
             "ltbox.actions.ota._resolve_ota_testkey_path",
-            side_effect=lambda key_name: {
-                "testkey_rsa4096.pem": key_file_4096,
-                "testkey_rsa2048.pem": key_file_2048,
-            }[key_name],
+            return_value=key_file_4096,
         ),
         patch("ltbox.actions.ota.const.IMAGE_DIR", image_dir),
         patch("ltbox.actions.ota.const.IMAGE_NEW_DIR", output_dir),
@@ -581,8 +569,8 @@ def test_resign_incremental_ota_outputs_rebuilds_vbmeta_images_from_updated_chil
         ),
         call(
             image_path=vbmeta_system_img,
-            key_file=key_file_2048,
-            algorithm="SHA256_RSA2048",
+            key_file=key_file_4096,
+            algorithm="SHA256_RSA4096",
         ),
     ]
     assert mock_rebuild_vbmeta.call_args_list == [
