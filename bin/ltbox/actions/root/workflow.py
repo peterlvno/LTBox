@@ -141,27 +141,42 @@ def _patch_root_from_folder(
         shutil.copy(
             const.BASE_DIR / strategy.image_name, const.WORK_DIR / strategy.image_name
         )
-        (const.BASE_DIR / strategy.image_name).unlink()
+        # Move originals aside instead of deleting so they can be restored on
+        # failure.  The backup copies created above (strategy.backup_name and
+        # FN_VBMETA_BAK) serve as the restore source.
+        base_image = const.BASE_DIR / strategy.image_name
+        base_vbmeta = const.BASE_DIR / const.FN_VBMETA if requires_vbmeta else None
+        base_image.unlink()
+        if base_vbmeta is not None:
+            base_vbmeta.unlink()
 
-        if requires_vbmeta:
-            (const.BASE_DIR / const.FN_VBMETA).unlink()
+        try:
+            if isinstance(strategy, LkmRootStrategy) and not lkm_kernel_version:
+                utils.ui.clear()
+                utils.ui.echo(get_string("err_req_kernel_ver_lkm"))
+                lkm_kernel_version = input(
+                    get_string("prompt_enter_kernel_version")
+                ).strip()
+                if not lkm_kernel_version:
+                    utils.ui.error(get_string("err_kernel_version_req"))
+                    return False
 
-        if isinstance(strategy, LkmRootStrategy) and not lkm_kernel_version:
-            utils.ui.clear()
-            utils.ui.echo(get_string("err_req_kernel_ver_lkm"))
-            lkm_kernel_version = input(
-                get_string("prompt_enter_kernel_version")
-            ).strip()
-            if not lkm_kernel_version:
-                utils.ui.error(get_string("err_kernel_version_req"))
+            if not strategy.download_resources(lkm_kernel_version):
                 return False
 
-        if not strategy.download_resources(lkm_kernel_version):
-            return False
-
-        patched_boot_path = strategy.patch(
-            const.WORK_DIR, dev=dev, lkm_kernel_version=lkm_kernel_version
-        )
+            patched_boot_path = strategy.patch(
+                const.WORK_DIR, dev=dev, lkm_kernel_version=lkm_kernel_version
+            )
+        except BaseException:
+            # Restore originals from the backups created earlier.
+            backup_image = const.BASE_DIR / strategy.backup_name
+            if backup_image.exists() and not base_image.exists():
+                shutil.copy(backup_image, base_image)
+            if base_vbmeta is not None and not base_vbmeta.exists():
+                vbmeta_bak = const.BASE_DIR / const.FN_VBMETA_BAK
+                if vbmeta_bak.exists():
+                    shutil.copy(vbmeta_bak, base_vbmeta)
+            raise
 
     if patched_boot_path and patched_boot_path.exists():
         utils.ui.echo("\n" + get_string("act_finalize"))
