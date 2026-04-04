@@ -136,7 +136,7 @@ def extract_archive_files(
     extracted_paths: Set[Path] = set()
 
     try:
-        is_tar = archive_path.suffix == ".gz" or archive_path.suffix == ".tar"
+        is_tar = tarfile.is_tarfile(archive_path)
 
         if is_tar:
             with tarfile.open(archive_path, "r:*") as tf:
@@ -451,7 +451,7 @@ def download_ksu_manager_release(
             )
         except ToolError as e:
             utils.ui.error(get_string("dl_err_ksu_download").format(e=e))
-            return
+            raise
 
     utils.ui.echo(get_string("dl_ksu_success"))
 
