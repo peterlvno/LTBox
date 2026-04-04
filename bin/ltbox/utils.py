@@ -196,7 +196,7 @@ def wait_for_directory(directory: Path, prompt_message: str) -> bool:
 def check_dependencies() -> None:
     is_git_checkout = (const.BASE_DIR / ".git").exists()
     missing_edl_binaries = (
-        not const.EDL_EXE.exists() and not const.QSAHARASERVER_EXE.exists()
+        not const.EDL_EXE.exists() or not const.QSAHARASERVER_EXE.exists()
     )
 
     if not is_git_checkout and missing_edl_binaries:
