@@ -370,11 +370,7 @@ def _download_ksuinit_artifact(
                         if download_all_ksuinit:
                             variant_name = variant.replace("/", "_")
                             variant_dest = target_dir / f"{variant_name}.ksuinit"
-                            with (
-                                zf.open(member) as src,
-                                open(variant_dest, "wb") as dst,
-                            ):
-                                shutil.copyfileobj(src, dst)
+                            shutil.copy2(ksuinit_dest, variant_dest)
                         break
             _cleanup_files(temp_zip)
 
