@@ -797,8 +797,12 @@ def rebuild_vbmeta_with_chained_images(
                 flags=vbmeta_info.get("flags", "0"),
             )
             return
-        except subprocess.CalledProcessError:
-            pass
+        except subprocess.CalledProcessError as e:
+            utils.ui.warn(
+                f"update_partition_descriptor failed for "
+                f"{chained_images[0].name}, falling back to "
+                f"make_vbmeta_image: {e}"
+            )
 
     avbtool = utils.AvbToolWrapper()
     cmd = [
