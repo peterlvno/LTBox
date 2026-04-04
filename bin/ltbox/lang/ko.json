@@ -235,7 +235,7 @@
   "act_temp_backup_avb": "[*] 임시 AVB 백업 생성 중...",
   "act_unhandled_success_result": "결과: {res}",
   "act_unroot_finish": "\n[*] 언루팅 완료",
-  "act_unroot_gki_detected": "[+] GKI 백업(boot.img)을 감지했습니다. GKI 언루팅을 진행합니다.",
+  "act_unroot_gki_detected": "[+] APatch/GKI 백업(boot.img)을 감지했습니다. boot 언루팅을 진행합니다.",
   "act_unroot_lkm_detected": "[+] LKM 백업(init_boot.img, vbmeta.img)을 감지했습니다. LKM 언루팅을 진행합니다.",
   "act_unroot_menu_2_lkm": "LKM (init_boot, vbmeta) 복원",
   "act_unroot_menu_3_gki": "APatch/GKI (boot) 복원",

@@ -235,7 +235,7 @@
   "act_temp_backup_avb": "[*] Creating temp AVB backup...",
   "act_unhandled_success_result": "Result: {res}",
   "act_unroot_finish": "\n[*] Unroot Finished",
-  "act_unroot_gki_detected": "[+] GKI backup (boot.img) detected. Proceeding with GKI unroot.",
+  "act_unroot_gki_detected": "[+] APatch/GKI backup (boot.img) detected. Proceeding with boot unroot.",
   "act_unroot_lkm_detected": "[+] LKM backup (init_boot.img, vbmeta.img) detected. Proceeding with LKM unroot.",
   "act_unroot_menu_2_lkm": "Restore LKM (init_boot, vbmeta)",
   "act_unroot_menu_3_gki": "Restore APatch/GKI (boot)",

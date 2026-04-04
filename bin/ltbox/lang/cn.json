@@ -235,7 +235,7 @@
   "act_temp_backup_avb": "[*] 正在创建临时 AVB 备份...",
   "act_unhandled_success_result": "结果: {res}",
   "act_unroot_finish": "\n[*] Unroot 完成",
-  "act_unroot_gki_detected": "[+] 检测到 GKI 备份 (boot.img)。正在执行 GKI unroot。",
+  "act_unroot_gki_detected": "[+] 检测到 APatch/GKI 备份 (boot.img)。正在执行 boot unroot。",
   "act_unroot_lkm_detected": "[+] 检测到 LKM 备份 (init_boot.img, vbmeta.img)。正在执行 LKM unroot。",
   "act_unroot_menu_2_lkm": "还原 LKM (init_boot, vbmeta)",
   "act_unroot_menu_3_gki": "还原 APatch/GKI (boot)",

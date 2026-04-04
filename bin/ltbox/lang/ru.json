@@ -235,7 +235,7 @@
   "act_temp_backup_avb": "[*] Создание временной копии AVB...",
   "act_unhandled_success_result": "Результат: {res}",
   "act_unroot_finish": "\n[*] Удаление root прав завершено",
-  "act_unroot_gki_detected": "[+] Обнаружена резервная копия GKI (boot.img). Продолжение в режиме GKI.",
+  "act_unroot_gki_detected": "[+] Обнаружена резервная копия APatch/GKI (boot.img). Продолжение восстановления boot.",
   "act_unroot_lkm_detected": "[+] Обнаружена резервная копия LKM (init_boot.img, vbmeta.img). Продолжение в режиме LKM.",
   "act_unroot_menu_2_lkm": "Восстановление LKM (init_boot, vbmeta)",
   "act_unroot_menu_3_gki": "Восстановление APatch/GKI (boot)",
