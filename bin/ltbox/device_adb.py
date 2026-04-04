@@ -45,7 +45,9 @@ class AdbManager(BaseDeviceManager):
                 e,
             )
         if not device:
-            return None
+            raise DeviceConnectionError(
+                get_string("device_err_wait_adb").format(e="No device found"),
+            )
         return action(device)
 
     def wait_for_device(self) -> bool:
