@@ -706,6 +706,7 @@
   "ota_super_repack_start": "[*] 开始重新打包 super...",
   "ota_super_unpack_complete": "[+] 已将 {count} 个动态分区提取到 '{dir}': {names}",
   "ota_super_unpack_start": "[*] 开始解包 super...",
+  "ota_verifying_hashes": "[*] 正在验证完整性哈希...",
   "ota_wait_resign_key": "[步骤 1] 请将 '{key}' 放入 '{dir}' 文件夹。",
   "ota_wait_resign_source": "[步骤 1] 请将要重签名的镜像放入 '{out_dir}' 文件夹，或将原始固件中的 AVB 镜像和 'vbmeta*.img' 文件放入 '{dir}' 文件夹。",
   "ota_wait_super_source": "[步骤 1] 请将原始固件的 'super_*.img' 和 'rawprogram*.xml' 文件放入 '{dir}' 文件夹。",

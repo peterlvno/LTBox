@@ -15,6 +15,7 @@ from .errors import ToolError
 class PayloadPartitionInfo:
     name: str
     new_size: int
+    new_hash: bytes
 
 
 def _ensure_update_engine_scripts() -> None:
@@ -60,6 +61,7 @@ def get_partition_infos(payload_path: Path) -> List[PayloadPartitionInfo]:
         PayloadPartitionInfo(
             name=partition.partition_name,
             new_size=int(partition.new_partition_info.size),
+            new_hash=partition.new_partition_info.hash,
         )
         for partition in payload.manifest.partitions
         if partition.partition_name
@@ -72,6 +74,10 @@ def get_partition_names(payload_path: Path) -> List[str]:
 
 def get_partition_sizes(payload_path: Path) -> dict[str, int]:
     return {info.name: info.new_size for info in get_partition_infos(payload_path)}
+
+
+def get_partition_hashes(payload_path: Path) -> dict[str, bytes]:
+    return {info.name: info.new_hash for info in get_partition_infos(payload_path)}
 
 
 def partition_names_from_infos(

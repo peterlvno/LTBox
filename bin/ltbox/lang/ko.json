@@ -706,6 +706,7 @@
   "ota_super_repack_start": "[*] super 리팩 시작...",
   "ota_super_unpack_complete": "[+] {count}개 동적 파티션을 '{dir}'에 추출했습니다: {names}",
   "ota_super_unpack_start": "[*] super 언팩 시작...",
+  "ota_verifying_hashes": "[*] 무결성 해시를 검증하는 중...",
   "ota_wait_resign_key": "[1단계] '{key}' 파일을 '{dir}' 폴더에 넣으세요.",
   "ota_wait_resign_source": "[1단계] 재서명할 이미지를 '{out_dir}' 폴더에 넣거나, 원본 펌웨어의 AVB 이미지와 'vbmeta*.img' 파일을 '{dir}' 폴더에 넣으세요.",
   "ota_wait_super_source": "[1단계] 원본 펌웨어의 'super_*.img'와 'rawprogram*.xml' 파일을 '{dir}' 폴더에 넣으세요.",

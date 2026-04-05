@@ -706,6 +706,7 @@
   "ota_super_repack_start": "[*] Starting super repack...",
   "ota_super_unpack_complete": "[+] Extracted {count} dynamic partitions to '{dir}': {names}",
   "ota_super_unpack_start": "[*] Starting super unpack...",
+  "ota_verifying_hashes": "[*] Verifying integrity hashes...",
   "ota_wait_resign_key": "[STEP 1] Place '{key}' into the '{dir}' folder.",
   "ota_wait_resign_source": "[STEP 1] Place images to resign into the '{out_dir}' folder, or place the source firmware's AVB images and 'vbmeta*.img' files into the '{dir}' folder.",
   "ota_wait_super_source": "[STEP 1] Place the source firmware's 'super_*.img' and 'rawprogram*.xml' files into the '{dir}' folder.",

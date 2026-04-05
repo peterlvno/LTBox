@@ -1,3 +1,4 @@
+import hashlib
 import shutil
 import subprocess
 import zipfile
@@ -273,6 +274,7 @@ def _run_differential_patch(
     output_dir: Path,
     file_map: dict[str, Path],
     new_sizes: dict[str, int],
+    new_hashes: dict[str, bytes],
     output_filenames: dict[str, str],
 ) -> None:
     utils.recreate_dir(output_dir)
@@ -307,6 +309,28 @@ def _run_differential_patch(
         if output_dir.exists():
             shutil.rmtree(output_dir)
         raise ToolError(get_string("ota_err_patch_failed").format(e=e)) from e
+
+    utils.ui.echo(get_string("ota_verifying_hashes"))
+    for name, image_path in zip(partitions, new_images):
+        expected_hash = new_hashes.get(name)
+        if not expected_hash:
+            continue
+
+        sha256_hash = hashlib.sha256()
+        try:
+            with open(image_path, "rb") as f:
+                for byte_block in iter(lambda: f.read(1024 * 1024), b""):
+                    sha256_hash.update(byte_block)
+            actual_hash = sha256_hash.digest()
+            if actual_hash != expected_hash:
+                raise ToolError(
+                    f"Hash mismatch for {name}: "
+                    f"expected {expected_hash.hex()}, got {actual_hash.hex()}"
+                )
+        except Exception as e:
+            if isinstance(e, ToolError):
+                raise e
+            raise ToolError(f"Failed to verify hash for {name}: {e}") from e
 
     utils.ui.echo(get_string("ota_patch_complete").format(dir=output_dir.name))
 
@@ -900,6 +924,8 @@ def apply_incremental_ota() -> None:
             const.OTA_WORKING_DIR,
         )
 
+        partition_hashes = update_engine_payload.get_partition_hashes(payload_bin)
+
         # Run differential patch
         _run_differential_patch(
             payload_bin,
@@ -907,6 +933,7 @@ def apply_incremental_ota() -> None:
             const.IMAGE_NEW_DIR,
             file_map,
             partition_sizes,
+            partition_hashes,
             output_filenames,
         )
         _copy_flash_xmls(const.IMAGE_NEW_DIR, rawprogram_paths, xml_filename_updates)

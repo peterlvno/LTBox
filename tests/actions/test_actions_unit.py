@@ -249,9 +249,9 @@ def test_run_differential_patch_uses_delta_generator(tmp_path):
             output_dir,
             file_map,
             new_sizes,
+            {},
             output_filenames,
         )
-
     command = runner.run.call_args.args[0]
     assert command[:4] == [
         "wsl.exe",
@@ -283,10 +283,13 @@ def test_apply_incremental_ota_uses_all_payload_partitions(tmp_path):
     zip_path.write_bytes(b"zip")
 
     partition_infos = [
-        ota.update_engine_payload.PayloadPartitionInfo(name="boot", new_size=16),
-        ota.update_engine_payload.PayloadPartitionInfo(name="system", new_size=24),
+        ota.update_engine_payload.PayloadPartitionInfo(
+            name="boot", new_size=16, new_hash=b"abc"
+        ),
+        ota.update_engine_payload.PayloadPartitionInfo(
+            name="system", new_size=24, new_hash=b"def"
+        ),
     ]
-
     with (
         patch("ltbox.actions.ota.utils.ui"),
         patch("ltbox.actions.ota._ensure_wsl_available"),
@@ -294,6 +297,10 @@ def test_apply_incremental_ota_uses_all_payload_partitions(tmp_path):
         patch("ltbox.actions.ota._select_zip_file", return_value=zip_path),
         patch("ltbox.actions.ota._load_xml_catalog", return_value=([], MagicMock())),
         patch("ltbox.actions.ota._extract_payload_bin", return_value=payload_bin),
+        patch(
+            "ltbox.actions.ota.update_engine_payload.get_partition_hashes",
+            return_value={"system": b"123", "boot": b"abc"},
+        ),
         patch(
             "ltbox.actions.ota._get_payload_partition_infos",
             return_value=partition_infos,
@@ -327,7 +334,8 @@ def test_apply_incremental_ota_uses_all_payload_partitions(tmp_path):
     assert mock_build_map.call_args.args[0] == ["boot", "system"]
     assert mock_patch.call_args.args[1] == ["boot", "system"]
     assert mock_patch.call_args.args[4] == {"boot": 16, "system": 24}
-    assert mock_patch.call_args.args[5] == {"boot": "boot.elf", "system": "system.img"}
+    assert mock_patch.call_args.args[5] == {"system": b"123", "boot": b"abc"}
+    assert mock_patch.call_args.args[6] == {"boot": "boot.elf", "system": "system.img"}
     assert mock_copy_xmls.call_args.args[2] == {
         "boot.img": "boot.elf",
         "system.img": "system.img",
@@ -1025,10 +1033,14 @@ def test_apply_incremental_ota_prompts_for_resign_before_super_rebuild(tmp_path)
         patch("ltbox.actions.ota._load_xml_catalog", return_value=([], MagicMock())),
         patch("ltbox.actions.ota._extract_payload_bin", return_value=payload_bin),
         patch(
+            "ltbox.actions.ota.update_engine_payload.get_partition_hashes",
+            return_value={"system": b"123", "boot": b"abc"},
+        ),
+        patch(
             "ltbox.actions.ota._get_payload_partition_infos",
             return_value=[
                 ota.update_engine_payload.PayloadPartitionInfo(
-                    name="system", new_size=24
+                    name="system", new_size=24, new_hash=b"123"
                 )
             ],
         ),
@@ -1085,10 +1097,14 @@ def test_apply_incremental_ota_promotes_outputs_to_image_dir(tmp_path):
         patch("ltbox.actions.ota._load_xml_catalog", return_value=([], MagicMock())),
         patch("ltbox.actions.ota._extract_payload_bin", return_value=payload_bin),
         patch(
+            "ltbox.actions.ota.update_engine_payload.get_partition_hashes",
+            return_value={"system": b"123", "boot": b"abc"},
+        ),
+        patch(
             "ltbox.actions.ota._get_payload_partition_infos",
             return_value=[
                 ota.update_engine_payload.PayloadPartitionInfo(
-                    name="system", new_size=24
+                    name="system", new_size=24, new_hash=b"123"
                 )
             ],
         ),
@@ -1140,10 +1156,14 @@ def test_apply_incremental_ota_preserves_abl_when_resign_was_requested(tmp_path)
         patch("ltbox.actions.ota._load_xml_catalog", return_value=([], MagicMock())),
         patch("ltbox.actions.ota._extract_payload_bin", return_value=payload_bin),
         patch(
+            "ltbox.actions.ota.update_engine_payload.get_partition_hashes",
+            return_value={"system": b"123", "boot": b"abc"},
+        ),
+        patch(
             "ltbox.actions.ota._get_payload_partition_infos",
             return_value=[
                 ota.update_engine_payload.PayloadPartitionInfo(
-                    name="system", new_size=24
+                    name="system", new_size=24, new_hash=b"123"
                 )
             ],
         ),

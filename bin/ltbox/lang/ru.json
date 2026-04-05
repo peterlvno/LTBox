@@ -706,6 +706,7 @@
   "ota_super_repack_start": "[*] Запуск пересборки super...",
   "ota_super_unpack_complete": "[+] Извлечено {count} динамических разделов в '{dir}': {names}",
   "ota_super_unpack_start": "[*] Запуск распаковки super...",
+  "ota_verifying_hashes": "[*] Проверка хэшей целостности...",
   "ota_wait_resign_key": "[ШАГ 1] Поместите '{key}' в папку '{dir}'.",
   "ota_wait_resign_source": "[ШАГ 1] Поместите образы для переподписи в папку '{out_dir}', либо поместите AVB-образы исходной прошивки и файлы 'vbmeta*.img' в папку '{dir}'.",
   "ota_wait_super_source": "[ШАГ 1] Поместите файлы исходной прошивки 'super_*.img' и 'rawprogram*.xml' в папку '{dir}'.",
