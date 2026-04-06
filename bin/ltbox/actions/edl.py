@@ -827,8 +827,7 @@ def _execute_full_flash_plan(
             except OSError as e:
                 utils.ui.error(get_string("act_err_clean_imgs").format(e=e))
 
-        if not skip_reset:
-            utils.ui.echo(get_string("act_flash_step3"))
+        # qdl-rs already prints "Resetting to system" when reset_after is set.
 
 
 def flash_full_firmware(
