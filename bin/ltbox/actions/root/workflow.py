@@ -495,9 +495,11 @@ def root_device(
     _flash_root_image(dev, session.strategy, partition_map, session.gki)
 
     width = utils.ui.get_term_width()
-    utils.ui.echo("\n" + "!" * width)
+    utils.ui.echo("")
+    utils.ui.error("!" * width)
     utils.ui.error(get_string("act_root_warn_brick"))
-    utils.ui.echo("!" * width + "\n")
+    utils.ui.error("!" * width)
+    utils.ui.echo("")
     utils.ui.echo(get_string("act_root_finish"))
 
     if not apk_installed:
