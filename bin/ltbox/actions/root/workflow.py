@@ -329,7 +329,7 @@ def _generate_root_image(
         backup_main = strategy.backup_dir / strategy.image_name
         base_main_bak = const.BASE_DIR / strategy.backup_name
 
-        with dev.edl_session(auto_reset=True, reset_msg_key="act_dump_reset") as port:
+        with dev.edl_session(auto_reset=False) as port:
             try:
                 _dump_partition(dev, port, main_partition, dumped_main)
 
@@ -347,7 +347,7 @@ def _generate_root_image(
 
             except (subprocess.CalledProcessError, FileNotFoundError, ValueError) as e:
                 utils.ui.error(
-                    get_string("act_err_dump").format(part=main_partition, e=e)
+                    get_string("act_err_dump").format(target=main_partition, e=e)
                 )
                 raise
 
@@ -422,13 +422,14 @@ def _flash_root_image(
         )
     )
 
-    if not dev.skip_adb:
-        utils.ui.echo(get_string("act_wait_sys_adb"))
-        dev.adb.wait_for_device()
-        utils.ui.echo(get_string("act_reboot_edl_flash"))
-    else:
-        utils.ui.echo(get_string("act_skip_adb_on"))
-        utils.ui.echo(get_string("act_manual_edl_now"))
+    if not dev.edl.check_device(silent=True):
+        if not dev.skip_adb:
+            utils.ui.echo(get_string("act_wait_sys_adb"))
+            dev.adb.wait_for_device()
+            utils.ui.echo(get_string("act_reboot_edl_flash"))
+        else:
+            utils.ui.echo(get_string("act_skip_adb_on"))
+            utils.ui.echo(get_string("act_manual_edl_now"))
 
     with dev.edl_session(auto_reset=True, reset_msg_key="act_reset_sys") as port:
         try:
@@ -651,7 +652,7 @@ def sign_and_flash_recovery(dev: device.DeviceController) -> None:
     with utils.temporary_workspace(const.WORK_DIR):
         dumped_recovery = const.WORK_DIR / f"recovery{suffix}.img"
 
-        with dev.edl_session(auto_reset=True, reset_msg_key="act_dump_reset") as port:
+        with dev.edl_session(auto_reset=False) as port:
             utils.ui.echo(get_string("act_dump_recovery").format(part=target_partition))
             try:
                 _partition_service().dump_partition(
@@ -659,7 +660,7 @@ def sign_and_flash_recovery(dev: device.DeviceController) -> None:
                 )
             except (subprocess.CalledProcessError, OSError, ValueError) as e:
                 utils.ui.error(
-                    get_string("act_err_dump").format(part=target_partition, e=e)
+                    get_string("act_err_dump").format(target=target_partition, e=e)
                 )
                 raise
 
@@ -671,11 +672,12 @@ def sign_and_flash_recovery(dev: device.DeviceController) -> None:
         utils.ui.echo(get_string("act_sign_twrp_start"))
         final_twrp = _sign_recovery_image(dumped_recovery, twrp_src, out_dir, twrp_name)
 
-        utils.ui.echo(get_string("act_reboot_edl_flash"))
-        if not dev.skip_adb:
-            dev.adb.wait_for_device()
-        else:
-            utils.ui.echo(get_string("act_manual_edl_now"))
+        if not dev.edl.check_device(silent=True):
+            utils.ui.echo(get_string("act_reboot_edl_flash"))
+            if not dev.skip_adb:
+                dev.adb.wait_for_device()
+            else:
+                utils.ui.echo(get_string("act_manual_edl_now"))
 
         with dev.edl_session(auto_reset=True, reset_msg_key="act_reset_sys") as port:
             edl.flash_partition_target(dev, port, target_partition, final_twrp)

@@ -77,7 +77,6 @@ def test_edl_flash_rawprogram_sends_pre_erase_and_reset(tmp_path):
         patch("ltbox.device_edl.const.QDLRS_EXE", qdlrs),
         patch.object(manager, "load_programmer_safe"),
         patch.object(manager, "_run_command") as mock_run,
-        patch.object(manager, "reset") as mock_reset,
     ):
         manager.flash_rawprogram(
             "COM1",
@@ -103,8 +102,9 @@ def test_edl_flash_rawprogram_sends_pre_erase_and_reset(tmp_path):
     assert "flasher" in flash_cmd
     assert "-p" in flash_cmd
     assert "-x" in flash_cmd
-
-    mock_reset.assert_called_once_with("COM1", mode="system")
+    # reset_after embeds --reset-mode system in the flasher command
+    rm_idx = flash_cmd.index("--reset-mode")
+    assert flash_cmd[rm_idx + 1] == "system"
 
 
 def test_edl_flash_rawprogram_skips_erase_and_reset_when_disabled(tmp_path):
@@ -149,6 +149,7 @@ def test_edl_write_partition_leaves_success_logging_to_caller(tmp_path):
     with (
         patch("ltbox.device_edl.const.QDLRS_EXE", qdlrs),
         patch("ltbox.device_edl.const.CONF") as mock_conf,
+        patch.object(manager, "_ensure_edl_port", return_value="COM5"),
         patch.object(manager, "_run_command"),
         patch("ltbox.device_edl.ui") as mock_ui,
     ):
@@ -201,6 +202,7 @@ def test_edl_reset_to_edl_calls_reset_with_edl_mode(tmp_path):
     with (
         patch("ltbox.device_edl.const.QDLRS_EXE", qdlrs),
         patch("ltbox.device_edl.const.CONF") as mock_conf,
+        patch.object(manager, "_ensure_edl_port", return_value="COM3"),
         patch.object(manager, "_run_command") as mock_run,
     ):
         mock_conf.edl_loader_file = tmp_path / "loader.melf"
@@ -208,6 +210,9 @@ def test_edl_reset_to_edl_calls_reset_with_edl_mode(tmp_path):
 
     cmd = mock_run.call_args.args[0]
     assert cmd[-2:] == ["reset", "edl"]
+    assert "--reset-mode" in cmd
+    rm_idx = cmd.index("--reset-mode")
+    assert cmd[rm_idx + 1] == "edl"
 
 
 def test_edl_base_cmd_uses_qdlrs_serial_backend(tmp_path):
@@ -221,5 +226,4 @@ def test_edl_base_cmd_uses_qdlrs_serial_backend(tmp_path):
     assert "COM12" in cmd
     assert "-s" in cmd
     assert "ufs" in cmd
-    assert "--reset-mode" in cmd
-    assert "off" in cmd
+    assert "--reset-mode" not in cmd

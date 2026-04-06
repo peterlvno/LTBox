@@ -91,6 +91,28 @@ class EdlManager(BaseDeviceManager):
             timeout=timeout,
         )
 
+    def _ensure_edl_port(self, port: str, timeout: float = 20.0) -> str:
+        """Wait for an EDL port to become stable after a qdl-rs reset.
+
+        qdl-rs resets the device to EDL after every command. The COM port
+        may still be visible briefly before the device disconnects, so we
+        must wait for it to disappear and reappear to avoid racing.
+        """
+        # Give the device time to start its reset cycle
+        time.sleep(2.0)
+        found = find_edl_port()
+        if found:
+            return found
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            time.sleep(1.0)
+            found = find_edl_port()
+            if found:
+                # Allow Sahara to fully initialize after COM port appears
+                time.sleep(1.0)
+                return found
+        return port
+
     def _base_cmd(self, port: str, loader_path: Path) -> list[str]:
         return [
             str(const.QDLRS_EXE),
@@ -102,8 +124,6 @@ class EdlManager(BaseDeviceManager):
             str(loader_path),
             "-s",
             "ufs",
-            "--reset-mode",
-            "off",
         ]
 
     def load_programmer(self, port: str, loader_path: Path) -> None:
@@ -151,29 +171,34 @@ class EdlManager(BaseDeviceManager):
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         loader_path = const.CONF.edl_loader_file
+        port = self._ensure_edl_port(port)
 
-        if partition_name:
-            cmd = self._base_cmd(port, loader_path) + [
-                "dump-part",
-                "-o",
-                str(dest_dir),
-                partition_name,
-            ]
-        else:
-            cmd = self._base_cmd(port, loader_path) + [
-                "-L",
-                str(lun),
-                "dump-part",
-                "-o",
-                str(dest_dir),
-                dest_file.stem,
-            ]
+        name = partition_name or dest_file.stem
+        cmd = self._base_cmd(port, loader_path) + [
+            "-L",
+            str(lun),
+            "dump-part",
+            "-o",
+            str(dest_dir),
+            name,
+        ]
 
         try:
             with prevent_sleep_during_flash():
                 self._run_command(cmd, cwd=dest_dir)
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             raise DeviceCommandError(get_string("device_err_edl_read").format(e=e), e)
+
+        # qdl-rs saves with the partition name; rename to the expected filename
+        if not dest_file.exists() and name != dest_file.stem:
+            for candidate in dest_dir.glob(f"{name}.*"):
+                candidate.rename(dest_file)
+                break
+            else:
+                # No extension variant — check bare name
+                bare = dest_dir / name
+                if bare.exists():
+                    bare.rename(dest_file)
 
     def write_partition(
         self,
@@ -192,21 +217,16 @@ class EdlManager(BaseDeviceManager):
 
         image_file = Path(image_path).resolve()
         loader_path = const.CONF.edl_loader_file
+        port = self._ensure_edl_port(port)
 
-        if partition_name:
-            cmd = self._base_cmd(port, loader_path) + [
-                "write",
-                partition_name,
-                str(image_file),
-            ]
-        else:
-            cmd = self._base_cmd(port, loader_path) + [
-                "-L",
-                str(lun),
-                "write",
-                image_file.stem,
-                str(image_file),
-            ]
+        name = partition_name or image_file.stem
+        cmd = self._base_cmd(port, loader_path) + [
+            "-L",
+            str(lun),
+            "write",
+            name,
+            str(image_file),
+        ]
 
         try:
             with prevent_sleep_during_flash():
@@ -221,11 +241,17 @@ class EdlManager(BaseDeviceManager):
             )
 
         loader_path = const.CONF.edl_loader_file
-        cmd = self._base_cmd(port, loader_path) + ["reset", mode]
+        port = self._ensure_edl_port(port)
+        cmd = self._base_cmd(port, loader_path) + [
+            "--reset-mode",
+            mode,
+            "reset",
+            mode,
+        ]
         try:
             with prevent_sleep_during_flash():
-                self._run_command(cmd, timeout=30.0)
-        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                self._run_command(cmd, timeout=30.0, check=False)
+        except FileNotFoundError as e:
             raise DeviceCommandError(get_string("device_err_reset_fail").format(e=e), e)
 
     def reset_to_edl(self, port: str) -> None:
@@ -260,15 +286,15 @@ class EdlManager(BaseDeviceManager):
                         )
 
                 ui.info(get_string("device_step2_flash"))
-                cmd = self._base_cmd(port, loader_path) + ["flasher"]
+                cmd = self._base_cmd(port, loader_path)
+                if reset_after:
+                    cmd.extend(["--reset-mode", "system"])
+                cmd.append("flasher")
                 for xml_path in raw_xmls:
                     cmd.extend(["-p", str(xml_path)])
                 for xml_path in patch_xmls:
                     cmd.extend(["-x", str(xml_path)])
                 self._run_command(cmd)
-
-                if reset_after:
-                    self.reset(port, mode="system")
         except (subprocess.CalledProcessError, OSError, RuntimeError) as e:
             raise DeviceCommandError(
                 get_string("device_err_rawprogram_fail").format(e=e),

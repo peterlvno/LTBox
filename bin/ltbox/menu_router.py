@@ -470,7 +470,11 @@ def _reboot_from_edl() -> None:
         time.sleep(2)
 
         ui.info(get_string("reboot_edl_resetting"))
-        subprocess.run(base_cmd + ["reset", "system"], check=True, timeout=30)
+        subprocess.run(
+            base_cmd + ["--reset-mode", "system", "reset", "system"],
+            check=True,
+            timeout=30,
+        )
 
         ui.info(get_string("reboot_sent_success"))
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:

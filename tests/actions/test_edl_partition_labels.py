@@ -99,7 +99,11 @@ def test_flash_selected_partitions_ab_slot_selection(mock_env):
         edl.flash_selected_partitions(dev, skip_reset=True)
 
     dev.edl.write_partition.assert_called_once_with(
-        port="COM1", image_path=(img_dir / "boot.img"), lun="0", start_sector="200"
+        port="COM1",
+        image_path=(img_dir / "boot.img"),
+        lun="0",
+        start_sector="200",
+        partition_name="boot_b",
     )
 
 

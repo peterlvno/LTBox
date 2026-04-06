@@ -70,6 +70,7 @@ class EdlPartitionService:
             image_path=image_path,
             lun=params["lun"],
             start_sector=params["start_sector"],
+            partition_name=target_name,
         )
         ui.echo(get_string("device_flash_success").format(filename=image_path.name))
         return params
@@ -91,6 +92,7 @@ class EdlPartitionService:
             lun=resolved_params["lun"],
             start_sector=resolved_params["start_sector"],
             num_sectors=resolved_params["num_sectors"],
+            partition_name=label,
         )
         self._validate_dump_size(
             label=label,
