@@ -1,7 +1,9 @@
 import hashlib
+import os
 import shutil
 import subprocess
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable, List, Optional
 
@@ -268,6 +270,37 @@ def _resolve_dynamic_partition_sources(
     return layout, dynamic_dir
 
 
+def _hash_file(path: Path) -> bytes:
+    sha256 = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1024 * 1024), b""):
+            sha256.update(block)
+    return sha256.digest()
+
+
+def _verify_hashes_parallel(
+    items: list[tuple[str, Path, bytes]],
+) -> Optional[tuple[str, bytes, bytes]]:
+    """Hash files in parallel and return the first mismatch, or None."""
+    if not items:
+        return None
+
+    workers = min(len(items), os.cpu_count() or 1)
+
+    def _check(entry: tuple[str, Path, bytes]) -> Optional[tuple[str, bytes, bytes]]:
+        name, path, expected = entry
+        actual = _hash_file(path)
+        if actual != expected:
+            return name, expected, actual
+        return None
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for result in pool.map(_check, items):
+            if result is not None:
+                return result
+    return None
+
+
 def _run_differential_patch(
     payload_bin: Path,
     partitions: List[str],
@@ -280,26 +313,22 @@ def _run_differential_patch(
 ) -> None:
     if old_hashes:
         utils.ui.echo(get_string("ota_verifying_source_hashes"))
+        source_items: list[tuple[str, Path, bytes]] = []
         for name in partitions:
-            expected_hash = old_hashes.get(name)
-            if not expected_hash:
-                continue
+            expected = old_hashes.get(name)
             source_path = file_map.get(name)
-            if not source_path:
-                continue
-            sha256_hash = hashlib.sha256()
-            with open(source_path, "rb") as f:
-                for block in iter(lambda: f.read(1024 * 1024), b""):
-                    sha256_hash.update(block)
-            actual_hash = sha256_hash.digest()
-            if actual_hash != expected_hash:
-                raise ToolError(
-                    get_string("ota_err_source_hash_mismatch").format(
-                        name=name,
-                        expected=expected_hash.hex(),
-                        actual=actual_hash.hex(),
-                    )
+            if expected and source_path:
+                source_items.append((name, source_path, expected))
+        mismatch = _verify_hashes_parallel(source_items)
+        if mismatch:
+            name, expected_hash, actual_hash = mismatch
+            raise ToolError(
+                get_string("ota_err_source_hash_mismatch").format(
+                    name=name,
+                    expected=expected_hash.hex(),
+                    actual=actual_hash.hex(),
                 )
+            )
 
     utils.recreate_dir(output_dir)
 
@@ -335,26 +364,18 @@ def _run_differential_patch(
         raise ToolError(get_string("ota_err_patch_failed").format(e=e)) from e
 
     utils.ui.echo(get_string("ota_verifying_hashes"))
-    for name, image_path in zip(partitions, new_images):
-        expected_hash = new_hashes.get(name)
-        if not expected_hash:
-            continue
-
-        sha256_hash = hashlib.sha256()
-        try:
-            with open(image_path, "rb") as f:
-                for byte_block in iter(lambda: f.read(1024 * 1024), b""):
-                    sha256_hash.update(byte_block)
-            actual_hash = sha256_hash.digest()
-            if actual_hash != expected_hash:
-                raise ToolError(
-                    f"Hash mismatch for {name}: "
-                    f"expected {expected_hash.hex()}, got {actual_hash.hex()}"
-                )
-        except Exception as e:
-            if isinstance(e, ToolError):
-                raise e
-            raise ToolError(f"Failed to verify hash for {name}: {e}") from e
+    output_items: list[tuple[str, Path, bytes]] = [
+        (name, image_path, new_hashes[name])
+        for name, image_path in zip(partitions, new_images)
+        if name in new_hashes
+    ]
+    mismatch = _verify_hashes_parallel(output_items)
+    if mismatch:
+        name, expected_hash_val, actual_hash_val = mismatch
+        raise ToolError(
+            f"Hash mismatch for {name}: "
+            f"expected {expected_hash_val.hex()}, got {actual_hash_val.hex()}"
+        )
 
     utils.ui.echo(get_string("ota_patch_complete").format(dir=output_dir.name))
 
