@@ -1,12 +1,15 @@
+import fnmatch
 import json
 import os
 import shutil
 import subprocess
+import tempfile
 import time
 import urllib.error
 import urllib.request
 import functools
 import warnings
+import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterable, List, NamedTuple, Optional, Union
@@ -232,15 +235,102 @@ def _check_required_windows_drivers() -> None:
     if os.name != "nt":
         return
 
-    if not _is_driver_present(["qcser.inf"]):
-        msg = get_string("utils_err_missing_qdloader_driver")
-        ui.error(msg)
-        raise RuntimeError(msg)
+    required_infs = ["qcadb.inf", "qcwdfser.inf"]
+    if all(_is_driver_present([inf]) for inf in required_infs):
+        return
 
-    if not _is_driver_present(["android_winusb.inf"]):
-        msg = get_string("utils_err_missing_android_usb_driver")
+    ui.warn(get_string("utils_driver_missing_warn"))
+    _auto_install_qualcomm_drivers()
+
+
+def _auto_install_qualcomm_drivers() -> None:
+    """Download and install Qualcomm USB Kernel Drivers from GitHub."""
+    from . import net  # local import to avoid circular dependency
+
+    repo_api_url = (
+        "https://api.github.com/repos/qualcomm/qcom-usb-kernel-drivers/releases/latest"
+    )
+
+    try:
+        # 1. Fetch latest release metadata
+        with net.request_with_retries(
+            "GET", repo_api_url, stream=False, timeout=15, retries=2
+        ) as response:
+            release_data = response.json()
+
+        # 2. Find the matching asset
+        asset_url: Optional[str] = None
+        asset_name: Optional[str] = None
+        for asset in release_data.get("assets", []):
+            name = asset.get("name", "")
+            if fnmatch.fnmatch(name, "qud-win-*_arm64_amd64.zip"):
+                asset_url = asset.get("browser_download_url")
+                asset_name = name
+                break
+
+        if not asset_url or not asset_name:
+            raise RuntimeError("No matching driver asset found in latest release")
+
+        # 3. Download to a temp directory
+        ui.echo(get_string("utils_driver_downloading"))
+        tmp_dir = Path(tempfile.mkdtemp(prefix="ltbox_qcom_drv_"))
+        zip_path = tmp_dir / asset_name
+
+        try:
+            with net.request_with_retries(
+                "GET", asset_url, stream=True, timeout=60, retries=2
+            ) as dl_response:
+                with open(zip_path, "wb") as f:
+                    for chunk in dl_response.iter_bytes(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+            # 4. Extract the zip
+            extract_dir = tmp_dir / "extracted"
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(extract_dir)
+
+            # 5. Find all .inf files inside Windows10/ subdirectory
+            inf_files: List[Path] = []
+            for root, _dirs, files in os.walk(extract_dir):
+                root_path = Path(root)
+                # Match any path containing a Windows10 directory component
+                if "Windows10" in root_path.parts:
+                    for fname in files:
+                        if fname.lower().endswith(".inf"):
+                            inf_files.append(root_path / fname)
+
+            if not inf_files:
+                raise RuntimeError("No .inf files found in Windows10/ subdirectory")
+
+            # 6. Install each .inf with pnputil
+            for inf_path in inf_files:
+                ui.echo(
+                    get_string("utils_driver_installing").format(name=inf_path.name)
+                )
+                try:
+                    subprocess.run(
+                        ["pnputil", "/add-driver", str(inf_path), "/install"],
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                        encoding="utf-8",
+                        errors="ignore",
+                    )
+                except subprocess.CalledProcessError as exc:
+                    logger.warning(
+                        "pnputil failed for %s: %s", inf_path.name, exc.stderr
+                    )
+
+            ui.echo(get_string("utils_driver_install_success"))
+
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    except Exception as e:
+        msg = get_string("utils_driver_install_failed").format(e=e)
         ui.error(msg)
-        raise RuntimeError(msg)
+        logger.warning("Qualcomm driver auto-install failed: %s", e)
 
 
 def _is_driver_present(expected_inf_names: List[str]) -> bool:

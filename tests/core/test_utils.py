@@ -293,18 +293,17 @@ class TestUtils:
             )
             assert utils._driver_present_via_driver_store(["qcser.inf"]) is False
 
-    def test_check_required_windows_drivers_raises_on_missing_qdloader(self):
+    def test_check_required_windows_drivers_auto_installs_on_missing(self):
         with (
             patch("ltbox.utils.os.name", "nt"),
             patch("ltbox.utils._is_driver_present", return_value=False),
+            patch("ltbox.utils._auto_install_qualcomm_drivers") as mock_install,
             patch("ltbox.utils.ui") as mock_ui,
         ):
-            with pytest.raises(RuntimeError, match="Qualcomm HS-USB QDLoader 9008"):
-                utils._check_required_windows_drivers()
+            utils._check_required_windows_drivers()
 
-            mock_ui.error.assert_called_once_with(
-                utils.get_string("utils_err_missing_qdloader_driver")
-            )
+            mock_ui.warn.assert_called_once()
+            mock_install.assert_called_once()
 
     @pytest.mark.integration
     def test_check_dependencies_allows_release_package_edl_tools(
