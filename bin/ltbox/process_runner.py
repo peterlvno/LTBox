@@ -12,6 +12,7 @@ from .logger import get_logger
 
 logger = get_logger()
 _TOOL_TIMESTAMP_PREFIX = re.compile(r"^\s*\d{2}:\d{2}:\d{2}:\s*")
+_PROGRESS_PERCENT = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 
 
 def _normalize_stream_log_line(line: str) -> str:
@@ -138,13 +139,22 @@ class CommandRunner:
 
             output_lines: list[str] = []
             timed_out = False
+            last_logged_pct = -10.0
             try:
                 if process.stdout:
                     for line in process.stdout:
                         if on_output is not None:
                             on_output(line)
                         else:
-                            logger.info(_normalize_stream_log_line(line))
+                            m = _PROGRESS_PERCENT.search(line)
+                            if m:
+                                pct = float(m.group(1))
+                                if pct - last_logged_pct >= 10.0 or pct >= 100.0:
+                                    logger.info(_normalize_stream_log_line(line))
+                                    last_logged_pct = pct
+                            else:
+                                logger.info(_normalize_stream_log_line(line))
+                                last_logged_pct = -10.0
                         output_lines.append(line)
 
                 process.wait(timeout=opts.timeout)

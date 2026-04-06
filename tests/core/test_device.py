@@ -221,3 +221,5 @@ def test_edl_base_cmd_uses_qdlrs_serial_backend(tmp_path):
     assert "COM12" in cmd
     assert "-s" in cmd
     assert "ufs" in cmd
+    assert "--reset-mode" in cmd
+    assert "off" in cmd

@@ -102,6 +102,8 @@ class EdlManager(BaseDeviceManager):
             str(loader_path),
             "-s",
             "ufs",
+            "--reset-mode",
+            "off",
         ]
 
     def load_programmer(self, port: str, loader_path: Path) -> None:
