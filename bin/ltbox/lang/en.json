@@ -353,6 +353,7 @@
   "device_err_get_slot": "[!] Error getting slot: {e}",
   "device_err_get_slot_fastboot": "[!] fastboot slot error: {e}",
   "device_err_getvar_all": "[!] fastboot getvar all error: {e}",
+  "device_err_qdlrs_missing": "qdl-rs.exe missing at {path}",
   "device_err_qsahara_missing": "QSaharaServer.exe missing at {path}",
   "device_err_rawprogram_fail": "EDL Rawprogram flash failed: {e}",
   "device_err_reboot": "[!] Reboot failed: {e}",

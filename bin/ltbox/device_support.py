@@ -28,6 +28,14 @@ def format_serial_port(port: str) -> str:
     return f"\\\\.\\{port}"
 
 
+def format_serial_port_bare(port: str) -> str:
+    """Return bare COM port name (e.g. 'COM12'), stripping '\\\\.\\' prefix if present."""
+    prefix = "\\\\.\\"
+    if port.startswith(prefix):
+        return port[len(prefix) :]
+    return port
+
+
 def is_qualcomm_edl_port(port: Any) -> bool:
     description = port.description or ""
     hwid = (port.hwid or "").upper()

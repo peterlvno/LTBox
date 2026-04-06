@@ -353,6 +353,7 @@
   "device_err_get_slot": "[!] Ошибка проверки слота: {e}",
   "device_err_get_slot_fastboot": "[!] Ошибка слота Fastboot {e}",
   "device_err_getvar_all": "[!] Ошибка fastboot getvar all: {e}",
+  "device_err_qdlrs_missing": "qdl-rs.exe отсутствует в {path}",
   "device_err_qsahara_missing": "QSaharaServer.exe отсутствует в {path}",
   "device_err_rawprogram_fail": "Ошибка прошивки EDL Rawprogram: {e}",
   "device_err_reboot": "[!] Перезагрузка не удалась: {e}",

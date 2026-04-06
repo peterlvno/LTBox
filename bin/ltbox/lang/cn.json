@@ -353,6 +353,7 @@
   "device_err_get_slot": "[!] 获取槽位错误: {e}",
   "device_err_get_slot_fastboot": "[!] Fastboot 槽位错误: {e}",
   "device_err_getvar_all": "[!] fastboot getvar all 错误: {e}",
+  "device_err_qdlrs_missing": "在 {path} 未找到 qdl-rs.exe",
   "device_err_qsahara_missing": "在 {path} 未找到 QSaharaServer.exe",
   "device_err_rawprogram_fail": "EDL Rawprogram 刷入失败: {e}",
   "device_err_reboot": "[!] 重启失败: {e}",

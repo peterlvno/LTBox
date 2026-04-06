@@ -353,6 +353,7 @@
   "device_err_get_slot": "[!] 슬롯 확인 오류: {e}",
   "device_err_get_slot_fastboot": "[!] Fastboot 슬롯 오류: {e}",
   "device_err_getvar_all": "[!] fastboot getvar all 오류: {e}",
+  "device_err_qdlrs_missing": "qdl-rs.exe가 {path}에 없습니다.",
   "device_err_qsahara_missing": "QSaharaServer.exe가 {path}에 없습니다.",
   "device_err_rawprogram_fail": "EDL Rawprogram 플래싱 실패: {e}",
   "device_err_reboot": "[!] 재부팅 실패: {e}",

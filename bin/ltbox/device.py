@@ -8,6 +8,7 @@ from . import constants as const
 from . import utils
 from .device_adb import AdbManager
 from .device_edl import EdlManager
+from .device_edl_qdlrs import QdlrsEdlManager
 from .device_fastboot import FastbootManager
 from .device_support import DeviceCommandRunner
 from .errors import DeviceCommandError
@@ -43,14 +44,18 @@ class DeviceController:
                 command_runner=self._command_runner,
             )
         )
-        self.edl = (
-            edl_manager
-            if edl_manager is not None
-            else EdlManager(
+        if edl_manager is not None:
+            self.edl = edl_manager
+        elif const.CONF.use_qdlrs:
+            self.edl = QdlrsEdlManager(
                 self._maybe_warn_usb_port_hint,
                 command_runner=self._command_runner,
             )
-        )
+        else:
+            self.edl = EdlManager(
+                self._maybe_warn_usb_port_hint,
+                command_runner=self._command_runner,
+            )
 
         self.adb._usb_port_hint = self._maybe_warn_usb_port_hint
         self.fastboot._usb_port_hint = self._maybe_warn_usb_port_hint
