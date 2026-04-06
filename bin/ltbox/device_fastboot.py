@@ -137,7 +137,6 @@ class FastbootManager(BaseDeviceManager):
 
     def wait_for_device(self) -> bool:
         self._usb_port_hint()
-        ui.info(get_string("device_wait_mode_title").format(mode="fastboot"))
         if self.check_device(silent=True):
             ui.info(get_string("device_fastboot_connected"))
             return True

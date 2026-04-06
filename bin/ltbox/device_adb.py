@@ -59,15 +59,12 @@ class AdbManager(BaseDeviceManager):
         if not self.connected_once:
             ui.box_output(
                 [
-                    get_string("device_wait_mode_title").format(mode="ADB"),
                     get_string("device_enable_usb_debug"),
                     get_string("device_usb_prompt_appear"),
                     get_string("device_check_always_allow"),
                     get_string("device_wait_cancel_hint"),
                 ]
             )
-        else:
-            print(get_string("device_wait_adb_loop") + "...", end="\r")
 
         def _check_adb() -> bool:
             try:
@@ -79,11 +76,11 @@ class AdbManager(BaseDeviceManager):
                 return False
 
         try:
-            utils.wait_for_condition(_check_adb, interval=1.0)
+            with ui.status(get_string("device_wait_adb_loop")):
+                utils.wait_for_condition(_check_adb, interval=1.0)
             if not self.connected_once:
                 ui.info(get_string("device_adb_connected"))
             self.connected_once = True
-            print(" " * 40, end="\r")
             return True
         except KeyboardInterrupt:
             ui.warn("\n" + get_string("device_wait_cancelled"))

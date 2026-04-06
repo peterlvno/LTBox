@@ -52,22 +52,18 @@ class EdlManager(BaseDeviceManager):
 
     def wait_for_device(self) -> str:
         self._usb_port_hint()
-        ui.info(get_string("device_wait_mode_title").format(mode="EDL"))
         port_name = self.check_device()
         if port_name:
             return port_name
 
-        def _loop_msg() -> None:
-            ui.info(get_string("device_wait_edl_loop"))
-
         try:
             from . import utils
 
-            port_name = utils.wait_for_condition(
-                lambda: self.check_device(silent=True),
-                interval=2.0,
-                on_loop=_loop_msg,
-            )
+            with ui.status(get_string("device_wait_edl_loop")):
+                port_name = utils.wait_for_condition(
+                    lambda: self.check_device(silent=True),
+                    interval=2.0,
+                )
             ui.info(get_string("device_edl_connected").format(port=port_name))
             return port_name
         except KeyboardInterrupt:
