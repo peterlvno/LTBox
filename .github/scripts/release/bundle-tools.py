@@ -5,6 +5,7 @@ import re
 import shutil
 import sys
 import tarfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -19,15 +20,28 @@ UPDATE_ENGINE_DIR = TOOLS_DIR / "update_engine"
 _CI_ANDROID_JS_VARS = re.compile(r"var JSVariables = (\{.*?\});", re.S)
 
 
-def _download(url: str, dest: Path, description: str) -> None:
+def _download(
+    url: str, dest: Path, description: str, *, max_retries: int = 4
+) -> None:
     print(f"[bundle-tools] Downloading {description}...")
-    response = requests.get(url, stream=True, timeout=60)
+    for attempt in range(1, max_retries + 1):
+        response = requests.get(url, stream=True, timeout=60)
+        if response.status_code == 503 and attempt < max_retries:
+            wait = 2**attempt
+            print(
+                f"[bundle-tools] 503 from server, retrying in {wait}s "
+                f"(attempt {attempt}/{max_retries})..."
+            )
+            time.sleep(wait)
+            continue
+        response.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+        print(f"[bundle-tools] Downloaded {dest.name}")
+        return
     response.raise_for_status()
-    with open(dest, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
-                f.write(chunk)
-    print(f"[bundle-tools] Downloaded {dest.name}")
 
 
 def _load_ci_android_variables(url: str) -> dict:

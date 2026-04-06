@@ -1,15 +1,25 @@
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
 import requests  # type: ignore[import-untyped]
 
+_MAX_RETRIES = 4
+
 
 def check_url(url: str, description: str) -> bool:
     print(f"Checking {description}...", end=" ")
     try:
-        response = requests.get(url, stream=True, timeout=15)
+        for attempt in range(1, _MAX_RETRIES + 1):
+            response = requests.get(url, stream=True, timeout=15)
+            if response.status_code == 503 and attempt < _MAX_RETRIES:
+                wait = 2**attempt
+                print(f"503, retry in {wait}s...", end=" ")
+                time.sleep(wait)
+                continue
+            break
         if response.status_code in [200, 302]:
             print(f"OK ({url})")
             return True
