@@ -19,6 +19,9 @@ jobs:
     uses: ./.github/workflows/windows_test.yml
     secrets: inherit
 
+  build-qdlrs:
+    uses: ./.github/workflows/build-qdlrs.yml
+
   resolve-tag:
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -29,7 +32,7 @@ jobs:
         run: echo "tag-name=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
   build:
-    needs: [test, resolve-tag]
+    needs: [test, build-qdlrs, resolve-tag]
     uses: ./.github/workflows/build-archive.yml
     with:
       tag-name: ${{ needs.resolve-tag.outputs.tag-name }}
