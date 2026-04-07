@@ -31,6 +31,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: true
 
       - name: Free Disk Space (Windows)
         run: |
