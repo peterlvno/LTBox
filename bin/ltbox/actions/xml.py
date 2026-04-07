@@ -101,11 +101,15 @@ def _move_files(src_files: List[Path], target_dir: Path) -> int:
 
 
 def auto_decrypt_if_needed() -> None:
-    x_files = list(const.IMAGE_DIR.glob("rawprogram*.x"))
+    raw_x_files = list(const.IMAGE_DIR.glob("rawprogram*.x"))
+    patch_x_files = list(const.IMAGE_DIR.glob("patch*.x"))
+    x_files = raw_x_files + patch_x_files
     if not x_files:
         return
 
-    xml_files = list(const.IMAGE_DIR.glob("rawprogram*.xml"))
+    xml_files = list(const.IMAGE_DIR.glob("rawprogram*.xml")) + list(
+        const.IMAGE_DIR.glob("patch*.xml")
+    )
     if xml_files:
         _clean_existing_files(xml_files, get_string("xml_cleaning_pollution"))
         width = utils.ui.get_term_width()
