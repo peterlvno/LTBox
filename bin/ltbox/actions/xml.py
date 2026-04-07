@@ -196,10 +196,10 @@ def decrypt_x_files() -> None:
         )
 
     width = utils.ui.get_term_width()
-    utils.ui.info("\n  " + "=" * width)
+    utils.ui.info("\n" + "=" * width)
     utils.ui.info(get_string("act_success"))
     utils.ui.info(get_string("act_xml_ready").format(dir=const.OUTPUT_XML_DIR.name))
-    utils.ui.info("  " + "=" * width)
+    utils.ui.info("=" * width)
 
 
 def _is_garbage_file(path: Path) -> bool:
@@ -472,7 +472,7 @@ def modify_xml(wipe: Literal[0, 1] = 0) -> None:
         utils.ui.info(get_string("act_clean_temp").format(dir=const.WORKING_DIR.name))
 
     width = utils.ui.get_term_width()
-    utils.ui.info("\n  " + "=" * width)
+    utils.ui.info("\n" + "=" * width)
     utils.ui.info(get_string("act_success"))
     utils.ui.info(get_string("act_xml_ready").format(dir=const.OUTPUT_XML_DIR.name))
-    utils.ui.info("  " + "=" * width)
+    utils.ui.info("=" * width)

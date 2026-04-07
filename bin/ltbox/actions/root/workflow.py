@@ -191,7 +191,7 @@ def _patch_root_from_folder(
         utils.ui.echo("")
 
         width = utils.ui.get_term_width()
-        utils.ui.echo("  " + "=" * width)
+        utils.ui.echo("=" * width)
         utils.ui.echo(get_string("act_success"))
 
         utils.ui.echo(
@@ -208,7 +208,7 @@ def _patch_root_from_folder(
 
         if show_manual_flash_notice:
             utils.ui.echo("\n" + get_string("act_root_manual_flash_notice"))
-        utils.ui.echo("  " + "=" * width)
+        utils.ui.echo("=" * width)
         return True
     else:
         fail_image = "boot" if gki else "init_boot"

@@ -110,10 +110,10 @@ def _finalize_region_outputs(
     on_log("")
 
     width = utils.ui.get_term_width()
-    on_log("  " + "=" * width)
+    on_log("=" * width)
     on_log(get_string("act_success"))
     on_log(get_string("act_final_saved").format(dir=const.OUTPUT_DIR.name))
-    on_log("  " + "=" * width)
+    on_log("=" * width)
 
 
 def _validate_device_model(
@@ -381,10 +381,10 @@ def edit_devinfo_persist(
     persist_img.unlink(missing_ok=True)
 
     width = utils.ui.get_term_width()
-    on_log("\n  " + "=" * width)
+    on_log("\n" + "=" * width)
     on_log(get_string("act_success"))
     on_log(get_string("act_dp_ready").format(dir=const.OUTPUT_DP_DIR.name))
-    on_log("  " + "=" * width)
+    on_log("=" * width)
 
     return backup_critical_dir.name
 

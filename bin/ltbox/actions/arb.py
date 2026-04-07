@@ -199,14 +199,14 @@ def patch_anti_rollback(comparison_result: ArbResult) -> None:
         )
 
         width = utils.ui.get_term_width()
-        utils.ui.echo("\n  " + "=" * width)
+        utils.ui.echo("\n" + "=" * width)
         utils.ui.echo(get_string("act_success"))
         utils.ui.echo(
             get_string("act_arb_patched_ready").format(
                 dir=const.OUTPUT_ANTI_ROLLBACK_DIR.name
             )
         )
-        utils.ui.echo("  " + "=" * width)
+        utils.ui.echo("=" * width)
 
     except (KeyError, subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
         utils.ui.error(get_string("act_err_arb_patch").format(e=e))
