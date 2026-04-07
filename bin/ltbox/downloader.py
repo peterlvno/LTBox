@@ -85,8 +85,6 @@ def download_resource(
     retries: int = 3,
     backoff: float = 5,
 ) -> None:
-    msg = get_string("dl_downloading").format(filename=dest_path.name)
-    utils.ui.echo(msg)
     try:
         with net.request_with_retries(
             "GET",
@@ -101,8 +99,6 @@ def download_resource(
             with open(dest_path, "wb") as f:
                 _write_stream(response, f, total_size, show_progress)
 
-        msg_success = get_string("dl_download_success").format(filename=dest_path.name)
-        utils.ui.echo(msg_success)
     except (httpx.HTTPError, OSError) as e:
         msg_err = get_string("dl_download_failed").format(url=url, error=e)
         utils.ui.error(msg_err)
@@ -200,13 +196,20 @@ def _download_github_asset(
         raise ToolError(get_string("dl_github_failed").format(e=e))
 
 
+class _DownloadResult(NamedTuple):
+    path: Path
+    original_name: str
+
+
 def _download_and_move_github_asset(
     repo_url: str, tag: str, asset_pattern: str, target_file: Path
-) -> Path:
+) -> _DownloadResult:
     downloaded_path = _download_github_asset(
         repo_url, tag, asset_pattern, target_file.parent
     )
-    return _move_downloaded_file(downloaded_path, target_file)
+    original_name = downloaded_path.name
+    moved = _move_downloaded_file(downloaded_path, target_file)
+    return _DownloadResult(moved, original_name)
 
 
 def _get_latest_release_tag(owner_repo: str) -> str:
@@ -256,8 +259,6 @@ def get_latest_successful_workflow_run(
 
 
 def get_gki_kernel(kernel_version: str, work_dir: Path) -> Path:
-    utils.ui.echo(get_string("dl_gki_downloading"))
-
     try:
         tag = const.CONF._get_val("wildkernels", "tag", default="latest")
         owner = const.CONF._get_val("wildkernels", "owner")
@@ -275,9 +276,15 @@ def get_gki_kernel(kernel_version: str, work_dir: Path) -> Path:
 
     try:
         anykernel_zip = work_dir / const.ANYKERNEL_ZIP_FILENAME
-        _download_and_move_github_asset(repo_ref, tag, asset_pattern, anykernel_zip)
 
-        utils.ui.echo(get_string("dl_gki_download_ok"))
+        with utils.ui.status(get_string("dl_gki_downloading")):
+            result = _download_and_move_github_asset(
+                repo_ref, tag, asset_pattern, anykernel_zip
+            )
+
+        utils.ui.echo(
+            get_string("dl_download_success").format(filename=result.original_name)
+        )
 
         utils.ui.echo(get_string("dl_gki_extracting"))
         extracted_kernel_dir = work_dir / "extracted_kernel"
@@ -404,56 +411,57 @@ def download_nightly_artifacts(
     ksuinit_dest = target_dir / "ksuinit"
     lkm_dest = target_dir / "lkm.zip"
 
-    utils.ui.info(
+    with utils.ui.status(
         get_string("dl_fetching_workflow_artifacts").format(workflow_id=workflow_id)
+    ):
+        try:
+            _download_manager_artifact(
+                base_url, target_dir, manager_name, manager_fallback_names
+            )
+            _download_ksuinit_artifact(
+                base_url,
+                repo,
+                workflow_id,
+                target_dir,
+                ksuinit_variants,
+                download_all_ksuinit,
+            )
+            download_resource(f"{base_url}/{mapped_name}-lkm.zip", lkm_dest)
+
+        except (ToolError, httpx.HTTPError, zipfile.BadZipFile, OSError) as e:
+            _cleanup_files(manager_zip, ksuinit_dest, lkm_dest)
+            raise e
+
+    utils.ui.echo(
+        get_string("dl_download_success").format(filename=f"Workflow {workflow_id}")
     )
-
-    try:
-        _download_manager_artifact(
-            base_url, target_dir, manager_name, manager_fallback_names
-        )
-        _download_ksuinit_artifact(
-            base_url,
-            repo,
-            workflow_id,
-            target_dir,
-            ksuinit_variants,
-            download_all_ksuinit,
-        )
-        download_resource(f"{base_url}/{mapped_name}-lkm.zip", lkm_dest)
-
-        utils.ui.echo(
-            get_string("dl_download_success").format(filename="All Artifacts")
-        )
-
-    except (ToolError, httpx.HTTPError, zipfile.BadZipFile, OSError) as e:
-        _cleanup_files(manager_zip, ksuinit_dest, lkm_dest)
-        raise e
 
 
 def download_ksu_manager_release(
     target_dir: Path, repo: str = "", tag: str = ""
 ) -> None:
-    utils.ui.echo(get_string("dl_ksu_downloading"))
     target_file = target_dir / "manager.apk"
 
     repo_url = f"https://github.com/{repo or const.KSU_APK_REPO}"
     resolved_tag = tag or const.KSU_APK_TAG
 
-    try:
-        _download_and_move_github_asset(
-            repo_url, resolved_tag, ".*spoofed.*\\.apk", target_file
-        )
-    except ToolError:
+    with utils.ui.status(get_string("dl_ksu_downloading")):
         try:
-            _download_and_move_github_asset(
-                repo_url, resolved_tag, ".*\\.apk", target_file
+            result = _download_and_move_github_asset(
+                repo_url, resolved_tag, ".*spoofed.*\\.apk", target_file
             )
-        except ToolError as e:
-            utils.ui.error(get_string("dl_err_ksu_download").format(e=e))
-            raise
+        except ToolError:
+            try:
+                result = _download_and_move_github_asset(
+                    repo_url, resolved_tag, ".*\\.apk", target_file
+                )
+            except ToolError as e:
+                utils.ui.error(get_string("dl_err_ksu_download").format(e=e))
+                raise
 
-    utils.ui.echo(get_string("dl_ksu_success"))
+    utils.ui.echo(
+        get_string("dl_download_success").format(filename=result.original_name)
+    )
 
 
 def download_ksuinit_release(target_path: Path, repo: str = "", tag: str = "") -> None:
@@ -466,21 +474,24 @@ def download_ksuinit_release(target_path: Path, repo: str = "", tag: str = "") -
     base_url = f"https://nightly.link/{owner_repo}/actions/runs/{workflow_id}"
     temp_zip = target_path.parent / "ksuinit.zip"
 
-    try:
-        download_resource(f"{base_url}/ksuinit.zip", temp_zip)
-        with zipfile.ZipFile(temp_zip, "r") as zf:
-            ksuinit_member = None
-            for member in zf.namelist():
-                if member.endswith("ksuinit"):
-                    ksuinit_member = member
-                    break
-            if not ksuinit_member:
-                raise ToolError(get_string("dl_err_ksuinit_not_found"))
+    with utils.ui.status(get_string("dl_downloading").format(filename="ksuinit.zip")):
+        try:
+            download_resource(f"{base_url}/ksuinit.zip", temp_zip)
+            with zipfile.ZipFile(temp_zip, "r") as zf:
+                ksuinit_member = None
+                for member in zf.namelist():
+                    if member.endswith("ksuinit"):
+                        ksuinit_member = member
+                        break
+                if not ksuinit_member:
+                    raise ToolError(get_string("dl_err_ksuinit_not_found"))
 
-            with zf.open(ksuinit_member) as src, open(target_path, "wb") as dst:
-                shutil.copyfileobj(src, dst)
-    finally:
-        _cleanup_files(temp_zip)
+                with zf.open(ksuinit_member) as src, open(target_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+        finally:
+            _cleanup_files(temp_zip)
+
+    utils.ui.echo(get_string("dl_download_success").format(filename="ksuinit.zip"))
 
 
 def get_lkm_kernel_release(
@@ -492,33 +503,41 @@ def get_lkm_kernel_release(
     utils.ui.echo(get_string("dl_lkm_kver_found").format(ver=kernel_version))
 
     asset_pattern_regex = f"android.*-{kernel_version}_kernelsu.ko"
-    utils.ui.echo(get_string("dl_lkm_downloading").format(asset=asset_pattern_regex))
 
-    try:
-        _download_and_move_github_asset(
-            f"https://github.com/{repo or const.KSU_APK_REPO}",
-            tag or const.KSU_APK_TAG,
-            asset_pattern_regex,
-            target_path,
-        )
-        utils.ui.echo(get_string("dl_lkm_download_ok"))
-    except (ToolError, OSError) as e:
-        utils.ui.error(
-            get_string("dl_lkm_download_fail").format(asset=asset_pattern_regex)
-        )
-        raise ToolError(str(e))
+    with utils.ui.status(get_string("dl_lkm_downloading")):
+        try:
+            result = _download_and_move_github_asset(
+                f"https://github.com/{repo or const.KSU_APK_REPO}",
+                tag or const.KSU_APK_TAG,
+                asset_pattern_regex,
+                target_path,
+            )
+        except (ToolError, OSError) as e:
+            utils.ui.error(
+                get_string("dl_lkm_download_fail").format(asset=asset_pattern_regex)
+            )
+            raise ToolError(str(e))
+
+    utils.ui.echo(
+        get_string("dl_download_success").format(filename=result.original_name)
+    )
 
 
 def download_apatch_release(
     target_dir: Path, repo: str = "", tag: str = "latest", name: str = "APatch"
 ):
-    utils.ui.echo(get_string("dl_apatch_stable_downloading").format(name=name))
     apk_path = target_dir / "FolkPatch.apk"
-    _download_and_move_github_asset(
-        repo or const.FOLKPATCH_REPO,
-        tag or const.FOLKPATCH_TAG,
-        r".*\.apk$",
-        apk_path,
+
+    with utils.ui.status(get_string("dl_apatch_stable_downloading").format(name=name)):
+        result = _download_and_move_github_asset(
+            repo or const.FOLKPATCH_REPO,
+            tag or const.FOLKPATCH_TAG,
+            r".*\.apk$",
+            apk_path,
+        )
+
+    utils.ui.echo(
+        get_string("dl_download_success").format(filename=result.original_name)
     )
     _extract_apatch_kpimg(apk_path, target_dir)
 
@@ -526,11 +545,6 @@ def download_apatch_release(
 def download_apatch_nightly(
     workflow_id: str, target_dir: Path, repo: str = "", name: str = "APatch"
 ):
-    utils.ui.echo(
-        get_string("dl_apatch_nightly_downloading").format(
-            name=name, workflow_id=workflow_id
-        )
-    )
     repo = repo or const.FOLKPATCH_REPO
     artifact_names = _get_workflow_run_artifacts(repo, workflow_id)
 
@@ -554,18 +568,28 @@ def download_apatch_nightly(
     )
     temp_zip = target_dir / f"{target_artifact}.zip"
 
-    try:
-        download_resource(base_url, temp_zip)
-        apk_path = target_dir / "FolkPatch.apk"
-        with zipfile.ZipFile(temp_zip, "r") as zf:
-            apk_member = next((m for m in zf.namelist() if m.endswith(".apk")), None)
-            if not apk_member:
-                raise ToolError(get_string("dl_err_apatch_apk_missing_in_nightly"))
-            with zf.open(apk_member) as src, open(apk_path, "wb") as dst:
-                shutil.copyfileobj(src, dst)
-    finally:
-        _cleanup_files(temp_zip)
+    with utils.ui.status(
+        get_string("dl_apatch_nightly_downloading").format(
+            name=name, workflow_id=workflow_id
+        )
+    ):
+        try:
+            download_resource(base_url, temp_zip)
+            apk_path = target_dir / "FolkPatch.apk"
+            with zipfile.ZipFile(temp_zip, "r") as zf:
+                apk_member = next(
+                    (m for m in zf.namelist() if m.endswith(".apk")), None
+                )
+                if not apk_member:
+                    raise ToolError(get_string("dl_err_apatch_apk_missing_in_nightly"))
+                with zf.open(apk_member) as src, open(apk_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+        finally:
+            _cleanup_files(temp_zip)
 
+    utils.ui.echo(
+        get_string("dl_download_success").format(filename=f"{target_artifact}.apk")
+    )
     _extract_apatch_kpimg(apk_path, target_dir)
 
 
