@@ -4,6 +4,7 @@ import io
 import shutil
 import sys
 import tempfile
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -62,7 +63,10 @@ def _load_avbtool_module(source_path: str) -> ModuleType:
     if spec is None or spec.loader is None:
         raise ImportError(f"Unable to load avbtool module from {source_path}")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+        spec.loader.exec_module(module)
     return module
 
 
@@ -423,8 +427,13 @@ def extract_image_avb_info(image_path: Path) -> Dict[str, Any]:
     props_args: List[str] = []
     for descriptor in parsed.descriptors:
         if isinstance(descriptor, avb_module.AvbPropertyDescriptor):
-            info[descriptor.key] = descriptor.value
-            props_args.extend(["--prop", f"{descriptor.key}:{descriptor.value}"])
+            value = (
+                descriptor.value.decode("utf-8", errors="replace")
+                if isinstance(descriptor.value, bytes)
+                else descriptor.value
+            )
+            info[descriptor.key] = value
+            props_args.extend(["--prop", f"{descriptor.key}:{value}"])
         elif isinstance(
             descriptor,
             (avb_module.AvbHashDescriptor, avb_module.AvbHashtreeDescriptor),
