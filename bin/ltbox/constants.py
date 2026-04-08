@@ -32,6 +32,7 @@ class LTBoxConfig:
         self.output_anti_rollback_dir = self.base_dir / "output_anti_rollback"
 
         self.image_dir = self.base_dir / "image"
+        self.kernel_dir = self.base_dir / "kernel"
         self.image_new_dir = self.base_dir / "image_new"
         self.working_dir = self.base_dir / "working"
         self.output_xml_dir = self.base_dir / "output_xml"
@@ -259,6 +260,7 @@ BACKUP_INIT_BOOT_DIR = CONF.backup_init_boot_dir
 WORKING_BOOT_DIR = CONF.working_boot_dir
 OUTPUT_ANTI_ROLLBACK_DIR = CONF.output_anti_rollback_dir
 IMAGE_DIR = CONF.image_dir
+KERNEL_DIR = CONF.kernel_dir
 IMAGE_NEW_DIR = CONF.image_new_dir
 WORKING_DIR = CONF.working_dir
 OUTPUT_XML_DIR = CONF.output_xml_dir

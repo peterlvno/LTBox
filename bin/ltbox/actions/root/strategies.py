@@ -304,6 +304,10 @@ class GkiRootStrategy(ConfigurableRootStrategy):
         patch_image_name="boot.img",
     )
 
+    def __init__(self, *, custom_kernel: bool = False):
+        super().__init__()
+        self._custom_kernel = custom_kernel
+
     def print_unroot_step(self, partition_map: Dict[str, str]) -> None:
         utils.ui.echo(
             get_string("act_unroot_step4_gki").format(part=partition_map["main"])
@@ -321,7 +325,19 @@ class GkiRootStrategy(ConfigurableRootStrategy):
     ) -> Optional[Path]:
         magiskboot_exe = const.MAGISKBOOT_EXE
 
-        return patch_boot_with_root_algo(work_dir, magiskboot_exe, dev=None, gki=True)
+        custom_kernel_zip: Optional[Path] = None
+        if self._custom_kernel:
+            custom_kernel_zip = _prompt_custom_kernel_zip()
+            if custom_kernel_zip is None:
+                return None
+
+        return patch_boot_with_root_algo(
+            work_dir,
+            magiskboot_exe,
+            dev=None,
+            gki=True,
+            custom_kernel_zip=custom_kernel_zip,
+        )
 
     def finalize_patch(
         self, patched_boot: Path, output_dir: Path, backup_source_dir: Path
@@ -522,12 +538,68 @@ class LkmRootStrategy(InitBootRootStrategy):
         )
 
 
-def get_root_strategy(gki: bool, root_type: str = "ksu") -> RootStrategy:
+def _prompt_custom_kernel_zip() -> Optional[Path]:
+    """Prompt the user to place an AnyKernel3 zip in the kernel folder and select one."""
+    kernel_dir = const.KERNEL_DIR
+    kernel_dir.mkdir(parents=True, exist_ok=True)
+
+    utils.ui.echo("")
+    utils.ui.echo(get_string("gki_custom_place_zip").format(path=kernel_dir))
+
+    while True:
+        try:
+            input(get_string("gki_custom_press_enter"))
+        except (KeyboardInterrupt, EOFError):
+            utils.ui.warn(get_string("gki_custom_cancelled"))
+            return None
+
+        zips = sorted(kernel_dir.glob("*.zip"))
+        if not zips:
+            utils.ui.warn(get_string("gki_custom_no_zip").format(path=kernel_dir))
+            continue
+
+        if len(zips) == 1:
+            utils.ui.echo(
+                get_string("gki_custom_selected").format(filename=zips[0].name)
+            )
+            return zips[0]
+
+        # Multiple zips — let the user choose
+        from ...menu import TerminalMenu
+
+        menu = TerminalMenu(get_string("gki_custom_select_title"))
+        zip_map: Dict[str, Path] = {}
+        for i, zf in enumerate(zips, 1):
+            key = str(i)
+            zip_map[key] = zf
+            menu.add_option(key, zf.name)
+        menu.add_option("c", get_string("cancel"))
+
+        choice = menu.ask(
+            get_string("prompt_select"),
+            get_string("err_invalid_selection"),
+        )
+
+        if choice == "c" or choice is None:
+            utils.ui.warn(get_string("gki_custom_cancelled"))
+            return None
+
+        selected = zip_map.get(choice)
+        if selected:
+            utils.ui.echo(
+                get_string("gki_custom_selected").format(filename=selected.name)
+            )
+            return selected
+
+
+def get_root_strategy(
+    gki: bool, root_type: str = "ksu", *, custom_kernel: bool = False
+) -> RootStrategy:
     provider = get_root_provider_profile(root_type)
     if provider.family == RootProviderFamily.APATCH:
         return APatchStrategy(provider.provider_id)
     if gki:
-        return GkiRootStrategy()
+        return GkiRootStrategy(custom_kernel=custom_kernel)
     return LkmRootStrategy(provider.provider_id)
 
 

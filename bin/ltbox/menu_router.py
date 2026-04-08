@@ -248,10 +248,12 @@ def _root_action_menu(
     gki: bool,
     root_type: str,
     breadcrumbs: str,
+    *,
+    custom_kernel: bool = False,
 ) -> MenuReturn:
     from .actions.root.strategies import get_root_strategy
 
-    strategy = get_root_strategy(gki, root_type)
+    strategy = get_root_strategy(gki, root_type, custom_kernel=custom_kernel)
 
     if hasattr(strategy, "configure_source"):
         strategy.configure_source(breadcrumbs=breadcrumbs)
@@ -295,6 +297,7 @@ def _handle_root_mode(
             gki=mode_option.gki,
             root_type=mode_option.strategy_root_type,
             breadcrumbs=mode_bc,
+            custom_kernel=mode_option.custom_kernel,
         )
 
     res = _loop_menu(

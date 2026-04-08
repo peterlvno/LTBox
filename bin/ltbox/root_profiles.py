@@ -49,6 +49,7 @@ class RootModeOption:
     label_key: str
     gki: bool
     strategy_root_type: str
+    custom_kernel: bool = False
 
 
 @dataclass(frozen=True)
@@ -131,11 +132,26 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         settings_key="kernelsu",
         workflow_file="build-manager.yml",
         menu_key="1",
-        route_kind=RootRouteKind.DIRECT,
+        route_kind=RootRouteKind.MODE,
         menu_label_key="menu_root_type_ksu",
-        command_variant=RootCommandVariantId.LKM,
         strategy_root_type="kernelsu",
-        direct_gki=False,
+        mode_options=(
+            RootModeOption(
+                key="1",
+                action="lkm",
+                label_key="menu_root_mode_1",
+                gki=False,
+                strategy_root_type="kernelsu",
+            ),
+            RootModeOption(
+                key="2",
+                action="gki_custom",
+                label_key="menu_root_mode_gki_custom",
+                gki=True,
+                strategy_root_type="kernelsu",
+                custom_kernel=True,
+            ),
+        ),
     ),
     RootProviderProfile(
         provider_id="kernelsu-next",
@@ -157,9 +173,17 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
             RootModeOption(
                 key="2",
                 action="gki",
-                label_key="menu_root_mode_2",
+                label_key="menu_root_mode_gki_wild",
                 gki=True,
                 strategy_root_type="ksu",
+            ),
+            RootModeOption(
+                key="3",
+                action="gki_custom",
+                label_key="menu_root_mode_gki_custom",
+                gki=True,
+                strategy_root_type="ksu",
+                custom_kernel=True,
             ),
         ),
         aliases=("ksu",),
@@ -173,11 +197,26 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         settings_key="sukisu-ultra",
         workflow_file="build-manager.yml",
         menu_key="3",
-        route_kind=RootRouteKind.DIRECT,
+        route_kind=RootRouteKind.MODE,
         menu_label_key="menu_root_type_sukisu",
-        command_variant=RootCommandVariantId.LKM,
         strategy_root_type="sukisu",
-        direct_gki=False,
+        mode_options=(
+            RootModeOption(
+                key="1",
+                action="lkm",
+                label_key="menu_root_mode_1",
+                gki=False,
+                strategy_root_type="sukisu",
+            ),
+            RootModeOption(
+                key="2",
+                action="gki_custom",
+                label_key="menu_root_mode_gki_custom",
+                gki=True,
+                strategy_root_type="sukisu",
+                custom_kernel=True,
+            ),
+        ),
         release_uses_tagged_build=True,
     ),
     RootProviderProfile(
@@ -187,11 +226,26 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         settings_key="resukisu",
         workflow_file="build-manager.yml",
         menu_key="4",
-        route_kind=RootRouteKind.DIRECT,
+        route_kind=RootRouteKind.MODE,
         menu_label_key="menu_root_type_resukisu",
-        command_variant=RootCommandVariantId.LKM,
         strategy_root_type="resukisu",
-        direct_gki=False,
+        mode_options=(
+            RootModeOption(
+                key="1",
+                action="lkm",
+                label_key="menu_root_mode_1",
+                gki=False,
+                strategy_root_type="resukisu",
+            ),
+            RootModeOption(
+                key="2",
+                action="gki_custom",
+                label_key="menu_root_mode_gki_custom",
+                gki=True,
+                strategy_root_type="resukisu",
+                custom_kernel=True,
+            ),
+        ),
         force_nightly=True,
     ),
     RootProviderProfile(

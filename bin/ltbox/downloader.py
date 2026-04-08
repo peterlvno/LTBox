@@ -307,6 +307,31 @@ def get_gki_kernel(kernel_version: str, work_dir: Path) -> Path:
         raise ToolError(str(e))
 
 
+def extract_kernel_from_anykernel3_zip(zip_path: Path, work_dir: Path) -> Path:
+    """Extract the kernel Image from a user-provided AnyKernel3 zip."""
+    utils.ui.echo(get_string("gki_custom_extracting").format(filename=zip_path.name))
+
+    extracted_kernel_dir = work_dir / "extracted_kernel"
+    if extracted_kernel_dir.exists():
+        shutil.rmtree(extracted_kernel_dir)
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(extracted_kernel_dir)
+    except zipfile.BadZipFile as e:
+        raise ToolError(
+            get_string("gki_custom_bad_zip").format(filename=zip_path.name)
+        ) from e
+
+    kernel_image = extracted_kernel_dir / "Image"
+    if not kernel_image.exists():
+        utils.ui.echo(get_string("dl_gki_image_missing"))
+        raise ToolError(get_string("dl_gki_image_missing"))
+
+    utils.ui.echo(get_string("dl_gki_extract_ok"))
+    return kernel_image
+
+
 def _download_manager_artifact(
     base_url: str,
     target_dir: Path,
