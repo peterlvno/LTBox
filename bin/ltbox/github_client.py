@@ -85,48 +85,11 @@ class GitHubClient:
         payload = self._request_json(path, params=params, timeout=timeout)
         return payload if isinstance(payload, dict) else {}
 
-    def find_non_testing_release_with_asset(
-        self,
-        asset_pattern: str,
-    ) -> Optional[GitHubPayload]:
-        releases = self._request_list("releases", params={"per_page": 10})
-        if not releases:
-            return None
-
-        first_non_testing_index = None
-        for index, release in enumerate(releases):
-            if release.get("draft"):
-                continue
-            body = release.get("body") or ""
-            if "TESTING" not in body:
-                first_non_testing_index = index
-                break
-
-        if first_non_testing_index is None:
-            return None
-
-        for release in releases[first_non_testing_index:]:
-            if release.get("draft"):
-                continue
-            if any(
-                re.match(asset_pattern, asset["name"])
-                for asset in release.get("assets", [])
-            ):
-                return release
-        return None
-
     def fetch_release_data(
         self,
         tag: str,
         asset_pattern: str,
     ) -> GitHubPayload:
-        if self.owner_repo.lower() == "wildkernels/gki_kernelsu_susfs" and (
-            not tag or tag.lower() == "latest"
-        ):
-            release_data = self.find_non_testing_release_with_asset(asset_pattern)
-            if release_data is not None:
-                return release_data
-
         if not tag or tag.lower() == "latest":
             return self._request_object("releases/latest")
         return self._request_object(f"releases/tags/{tag}")

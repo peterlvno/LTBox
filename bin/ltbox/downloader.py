@@ -1,4 +1,3 @@
-import re
 import shutil
 import tarfile
 import zipfile
@@ -256,61 +255,6 @@ def get_latest_successful_workflow_run(
     return _github_client(repo).latest_successful_workflow_run(
         workflow_file, branch=branch
     )
-
-
-def get_gki_kernel(kernel_version: str, work_dir: Path) -> Path:
-    try:
-        tag = const.CONF._get_val("wildkernels", "tag", default="latest")
-        owner = const.CONF._get_val("wildkernels", "owner")
-        repo = const.CONF._get_val("wildkernels", "repo")
-    except RuntimeError:
-        tag = "latest"
-        owner = const.RELEASE_OWNER
-        repo = const.RELEASE_REPO
-
-    if not tag:
-        tag = "latest"
-    repo_ref = f"{owner}/{repo}"
-
-    asset_pattern = f"{re.escape(kernel_version)}.*AnyKernel3\\.zip"
-    asset_pattern_legacy = f"{re.escape(kernel_version)}.*Normal.*AnyKernel3\\.zip"
-
-    try:
-        anykernel_zip = work_dir / const.ANYKERNEL_ZIP_FILENAME
-
-        with utils.ui.status(get_string("dl_gki_downloading")):
-            try:
-                result = _download_and_move_github_asset(
-                    repo_ref, tag, asset_pattern_legacy, anykernel_zip
-                )
-            except (ToolError, OSError):
-                result = _download_and_move_github_asset(
-                    repo_ref, tag, asset_pattern, anykernel_zip
-                )
-
-        utils.ui.echo(
-            get_string("dl_download_success").format(filename=result.original_name)
-        )
-
-        utils.ui.echo(get_string("dl_gki_extracting"))
-        extracted_kernel_dir = work_dir / "extracted_kernel"
-        if extracted_kernel_dir.exists():
-            shutil.rmtree(extracted_kernel_dir)
-
-        with zipfile.ZipFile(anykernel_zip, "r") as zip_ref:
-            zip_ref.extractall(extracted_kernel_dir)
-
-        kernel_image = extracted_kernel_dir / "Image"
-        if not kernel_image.exists():
-            utils.ui.echo(get_string("dl_gki_image_missing"))
-            raise ToolError(get_string("dl_gki_image_missing"))
-
-        utils.ui.echo(get_string("dl_gki_extract_ok"))
-        return kernel_image
-
-    except (ToolError, zipfile.BadZipFile, OSError) as e:
-        utils.ui.echo(get_string("dl_gki_download_fail").format(version=tag))
-        raise ToolError(str(e))
 
 
 def extract_kernel_from_anykernel3_zip(zip_path: Path, work_dir: Path) -> Path:

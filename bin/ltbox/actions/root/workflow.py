@@ -63,7 +63,9 @@ def _resolve_strategy(
 
     strategy = get_root_strategy(gki, root_type)
     if hasattr(strategy, "configure_source"):
-        strategy.configure_source()
+        configured = strategy.configure_source()
+        if configured is False:
+            raise ToolError(get_string("gki_custom_cancelled"))
         utils.ui.clear()
     return strategy
 
@@ -232,9 +234,8 @@ def patch_and_flash_root(
     root_type: str = "ksu",
     strategy=None,
 ) -> None:
-    strategy = _resolve_strategy(gki, root_type, strategy)
-
     cleanup_manager_apk()
+    strategy = _resolve_strategy(gki, root_type, strategy)
     _prepare_root_output_dir(strategy)
     session = _create_root_workflow_session(
         dev,
@@ -452,9 +453,8 @@ def root_device(
     root_type: str = "ksu",
     strategy=None,
 ) -> None:
-    strategy = _resolve_strategy(gki, root_type, strategy)
-
     cleanup_manager_apk()
+    strategy = _resolve_strategy(gki, root_type, strategy)
 
     _prepare_root_env(strategy)
     utils.ui.echo(get_string("act_root_step1"))
@@ -469,7 +469,9 @@ def root_device(
         utils.ui.error(get_string("err_download_resources_abort"))
         return
 
-    apk_installed = _install_manager_apk(dev)
+    apk_installed = _install_manager_apk(
+        dev, required=session.strategy.manager_apk_required
+    )
 
     utils.ui.echo(get_string("act_root_step2"))
     partition_map = session.resolve_partition_map(dev)
@@ -677,7 +679,9 @@ def sign_and_flash_recovery(dev: device.DeviceController) -> None:
     utils.ui.echo(get_string("act_success"))
 
 
-def _install_manager_apk(dev: device.DeviceController) -> bool:
+def _install_manager_apk(
+    dev: device.DeviceController, *, required: bool = True
+) -> bool:
     manager_apk = const.TOOLS_DIR / "manager.apk"
 
     width = utils.ui.get_term_width()
@@ -685,7 +689,8 @@ def _install_manager_apk(dev: device.DeviceController) -> bool:
     utils.ui.echo(get_string("act_install_ksu").format(name="Manager App"))
 
     if not manager_apk.exists():
-        utils.ui.error(get_string("act_manager_apk_not_found"))
+        printer = utils.ui.error if required else utils.ui.echo
+        printer(get_string("act_manager_apk_not_found"))
         utils.ui.echo("-" * width + "\n")
         return False
 

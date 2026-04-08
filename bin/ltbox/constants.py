@@ -157,29 +157,6 @@ class LTBoxConfig:
         return self._get_val("folkpatch", "workflow", default="")
 
     @property
-    def release_owner(self) -> str:
-        return self._get_val("wildkernels", "owner", default="WildKernels")
-
-    @property
-    def release_repo(self) -> str:
-        return self._get_val("wildkernels", "repo", default="GKI_KernelSU_SUSFS")
-
-    @property
-    def release_tag(self) -> str:
-        return self._get_val("wildkernels", "tag", default="")
-
-    @property
-    def repo_url(self) -> str:
-        return f"https://github.com/{self.release_owner}/{self.release_repo}"
-
-    @property
-    def anykernel_zip_filename(self) -> str:
-        try:
-            return self._get_val("wildkernels", "zip")
-        except RuntimeError:
-            return self._get_val("kernelsu-next", "anykernel_zip")
-
-    @property
     def edl_loader_filename(self) -> str:
         return self._get_val("edl", "loader_filename")
 
@@ -314,12 +291,6 @@ SUKISU_WORKFLOW = CONF.sukisu_workflow
 FOLKPATCH_REPO = CONF.apatch_repo
 FOLKPATCH_TAG = CONF.apatch_tag
 FOLKPATCH_WORKFLOW = CONF.apatch_workflow
-RELEASE_OWNER = CONF.release_owner
-RELEASE_REPO = CONF.release_repo
-RELEASE_TAG = CONF.release_tag
-REPO_URL = CONF.repo_url
-ANYKERNEL_ZIP_FILENAME = CONF.anykernel_zip_filename
-
 EDL_LOADER_FILENAME = CONF.edl_loader_filename
 EDL_LOADER_FILE = CONF.edl_loader_file
 

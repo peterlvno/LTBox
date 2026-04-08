@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Union
 
 from .i18n import get_string
-from .root_profiles import GkiKernelSource, RootModeOption, resolve_root_command_variant
+from .root_profiles import resolve_root_command_variant
 
 
 @dataclass(frozen=True)
@@ -220,50 +220,6 @@ def get_advanced_menu_data(
             ),
             MenuSpec("separator"),
             *_navigation_specs(include_back=True, include_exit=True),
-        ]
-    )
-    return _build_menu(specs)
-
-
-def get_root_mode_menu_data(mode_options: List[RootModeOption]) -> List[MenuItem]:
-    specs = [
-        MenuSpec(
-            "option",
-            key=mode_option.key,
-            text=lambda label_key=mode_option.label_key: get_string(label_key),  # type: ignore[misc]
-            action=mode_option.action,
-        )
-        for mode_option in mode_options
-    ]
-    specs.extend(
-        [
-            MenuSpec("separator"),
-            *_navigation_specs(
-                include_back=True, include_return=True, include_exit=True
-            ),
-        ]
-    )
-    return _build_menu(specs)
-
-
-def get_gki_kernel_source_menu_data(
-    sources: List[GkiKernelSource],
-) -> List[MenuItem]:
-    specs = [
-        MenuSpec(
-            "option",
-            key=source.key,
-            text=lambda label_key=source.label_key: get_string(label_key),  # type: ignore[misc]
-            action=source.key,
-        )
-        for source in sources
-    ]
-    specs.extend(
-        [
-            MenuSpec("separator"),
-            *_navigation_specs(
-                include_back=True, include_return=True, include_exit=True
-            ),
         ]
     )
     return _build_menu(specs)

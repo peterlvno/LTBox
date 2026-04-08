@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ... import constants as const
-from ... import device, downloader, utils
+from ... import device, utils
 from ...i18n import get_string
 from ...patch.avb import (
     process_boot_image_avb,
@@ -18,7 +18,6 @@ from ...root_profiles import (
     get_root_provider_profile,
 )
 from .downloads import (
-    cleanup_manager_apk,
     download_apatch_resources,
     download_lkm_resources,
 )
@@ -106,6 +105,10 @@ class RootStrategy(ABC):
     @property
     def requires_kernel_version(self) -> bool:
         return False
+
+    @property
+    def manager_apk_required(self) -> bool:
+        return True
 
     @abstractmethod
     def print_unroot_step(self, partition_map: Dict[str, str]) -> None:
@@ -304,9 +307,22 @@ class GkiRootStrategy(ConfigurableRootStrategy):
         patch_image_name="boot.img",
     )
 
-    def __init__(self, *, custom_kernel: bool = False):
+    def __init__(self) -> None:
         super().__init__()
-        self._custom_kernel = custom_kernel
+        self._kernel_zip: Optional[Path] = None
+
+    @property
+    def manager_apk_required(self) -> bool:
+        return False
+
+    def configure_source(self, breadcrumbs: Optional[str] = None) -> bool:
+        self._kernel_zip = _prompt_custom_kernel_zip()
+        if self._kernel_zip is None:
+            return False
+
+        self.source_label = self._kernel_zip.name
+        _extract_manager_apk_from_zip(self._kernel_zip)
+        return True
 
     def print_unroot_step(self, partition_map: Dict[str, str]) -> None:
         utils.ui.echo(
@@ -314,7 +330,9 @@ class GkiRootStrategy(ConfigurableRootStrategy):
         )
 
     def download_resources(self, kernel_version: Optional[str] = None) -> bool:
-        downloader.download_ksu_manager_release(const.TOOLS_DIR)
+        if self._kernel_zip is None:
+            utils.ui.warn(get_string("gki_custom_cancelled"))
+            return False
         return True
 
     def patch(
@@ -323,20 +341,17 @@ class GkiRootStrategy(ConfigurableRootStrategy):
         dev: Optional[device.DeviceController] = None,
         lkm_kernel_version: Optional[str] = None,
     ) -> Optional[Path]:
+        if self._kernel_zip is None:
+            utils.ui.error(get_string("gki_custom_cancelled"))
+            return None
+
         magiskboot_exe = const.MAGISKBOOT_EXE
-
-        custom_kernel_zip: Optional[Path] = None
-        if self._custom_kernel:
-            custom_kernel_zip = _prompt_custom_kernel_zip()
-            if custom_kernel_zip is None:
-                return None
-
         return patch_boot_with_root_algo(
             work_dir,
             magiskboot_exe,
             dev=None,
             gki=True,
-            custom_kernel_zip=custom_kernel_zip,
+            custom_kernel_zip=self._kernel_zip,
         )
 
     def finalize_patch(
@@ -394,6 +409,10 @@ class APatchStrategy(GkiRootStrategy):
         self._staging_dir = const.TOOLS_DIR / f"{self.root_type}_staging"
 
     @property
+    def manager_apk_required(self) -> bool:
+        return True
+
+    @property
     def source_name(self) -> str:
         return self.provider.display_name
 
@@ -403,10 +422,11 @@ class APatchStrategy(GkiRootStrategy):
         self.is_nightly = selection.is_nightly
         self.workflow_id = selection.workflow_id
 
-    def configure_source(self, breadcrumbs: Optional[str] = None) -> None:
+    def configure_source(self, breadcrumbs: Optional[str] = None) -> bool:
         self._apply_source_selection(
             select_apatch_source(self.provider.provider_id, breadcrumbs=breadcrumbs)
         )
+        return True
 
     def download_resources(self, kernel_version: Optional[str] = None) -> bool:
         return download_apatch_resources(
@@ -521,10 +541,11 @@ class LkmRootStrategy(InitBootRootStrategy):
         self.workflow_id = selection.workflow_id
         self.is_tagged_build = selection.is_tagged_build
 
-    def configure_source(self, breadcrumbs: Optional[str] = None) -> None:
+    def configure_source(self, breadcrumbs: Optional[str] = None) -> bool:
         self._apply_source_selection(
             select_lkm_source(self.provider.provider_id, breadcrumbs=breadcrumbs)
         )
+        return True
 
     def download_resources(self, kernel_version: Optional[str] = None) -> bool:
         return download_lkm_resources(
@@ -592,15 +613,28 @@ def _prompt_custom_kernel_zip() -> Optional[Path]:
             return selected
 
 
-def get_root_strategy(
-    gki: bool, root_type: str = "ksu", *, custom_kernel: bool = False
-) -> RootStrategy:
+def _extract_manager_apk_from_zip(zip_path: Path) -> None:
+    """Extract .apk from AnyKernel3 zip to TOOLS_DIR/manager.apk if present."""
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            apk_names = [n for n in zf.namelist() if n.lower().endswith(".apk")]
+            if not apk_names:
+                return
+            apk_name = apk_names[0]
+            dest = const.TOOLS_DIR / "manager.apk"
+            with zf.open(apk_name) as src, open(dest, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            utils.ui.echo(get_string("gki_apk_found").format(filename=apk_name))
+    except (zipfile.BadZipFile, OSError):
+        pass
+
+
+def get_root_strategy(gki: bool, root_type: str = "ksu") -> RootStrategy:
     provider = get_root_provider_profile(root_type)
     if provider.family == RootProviderFamily.APATCH:
         return APatchStrategy(provider.provider_id)
     if gki:
-        return GkiRootStrategy(custom_kernel=custom_kernel)
+        return GkiRootStrategy()
     return LkmRootStrategy(provider.provider_id)
-
-
-_cleanup_manager_apk = cleanup_manager_apk

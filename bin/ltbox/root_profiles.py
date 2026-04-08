@@ -7,7 +7,6 @@ from typing import Optional
 
 class RootRouteKind(str, Enum):
     DIRECT = "direct"
-    MODE = "mode"
 
 
 class RootCommandVariantId(str, Enum):
@@ -43,22 +42,6 @@ class RootCommandVariant:
 
 
 @dataclass(frozen=True)
-class RootModeOption:
-    key: str
-    action: str
-    label_key: str
-    gki: bool
-    strategy_root_type: str
-
-
-@dataclass(frozen=True)
-class GkiKernelSource:
-    key: str
-    label_key: str
-    custom: bool = False
-
-
-@dataclass(frozen=True)
 class RootProviderProfile:
     provider_id: str
     display_name: str
@@ -72,8 +55,6 @@ class RootProviderProfile:
     command_variant: Optional[RootCommandVariantId] = None
     strategy_root_type: str = ""
     direct_gki: Optional[bool] = None
-    mode_options: tuple[RootModeOption, ...] = ()
-    gki_kernel_sources: tuple[GkiKernelSource, ...] = ()
     aliases: tuple[str, ...] = ()
     force_nightly: bool = False
     release_uses_tagged_build: bool = False
@@ -139,28 +120,11 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         settings_key="kernelsu",
         workflow_file="build-manager.yml",
         menu_key="1",
-        route_kind=RootRouteKind.MODE,
+        route_kind=RootRouteKind.DIRECT,
         menu_label_key="menu_root_type_ksu",
+        command_variant=RootCommandVariantId.LKM,
         strategy_root_type="kernelsu",
-        mode_options=(
-            RootModeOption(
-                key="1",
-                action="lkm",
-                label_key="menu_root_mode_1",
-                gki=False,
-                strategy_root_type="kernelsu",
-            ),
-            RootModeOption(
-                key="2",
-                action="gki",
-                label_key="menu_root_mode_2",
-                gki=True,
-                strategy_root_type="kernelsu",
-            ),
-        ),
-        gki_kernel_sources=(
-            GkiKernelSource(key="1", label_key="gki_source_custom", custom=True),
-        ),
+        direct_gki=False,
     ),
     RootProviderProfile(
         provider_id="kernelsu-next",
@@ -169,28 +133,11 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         settings_key="kernelsu-next",
         workflow_file="build-manager-ci.yml",
         menu_key="2",
-        route_kind=RootRouteKind.MODE,
+        route_kind=RootRouteKind.DIRECT,
         menu_label_key="menu_root_type_ksun",
-        mode_options=(
-            RootModeOption(
-                key="1",
-                action="lkm",
-                label_key="menu_root_mode_1",
-                gki=False,
-                strategy_root_type="ksu",
-            ),
-            RootModeOption(
-                key="2",
-                action="gki",
-                label_key="menu_root_mode_2",
-                gki=True,
-                strategy_root_type="ksu",
-            ),
-        ),
-        gki_kernel_sources=(
-            GkiKernelSource(key="1", label_key="gki_source_wild"),
-            GkiKernelSource(key="2", label_key="gki_source_custom", custom=True),
-        ),
+        command_variant=RootCommandVariantId.LKM,
+        strategy_root_type="ksu",
+        direct_gki=False,
         aliases=("ksu",),
         release_uses_tagged_build=True,
         nightly_branch="dev",
@@ -202,28 +149,11 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         settings_key="sukisu-ultra",
         workflow_file="build-manager.yml",
         menu_key="3",
-        route_kind=RootRouteKind.MODE,
+        route_kind=RootRouteKind.DIRECT,
         menu_label_key="menu_root_type_sukisu",
+        command_variant=RootCommandVariantId.LKM,
         strategy_root_type="sukisu",
-        mode_options=(
-            RootModeOption(
-                key="1",
-                action="lkm",
-                label_key="menu_root_mode_1",
-                gki=False,
-                strategy_root_type="sukisu",
-            ),
-            RootModeOption(
-                key="2",
-                action="gki",
-                label_key="menu_root_mode_2",
-                gki=True,
-                strategy_root_type="sukisu",
-            ),
-        ),
-        gki_kernel_sources=(
-            GkiKernelSource(key="1", label_key="gki_source_custom", custom=True),
-        ),
+        direct_gki=False,
         release_uses_tagged_build=True,
     ),
     RootProviderProfile(
@@ -233,28 +163,11 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         settings_key="resukisu",
         workflow_file="build-manager.yml",
         menu_key="4",
-        route_kind=RootRouteKind.MODE,
+        route_kind=RootRouteKind.DIRECT,
         menu_label_key="menu_root_type_resukisu",
+        command_variant=RootCommandVariantId.LKM,
         strategy_root_type="resukisu",
-        mode_options=(
-            RootModeOption(
-                key="1",
-                action="lkm",
-                label_key="menu_root_mode_1",
-                gki=False,
-                strategy_root_type="resukisu",
-            ),
-            RootModeOption(
-                key="2",
-                action="gki",
-                label_key="menu_root_mode_2",
-                gki=True,
-                strategy_root_type="resukisu",
-            ),
-        ),
-        gki_kernel_sources=(
-            GkiKernelSource(key="1", label_key="gki_source_custom", custom=True),
-        ),
+        direct_gki=False,
         force_nightly=True,
     ),
     RootProviderProfile(
@@ -283,6 +196,19 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         strategy_root_type="folkpatch",
         direct_gki=True,
     ),
+    RootProviderProfile(
+        provider_id="gki",
+        display_name="GKI Mode",
+        family=RootProviderFamily.LKM,
+        settings_key="gki",
+        workflow_file="",
+        menu_key="7",
+        route_kind=RootRouteKind.DIRECT,
+        menu_label_key="menu_root_type_gki",
+        command_variant=RootCommandVariantId.GKI,
+        strategy_root_type="gki",
+        direct_gki=True,
+    ),
 )
 
 ROOT_TYPE_MENU_LAYOUT: tuple[Optional[str], ...] = (
@@ -294,6 +220,8 @@ ROOT_TYPE_MENU_LAYOUT: tuple[Optional[str], ...] = (
     None,
     "apatch",
     "folkpatch",
+    None,
+    "gki",
     None,
 )
 

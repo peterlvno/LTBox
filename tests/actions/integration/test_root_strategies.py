@@ -81,9 +81,6 @@ def test_root_patch_strategies(
 
         strategy = strategy_cls()
 
-        if not strategy.download_resources():
-            pytest.fail(download_error)
-
         work_dir = tmp_path / f"work_{label.lower()}"
         work_dir.mkdir()
 
@@ -94,6 +91,12 @@ def test_root_patch_strategies(
             "base_dir": mock_dirs["BASE_DIR"],
         }
         setup_fn(setup_context)
+
+        if strategy_cls is GkiRootStrategy:
+            strategy._kernel_zip = work_dir / "AnyKernel3.zip"
+
+        if not strategy.download_resources():
+            pytest.fail(download_error)
 
         input_context = (
             patch("builtins.input", side_effect=[input_value, "n"])

@@ -15,19 +15,19 @@ def test_build_root_type_menu_uses_declarative_spec(monkeypatch):
     built = menu_router._build_root_type_menu("main")
 
     assert built is menu
-    assert menu.add_option.call_count == 8
-    assert menu.add_separator.call_count == 3
+    assert menu.add_option.call_count == 9
+    assert menu.add_separator.call_count == 4
 
 
 def test_build_root_dispatch_map_covers_all_root_choices():
     breadcrumbs = {
-        key: f"main > root > {key}" for key in ["1", "2", "3", "4", "5", "6"]
+        key: f"main > root > {key}" for key in ["1", "2", "3", "4", "5", "6", "7"]
     }
     dispatch_map = menu_router._build_root_dispatch_map(
         dev=object(), registry=object(), type_breadcrumbs=breadcrumbs
     )
 
-    assert sorted(dispatch_map.keys()) == ["1", "2", "3", "4", "5", "6"]
+    assert sorted(dispatch_map.keys()) == ["1", "2", "3", "4", "5", "6", "7"]
 
 
 def test_root_menu_uses_dispatch_map_and_returns_on_route(monkeypatch):
@@ -57,6 +57,7 @@ def test_root_menu_uses_dispatch_map_and_returns_on_route(monkeypatch):
     assert called["count"] == 1
     assert called["breadcrumbs"]["5"].endswith(" > APatch")
     assert called["breadcrumbs"]["6"].endswith(" > FolkPatch")
+    assert called["breadcrumbs"]["7"].endswith(" > menu_root_type_gki")
     assert result is menu_router.RouteResult.MAIN
 
 
@@ -75,6 +76,7 @@ def test_build_root_dispatch_map_routes_with_selected_type_breadcrumbs(monkeypat
         "4": "main > root > ReSukiSU",
         "5": "main > root > APatch",
         "6": "main > root > FolkPatch",
+        "7": "main > root > GKI Mode",
     }
     dispatch_map = menu_router._build_root_dispatch_map(
         dev=object(), registry=object(), type_breadcrumbs=breadcrumbs
@@ -82,10 +84,12 @@ def test_build_root_dispatch_map_routes_with_selected_type_breadcrumbs(monkeypat
 
     dispatch_map["5"]()
     dispatch_map["6"]()
+    dispatch_map["7"]()
 
     assert received == [
         (True, "apatch", "main > root > APatch"),
         (True, "folkpatch", "main > root > FolkPatch"),
+        (True, "gki", "main > root > GKI Mode"),
     ]
 
 

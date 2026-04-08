@@ -1,7 +1,12 @@
+import zipfile
 from unittest.mock import patch
 
 from ltbox.actions.root.prompts import StrategySourceSelection
-from ltbox.actions.root.strategies import APatchStrategy, LkmRootStrategy
+from ltbox.actions.root.strategies import (
+    APatchStrategy,
+    GkiRootStrategy,
+    LkmRootStrategy,
+)
 
 
 def test_apatch_strategy_configure_source_applies_prompt_selection():
@@ -93,3 +98,38 @@ def test_lkm_strategy_download_resources_uses_download_helper():
         workflow_id="",
         is_tagged_build=True,
     )
+
+
+def test_gki_strategy_configure_source_extracts_manager_apk(tmp_path):
+    zip_path = tmp_path / "AnyKernel3.zip"
+    tools_dir = tmp_path / "tools"
+    tools_dir.mkdir()
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("Image", b"kernel")
+        archive.writestr("nested/manager.apk", b"apk")
+
+    strategy = GkiRootStrategy()
+
+    with (
+        patch(
+            "ltbox.actions.root.strategies._prompt_custom_kernel_zip",
+            return_value=zip_path,
+        ),
+        patch("ltbox.actions.root.strategies.const.TOOLS_DIR", tools_dir),
+        patch("ltbox.actions.root.strategies.utils.ui.echo"),
+    ):
+        assert strategy.configure_source("main > root > GKI") is True
+
+    assert strategy._kernel_zip == zip_path
+    assert strategy.source_label == zip_path.name
+    assert (tools_dir / "manager.apk").read_bytes() == b"apk"
+
+
+def test_gki_strategy_download_resources_requires_selected_zip():
+    strategy = GkiRootStrategy()
+
+    with patch("ltbox.actions.root.strategies.utils.ui.warn") as warn:
+        assert strategy.download_resources() is False
+
+    warn.assert_called_once()

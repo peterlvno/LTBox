@@ -180,14 +180,13 @@ def patch_boot_with_root_algo(
 
         print(get_string("img_root_target_ver").format(ver=target_kernel_version))
 
-        if custom_kernel_zip is not None:
-            kernel_image_path = downloader.extract_kernel_from_anykernel3_zip(
-                custom_kernel_zip, work_dir
-            )
-        else:
-            kernel_image_path = downloader.get_gki_kernel(
-                target_kernel_version, work_dir
-            )
+        if custom_kernel_zip is None:
+            print(get_string("gki_custom_cancelled"))
+            return None
+
+        kernel_image_path = downloader.extract_kernel_from_anykernel3_zip(
+            custom_kernel_zip, work_dir
+        )
 
         print(get_string("img_root_step5"))
         shutil.move(str(kernel_image_path), work_dir / "kernel")

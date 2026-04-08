@@ -16,12 +16,6 @@
       "manager.zip"
     ]
   },
-  "wildkernels": {
-    "owner": "WildKernels",
-    "repo": "GKI_KernelSU_SUSFS",
-    "tag": "latest",
-    "zip": "AnyKernel3.zip"
-  },
   "sukisu-ultra": {
     "repo": "SukiSU-Ultra/SukiSU-Ultra",
     "tag": "latest",

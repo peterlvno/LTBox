@@ -176,56 +176,6 @@ class TestUtils:
         assert latest_release is None
         assert latest_prerelease is None
 
-    def test_wildkernels_skip_testing_and_fallback_previous_release(self):
-        releases = [
-            {
-                "tag_name": "v3",
-                "draft": False,
-                "body": "Contains TESTING marker",
-                "assets": [
-                    {
-                        "name": "5.10-Normal-AnyKernel3.zip",
-                        "browser_download_url": "http://testing",
-                    }
-                ],
-            },
-            {
-                "tag_name": "v2",
-                "draft": False,
-                "body": "Stable release",
-                "assets": [],
-            },
-            {
-                "tag_name": "v1",
-                "draft": False,
-                "body": "Older stable release",
-                "assets": [
-                    {
-                        "name": "5.10-Normal-AnyKernel3.zip",
-                        "browser_download_url": "http://stable-old",
-                    }
-                ],
-            },
-        ]
-
-        with (
-            patch("ltbox.github_client.net.get_client") as get_session,
-            patch("ltbox.downloader.download_resource") as m_dl,
-        ):
-            session = get_session.return_value
-            session.get.return_value.json.return_value = releases
-            session.get.return_value.raise_for_status.return_value = None
-
-            downloader._download_github_asset(
-                "WildKernels/GKI_KernelSU_SUSFS",
-                "latest",
-                ".*Normal.*AnyKernel3\\.zip",
-                Path("."),
-            )
-
-            args, _ = m_dl.call_args
-            assert args[0] == "http://stable-old"
-
     def test_check_dependencies_blocks_source_download_without_edl_tools(
         self, tmp_path
     ):
@@ -335,40 +285,6 @@ class TestUtils:
             utils.check_dependencies()
 
             mock_ui.echo.assert_called_once_with(utils.get_string("utils_deps_found"))
-
-    def test_wildkernels_fallback_when_releases_json_invalid(self):
-        releases_response = MagicMock()
-        releases_response.raise_for_status.return_value = None
-        releases_response.json.side_effect = ValueError("invalid json")
-
-        latest_response = MagicMock()
-        latest_response.raise_for_status.return_value = None
-        latest_response.json.return_value = {
-            "assets": [
-                {
-                    "name": "6.6.89-Normal-AnyKernel3.zip",
-                    "browser_download_url": "http://latest-ok",
-                }
-            ]
-        }
-
-        with (
-            patch("ltbox.github_client.net.get_client") as get_session,
-            patch("ltbox.downloader.download_resource") as m_dl,
-        ):
-            get_session.return_value.get.side_effect = [
-                releases_response,
-                latest_response,
-            ]
-            downloader._download_github_asset(
-                "WildKernels/GKI_KernelSU_SUSFS",
-                "latest",
-                "6\\.6\\.89.*Normal.*AnyKernel3\\.zip",
-                Path("."),
-            )
-
-            args, _ = m_dl.call_args
-            assert args[0] == "http://latest-ok"
 
     def test_resolve_extract_target_handles_prefixed_archive_paths(self):
         extract_map = {

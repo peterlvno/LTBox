@@ -141,16 +141,7 @@ def main() -> None:
         if not check_url(url, "KernelSU-Next Nightly"):
             has_error = True
 
-    # 3. GKI_KernelSU_SUSFS
-    print("\n--- WildKernels ---")
-    wk = config.get("wildkernels", {})
-    wk_owner = wk.get("owner", "WildKernels")
-    wk_repo = wk.get("repo", "GKI_KernelSU_SUSFS")
-    wk_tag = wk.get("tag", "latest")
-    if not check_github_api(f"{wk_owner}/{wk_repo}", wk_tag, "WildKernels GKI"):
-        has_error = True
-
-    # 4. SukiSU Ultra (Nightly)
+    # 3. SukiSU Ultra (Nightly)
     print("\n--- SukiSU Ultra ---")
     suki = config.get("sukisu-ultra", {})
     suki_repo = suki.get("repo")

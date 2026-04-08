@@ -1,6 +1,7 @@
 import re
 import shutil
 import subprocess
+import zipfile
 from pathlib import Path
 from typing import Any, Optional, TypedDict
 
@@ -88,18 +89,42 @@ def _run_patch_with_fail_context(
         return strategy.patch(work_dir, dev=None, **(patch_kwargs or {}))
     except Exception as e:
         pytest.fail(f"{fail_label} patching failed with real tools: {e}")
+        raise AssertionError("unreachable")
 
 
 def _setup_gki_context(ctx: RootSetupContext) -> None:
     shutil.copy(ctx["boot_img"], ctx["work_dir"] / "boot.img")
     shutil.copy(ctx["boot_img"], ctx["base_dir"] / "boot.bak.img")
 
+    unpack_dir = ctx["work_dir"] / "gki_zip_src"
+    unpack_dir.mkdir(exist_ok=True)
+    shutil.copy(ctx["boot_img"], unpack_dir / "boot.img")
+
+    try:
+        subprocess.run(
+            [str(MAGISKBOOT_PATH), "unpack", "boot.img"],
+            cwd=str(unpack_dir),
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError as exc:
+        pytest.fail(f"Failed to unpack boot image for GKI zip setup: {exc}")
+
+    kernel_file = unpack_dir / "kernel"
+    if not kernel_file.exists():
+        pytest.fail("Kernel file not found after unpacking boot.img for GKI zip setup")
+
+    with zipfile.ZipFile(ctx["work_dir"] / "AnyKernel3.zip", "w") as archive:
+        archive.write(kernel_file, "Image")
+        archive.writestr("manager.apk", b"fake-apk")
+
 
 def _setup_apatch_context(ctx: RootSetupContext) -> None:
     shutil.copy(ctx["boot_img"], ctx["work_dir"] / "boot.img")
     vbmeta_img = ctx["vbmeta_img"]
     if vbmeta_img is None:
-        pytest.fail("APatch requires vbmeta image in setup context")
+        raise AssertionError("APatch requires vbmeta image in setup context")
     shutil.copy(vbmeta_img, ctx["base_dir"] / "vbmeta.bak.img")
     shutil.copy(ctx["boot_img"], ctx["base_dir"] / "boot.bak.img")
 
