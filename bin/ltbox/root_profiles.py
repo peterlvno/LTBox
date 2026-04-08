@@ -49,7 +49,13 @@ class RootModeOption:
     label_key: str
     gki: bool
     strategy_root_type: str
-    custom_kernel: bool = False
+
+
+@dataclass(frozen=True)
+class GkiKernelSource:
+    key: str
+    label_key: str
+    custom: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +73,7 @@ class RootProviderProfile:
     strategy_root_type: str = ""
     direct_gki: Optional[bool] = None
     mode_options: tuple[RootModeOption, ...] = ()
+    gki_kernel_sources: tuple[GkiKernelSource, ...] = ()
     aliases: tuple[str, ...] = ()
     force_nightly: bool = False
     release_uses_tagged_build: bool = False
@@ -145,12 +152,14 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
             ),
             RootModeOption(
                 key="2",
-                action="gki_custom",
-                label_key="menu_root_mode_gki_custom",
+                action="gki",
+                label_key="menu_root_mode_2",
                 gki=True,
                 strategy_root_type="kernelsu",
-                custom_kernel=True,
             ),
+        ),
+        gki_kernel_sources=(
+            GkiKernelSource(key="1", label_key="gki_source_custom", custom=True),
         ),
     ),
     RootProviderProfile(
@@ -173,18 +182,14 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
             RootModeOption(
                 key="2",
                 action="gki",
-                label_key="menu_root_mode_gki_wild",
+                label_key="menu_root_mode_2",
                 gki=True,
                 strategy_root_type="ksu",
             ),
-            RootModeOption(
-                key="3",
-                action="gki_custom",
-                label_key="menu_root_mode_gki_custom",
-                gki=True,
-                strategy_root_type="ksu",
-                custom_kernel=True,
-            ),
+        ),
+        gki_kernel_sources=(
+            GkiKernelSource(key="1", label_key="gki_source_wild"),
+            GkiKernelSource(key="2", label_key="gki_source_custom", custom=True),
         ),
         aliases=("ksu",),
         release_uses_tagged_build=True,
@@ -210,12 +215,14 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
             ),
             RootModeOption(
                 key="2",
-                action="gki_custom",
-                label_key="menu_root_mode_gki_custom",
+                action="gki",
+                label_key="menu_root_mode_2",
                 gki=True,
                 strategy_root_type="sukisu",
-                custom_kernel=True,
             ),
+        ),
+        gki_kernel_sources=(
+            GkiKernelSource(key="1", label_key="gki_source_custom", custom=True),
         ),
         release_uses_tagged_build=True,
     ),
@@ -239,12 +246,14 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
             ),
             RootModeOption(
                 key="2",
-                action="gki_custom",
-                label_key="menu_root_mode_gki_custom",
+                action="gki",
+                label_key="menu_root_mode_2",
                 gki=True,
                 strategy_root_type="resukisu",
-                custom_kernel=True,
             ),
+        ),
+        gki_kernel_sources=(
+            GkiKernelSource(key="1", label_key="gki_source_custom", custom=True),
         ),
         force_nightly=True,
     ),

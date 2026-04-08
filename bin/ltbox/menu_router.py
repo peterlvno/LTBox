@@ -12,6 +12,7 @@ from .device_support import DeviceCommandRunner, find_edl_port, format_serial_po
 from .i18n import get_string
 from .menu import TerminalMenu, select_menu_action
 from .root_profiles import (
+    GkiKernelSource,
     RootProviderProfile,
     RootRouteKind,
     iter_root_type_menu_profiles,
@@ -277,6 +278,27 @@ def _root_action_menu(
     return res
 
 
+def _select_gki_kernel_source(
+    sources: tuple[GkiKernelSource, ...],
+    breadcrumbs: str,
+) -> Optional[GkiKernelSource]:
+    source_map = {src.key: src for src in sources}
+
+    def _handler(action: str) -> MenuReturn:
+        return action  # type: ignore[return-value]
+
+    res = _loop_menu(
+        lambda: menu_data.get_gki_kernel_source_menu_data(list(sources)),
+        "gki_source_title",
+        lambda: breadcrumbs,
+        _handler,
+    )
+
+    if isinstance(res, str) and res in source_map:
+        return source_map[res]
+    return None
+
+
 def _handle_root_mode(
     dev: DeviceControllerProtocol,
     registry: CommandRegistry,
@@ -291,13 +313,23 @@ def _handle_root_mode(
             return None
         mode_label = get_string(mode_option.label_key)
         mode_bc = f"{type_breadcrumbs} > {mode_label}"
+
+        custom_kernel = False
+        if mode_option.gki and profile.gki_kernel_sources:
+            source = _select_gki_kernel_source(profile.gki_kernel_sources, mode_bc)
+            if source is None:
+                return None
+            custom_kernel = source.custom
+            source_label = get_string(source.label_key)
+            mode_bc = f"{mode_bc} > {source_label}"
+
         return _root_action_menu(
             dev,
             registry,
             gki=mode_option.gki,
             root_type=mode_option.strategy_root_type,
             breadcrumbs=mode_bc,
-            custom_kernel=mode_option.custom_kernel,
+            custom_kernel=custom_kernel,
         )
 
     res = _loop_menu(
