@@ -134,15 +134,16 @@ class DeviceController:
     def setup_edl_connection(self) -> str:
         self.ensure_edl_mode()
 
-        ui.info(get_string("device_wait_loader_title"))
         required_files = [const.EDL_LOADER_FILENAME]
-        prompt = get_string("device_loader_prompt").format(
-            loader=const.EDL_LOADER_FILENAME,
-            folder=const.IMAGE_DIR.name,
-        )
-
         const.IMAGE_DIR.mkdir(exist_ok=True)
-        utils.wait_for_files(const.IMAGE_DIR, required_files, prompt)
+
+        if not const.EDL_LOADER_FILE.exists():
+            prompt = get_string("device_loader_prompt").format(
+                loader=const.EDL_LOADER_FILENAME,
+                folder=const.IMAGE_DIR.name,
+            )
+            utils.wait_for_files(const.IMAGE_DIR, required_files, prompt)
+
         ui.info(
             get_string("device_loader_found").format(
                 file=const.EDL_LOADER_FILE.name,
@@ -151,7 +152,6 @@ class DeviceController:
         )
 
         port = self.edl.wait_for_device()
-        ui.info(get_string("device_edl_setup_done"))
         return port
 
     @contextlib.contextmanager

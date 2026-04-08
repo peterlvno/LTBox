@@ -405,7 +405,7 @@
   "dl_apatch_nightly_downloading": "Downloading {name} Nightly from workflow {workflow_id}...",
   "dl_apatch_stable_downloading": "Downloading {name} Stable (Latest Release)...",
   "dl_download_failed": "[!] Failed to download {url}: {error}",
-  "dl_download_success": "{filename} downloaded.",
+  "dl_download_success": "[+] {filename} downloaded.",
   "dl_downloading": "Downloading {filename}...",
   "dl_err_apatch_apk_missing_in_nightly": "APK not found in nightly zip.",
   "dl_err_apatch_artifact_missing": "No {name} artifact found in workflow {workflow_id}. Available: {artifacts}",

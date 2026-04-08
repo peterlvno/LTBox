@@ -405,7 +405,7 @@
   "dl_apatch_nightly_downloading": "워크플로 {workflow_id}에서 {name} 나이틀리 다운로드 중...",
   "dl_apatch_stable_downloading": "{name} 안정 버전(최신 릴리스) 다운로드 중...",
   "dl_download_failed": "[!] {url} 다운로드 실패: {error}",
-  "dl_download_success": "{filename} 다운로드됨.",
+  "dl_download_success": "[+] {filename} 다운로드됨.",
   "dl_downloading": "{filename} 다운로드 중...",
   "dl_err_apatch_apk_missing_in_nightly": "나이틀리 zip에서 APK를 찾지 못했습니다.",
   "dl_err_apatch_artifact_missing": "워크플로 {workflow_id}에서 {name} 아티팩트를 찾지 못했습니다. 사용 가능 항목: {artifacts}",

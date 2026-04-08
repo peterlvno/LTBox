@@ -405,7 +405,7 @@
   "dl_apatch_nightly_downloading": "Загрузка ночной сборки {name} из workflow {workflow_id}...",
   "dl_apatch_stable_downloading": "Загрузка стабильного {name} (последний релиз)...",
   "dl_download_failed": "[!] Не удалось загрузить {url}: {error}",
-  "dl_download_success": "{filename} загружен.",
+  "dl_download_success": "[+] {filename} загружен.",
   "dl_downloading": "Загрузка {filename}...",
   "dl_err_apatch_apk_missing_in_nightly": "APK APatch не найден в nightly zip.",
   "dl_err_apatch_artifact_missing": "Артефакт {name} не найден в workflow {workflow_id}. Доступно: {artifacts}",

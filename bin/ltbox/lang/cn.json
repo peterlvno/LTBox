@@ -405,7 +405,7 @@
   "dl_apatch_nightly_downloading": "正在从工作流 {workflow_id} 下载 {name} 夜版...",
   "dl_apatch_stable_downloading": "正在下载 {name} 稳定版（最新发布）...",
   "dl_download_failed": "[!] 无法下载 {url}: {error}",
-  "dl_download_success": "{filename} 已下载。",
+  "dl_download_success": "[+] {filename} 已下载。",
   "dl_downloading": "正在下载 {filename}...",
   "dl_err_apatch_apk_missing_in_nightly": "在夜版 zip 中未找到 APK。",
   "dl_err_apatch_artifact_missing": "在工作流 {workflow_id} 中未找到 {name} 产物。可用项：{artifacts}",

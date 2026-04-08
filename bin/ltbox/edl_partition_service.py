@@ -14,17 +14,6 @@ class EdlPartitionService:
     def get_params(self, label: str) -> PartitionParams:
         return self.resolve_params(label)
 
-    def _announce_partition_details(
-        self, params: PartitionParams, *, message_key: str = "act_found_dump_info"
-    ) -> None:
-        ui.echo(
-            get_string(message_key).format(
-                xml=params["source_xml"],
-                lun=params["lun"],
-                start=params["start_sector"],
-            )
-        )
-
     def _validate_dump_size(
         self,
         *,
@@ -56,7 +45,6 @@ class EdlPartitionService:
     ) -> PartitionParams:
         params = self.resolve_params(target_name)
         ui.echo(get_string("act_flashing_target").format(target=target_name))
-        self._announce_partition_details(params)
 
         ui.echo(
             get_string("device_flashing_part").format(
@@ -89,7 +77,6 @@ class EdlPartitionService:
         params: Optional[PartitionParams] = None,
     ) -> PartitionParams:
         resolved_params = params or self.get_params(label)
-        self._announce_partition_details(resolved_params)
         dev.edl.read_partition(
             port=port,
             output_filename=str(output_path),
