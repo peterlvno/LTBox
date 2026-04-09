@@ -18,6 +18,7 @@ from ...root_profiles import (
     get_root_provider_profile,
 )
 from .downloads import (
+    cleanup_manager_apk,
     download_apatch_resources,
     download_lkm_resources,
 )
@@ -316,6 +317,7 @@ class GkiRootStrategy(ConfigurableRootStrategy):
         return False
 
     def configure_source(self, breadcrumbs: Optional[str] = None) -> bool:
+        cleanup_manager_apk()
         self._kernel_zip = _prompt_custom_kernel_zip()
         if self._kernel_zip is None:
             return False
@@ -635,6 +637,7 @@ def _extract_manager_apk_from_zip(zip_path: Path) -> None:
                 return
             apk_name = apk_names[0]
             dest = const.TOOLS_DIR / "manager.apk"
+            dest.parent.mkdir(parents=True, exist_ok=True)
             with zf.open(apk_name) as src, open(dest, "wb") as dst:
                 shutil.copyfileobj(src, dst)
             utils.ui.echo(get_string("gki_apk_found").format(filename=apk_name))

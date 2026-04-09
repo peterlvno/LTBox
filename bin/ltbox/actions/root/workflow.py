@@ -70,6 +70,13 @@ def _resolve_strategy(
     return strategy
 
 
+def _should_cleanup_manager_apk(strategy: Optional[RootStrategy]) -> bool:
+    return not (
+        isinstance(strategy, GkiRootStrategy)
+        and getattr(strategy, "_kernel_zip", None) is not None
+    )
+
+
 def _prepare_root_output_dir(strategy: RootStrategy) -> None:
     utils.ui.echo(get_string("act_clean_dir").format(dir=strategy.log_output_dir_name))
     utils.recreate_dir(strategy.output_dir)
@@ -234,7 +241,8 @@ def patch_and_flash_root(
     root_type: str = "ksu",
     strategy=None,
 ) -> None:
-    cleanup_manager_apk()
+    if _should_cleanup_manager_apk(strategy):
+        cleanup_manager_apk()
     strategy = _resolve_strategy(gki, root_type, strategy)
     _prepare_root_output_dir(strategy)
     session = _create_root_workflow_session(
@@ -453,7 +461,8 @@ def root_device(
     root_type: str = "ksu",
     strategy=None,
 ) -> None:
-    cleanup_manager_apk()
+    if _should_cleanup_manager_apk(strategy):
+        cleanup_manager_apk()
     strategy = _resolve_strategy(gki, root_type, strategy)
 
     _prepare_root_env(strategy)

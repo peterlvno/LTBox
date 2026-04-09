@@ -127,6 +127,31 @@ def test_gki_strategy_configure_source_extracts_manager_apk(tmp_path):
     assert (tools_dir / "manager.apk").read_bytes() == b"apk"
 
 
+def test_gki_strategy_configure_source_cleans_stale_manager_apk(tmp_path):
+    zip_path = tmp_path / "kernel_bundle.zip"
+    tools_dir = tmp_path / "tools"
+
+    with zipfile.ZipFile(zip_path, "w") as archive:
+        archive.writestr("Image", b"kernel")
+        archive.writestr("Manager-1.0.0-release.APK", b"apk")
+
+    strategy = GkiRootStrategy()
+
+    with (
+        patch(
+            "ltbox.actions.root.strategies._prompt_custom_kernel_zip",
+            return_value=zip_path,
+        ),
+        patch("ltbox.actions.root.strategies.const.TOOLS_DIR", tools_dir),
+        patch("ltbox.actions.root.strategies.cleanup_manager_apk") as cleanup,
+        patch("ltbox.actions.root.strategies.utils.ui.echo"),
+    ):
+        assert strategy.configure_source("main > root > GKI") is True
+
+    cleanup.assert_called_once_with()
+    assert (tools_dir / "manager.apk").read_bytes() == b"apk"
+
+
 def test_gki_strategy_download_resources_requires_selected_zip():
     strategy = GkiRootStrategy()
 
