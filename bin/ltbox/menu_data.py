@@ -225,6 +225,66 @@ def get_advanced_menu_data(
     return _build_menu(specs)
 
 
+def get_root_variants_menu_data() -> List[MenuItem]:
+    specs = [
+        MenuSpec(
+            "option",
+            key="1",
+            text=lambda: get_string("menu_root_variants_ksu"),
+            action="ksu_variants",
+        ),
+        MenuSpec(
+            "option",
+            key="2",
+            text=lambda: get_string("menu_root_variants_apatch"),
+            action="apatch_variants",
+        ),
+        MenuSpec("separator"),
+        *_navigation_specs(include_back=True, include_exit=True),
+    ]
+    return _build_menu(specs)
+
+
+def get_root_ksu_modes_menu_data() -> List[MenuItem]:
+    specs = [
+        MenuSpec(
+            "option",
+            key="1",
+            text=lambda: get_string("menu_root_mode_lkm"),
+            action="lkm_mode",
+        ),
+        MenuSpec(
+            "option",
+            key="2",
+            text=lambda: get_string("menu_root_mode_gki"),
+            action="gki_mode",
+        ),
+        MenuSpec("separator"),
+        *_navigation_specs(include_back=True, include_exit=True),
+    ]
+    return _build_menu(specs)
+
+
+def get_root_apatch_variants_menu_data() -> List[MenuItem]:
+    specs = [
+        MenuSpec(
+            "option",
+            key="1",
+            text=lambda: "APatch",
+            action="apatch",
+        ),
+        MenuSpec(
+            "option",
+            key="2",
+            text=lambda: "FolkPatch",
+            action="folkpatch",
+        ),
+        MenuSpec("separator"),
+        *_navigation_specs(include_back=True, include_exit=True),
+    ]
+    return _build_menu(specs)
+
+
 def get_root_menu_data(gki: bool, root_type: str = "") -> List[MenuItem]:
     variant = resolve_root_command_variant(gki, root_type)
     specs: List[MenuSpec] = [

@@ -5,92 +5,89 @@ from ltbox import menu_data, menu_router
 from ltbox.app_state import AppState
 
 
-def test_build_root_type_menu_uses_declarative_spec(monkeypatch):
-    menu = MagicMock()
-    menu.ask.return_value = "b"
-
-    monkeypatch.setattr(menu_router, "TerminalMenu", lambda title, breadcrumbs: menu)
-    monkeypatch.setattr(menu_router, "get_string", lambda key: f"T::{key}")
-
-    built = menu_router._build_root_type_menu("main")
-
-    assert built is menu
-    assert menu.add_option.call_count == 9
-    assert menu.add_separator.call_count == 4
-
-
-def test_build_root_dispatch_map_covers_all_root_choices():
-    breadcrumbs = {
-        key: f"main > root > {key}" for key in ["1", "2", "3", "4", "5", "6", "7"]
-    }
-    dispatch_map = menu_router._build_root_dispatch_map(
-        dev=object(), registry=object(), type_breadcrumbs=breadcrumbs
-    )
-
-    assert sorted(dispatch_map.keys()) == ["1", "2", "3", "4", "5", "6", "7"]
-
-
-def test_root_menu_uses_dispatch_map_and_returns_on_route(monkeypatch):
-    class FakeMenu:
-        def __init__(self, choices):
-            self._choices = iter(choices)
-
-        def ask(self, *_args):
-            return next(self._choices)
-
-    fake_menu = FakeMenu(["1"])
-
-    monkeypatch.setattr(menu_router, "_build_root_type_menu", lambda *_args: fake_menu)
-    monkeypatch.setattr(menu_router, "get_string", lambda key: key)
-
-    called = {"count": 0, "breadcrumbs": None}
-
-    def fake_dispatch(_dev, _registry, breadcrumbs):
-        called["count"] += 1
-        called["breadcrumbs"] = breadcrumbs
-        return {"1": lambda: menu_router.RouteResult.MAIN}
-
-    monkeypatch.setattr(menu_router, "_build_root_dispatch_map", fake_dispatch)
-
-    result = menu_router.root_menu(dev=object(), registry=object())
-
-    assert called["count"] == 1
-    assert called["breadcrumbs"]["5"].endswith(" > APatch")
-    assert called["breadcrumbs"]["6"].endswith(" > FolkPatch")
-    assert called["breadcrumbs"]["7"].endswith(" > menu_root_type_gki")
-    assert result is menu_router.RouteResult.MAIN
-
-
-def test_build_root_dispatch_map_routes_with_selected_type_breadcrumbs(monkeypatch):
+def test_root_menu_ksu_lkm_flow(monkeypatch):
+    """Test flow: Main > Root > KSU variants > LKM Mode > KernelSU"""
     received = []
 
-    def fake_root_action_menu(_dev, _registry, gki, root_type, breadcrumbs):
+    def mock_loop_menu(data_fn, title_key, breadcrumbs, handler):
+        # 1. Main Root Menu -> select ksu_variants
+        if title_key == "menu_main_root":
+            return handler("ksu_variants")
+        # 2. KSU Variants Menu -> select lkm_mode
+        if title_key == "menu_root_variants_ksu":
+            return handler("lkm_mode")
+        return None
+
+    monkeypatch.setattr(menu_router, "_loop_menu", mock_loop_menu)
+
+    # 3. LKM Mode Menu (manual loop) -> select '1' (KernelSU)
+    class FakeTerminalMenu:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def add_option(self, *args):
+            pass
+
+        def ask(self, *args):
+            return "1"
+
+    monkeypatch.setattr(menu_router, "TerminalMenu", FakeTerminalMenu)
+
+    # 4. Action Menu
+    def mock_root_action_menu(dev, reg, gki, root_type, breadcrumbs):
         received.append((gki, root_type, breadcrumbs))
+        return menu_router.RouteResult.MAIN
 
-    monkeypatch.setattr(menu_router, "_root_action_menu", fake_root_action_menu)
+    monkeypatch.setattr(menu_router, "_root_action_menu", mock_root_action_menu)
+    monkeypatch.setattr(menu_router, "get_string", lambda k: k)
 
-    breadcrumbs = {
-        "1": "main > root > KernelSU",
-        "2": "main > root > KernelSU Next",
-        "3": "main > root > SukiSU",
-        "4": "main > root > ReSukiSU",
-        "5": "main > root > APatch",
-        "6": "main > root > FolkPatch",
-        "7": "main > root > GKI Mode",
-    }
-    dispatch_map = menu_router._build_root_dispatch_map(
-        dev=object(), registry=object(), type_breadcrumbs=breadcrumbs
+    result = menu_router.root_menu(MagicMock(), MagicMock())
+
+    assert result is None  # Loop menu returns MAIN which maps to None in root_menu
+    assert received[0] == (
+        False,
+        "kernelsu",
+        "menu_main_title > menu_main_root > menu_root_variants_ksu > menu_root_mode_lkm > menu_root_type_ksu",
     )
 
-    dispatch_map["5"]()
-    dispatch_map["6"]()
-    dispatch_map["7"]()
 
-    assert received == [
-        (True, "apatch", "main > root > APatch"),
-        (True, "folkpatch", "main > root > FolkPatch"),
-        (True, "gki", "main > root > GKI Mode"),
-    ]
+def test_root_menu_apatch_flow(monkeypatch):
+    """Test flow: Main > Root > APatch variants > FolkPatch"""
+    received = []
+
+    def mock_loop_menu(data_fn, title_key, breadcrumbs, handler):
+        if title_key == "menu_main_root":
+            return handler(
+                "ksu_variants"
+            )  # Test ksu_variants -> apatch_variants transition or direct
+        if title_key == "menu_root_variants_apatch":
+            return handler("folkpatch")
+        return None
+
+    # Actually test direct apatch_variants flow
+    def mock_loop_menu_apatch(data_fn, title_key, breadcrumbs, handler):
+        if title_key == "menu_main_root":
+            return handler("apatch_variants")
+        if title_key == "menu_root_variants_apatch":
+            return handler("folkpatch")
+        return None
+
+    monkeypatch.setattr(menu_router, "_loop_menu", mock_loop_menu_apatch)
+
+    def mock_root_action_menu(dev, reg, gki, root_type, breadcrumbs):
+        received.append((gki, root_type, breadcrumbs))
+        return menu_router.RouteResult.MAIN
+
+    monkeypatch.setattr(menu_router, "_root_action_menu", mock_root_action_menu)
+    monkeypatch.setattr(menu_router, "get_string", lambda k: k)
+
+    menu_router.root_menu(MagicMock(), MagicMock())
+
+    assert received[0] == (
+        True,
+        "folkpatch",
+        "menu_main_title > menu_main_root > menu_root_variants_apatch > FolkPatch",
+    )
 
 
 def test_build_task_kwargs_uses_app_state_for_patch_actions():

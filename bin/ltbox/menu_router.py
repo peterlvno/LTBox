@@ -329,37 +329,137 @@ def _build_root_type_menu(main_title: str) -> TerminalMenu:
     return menu
 
 
-def root_menu(
+def _root_lkm_variants_menu(
     dev: DeviceControllerProtocol,
     registry: CommandRegistry,
+    breadcrumbs: str,
 ) -> MenuReturn:
-    while True:
-        main_title = get_string("menu_main_title")
-        type_breadcrumbs = {
-            profile.menu_key: f"{main_title} > {_resolve_root_type_label(profile)}"
-            for profile in iter_root_type_menu_profiles()
-            if profile is not None
-        }
-        dispatch_map = _build_root_dispatch_map(dev, registry, type_breadcrumbs)
-        mode_menu = _build_root_type_menu(main_title)
+    from .root_profiles import get_root_provider_profile
 
-        choice = mode_menu.ask(
+    lkm_profiles = [
+        get_root_provider_profile("kernelsu"),
+        get_root_provider_profile("kernelsu-next"),
+        get_root_provider_profile("sukisu"),
+        get_root_provider_profile("resukisu"),
+    ]
+
+    while True:
+        menu = TerminalMenu(get_string("menu_root_mode_lkm"), breadcrumbs=breadcrumbs)
+        for profile in lkm_profiles:
+            menu.add_option(profile.menu_key, _resolve_root_type_label(profile))
+        menu.add_option("b", get_string("menu_back"))
+        menu.add_option("x", get_string("menu_main_exit"))
+
+        choice = menu.ask(
             get_string("prompt_select"), get_string("err_invalid_selection")
         )
-
         if choice == "b":
             return LoopAction.BACK
         if choice == "x":
             return LoopAction.EXIT
 
-        if choice is not None:
-            action_func = dispatch_map.get(choice)
-            if action_func is not None:
-                res = action_func()
-                if res in (RouteResult.MAIN, RouteResult.RETURN):
-                    return res
-                if res == LoopAction.EXIT:
-                    return LoopAction.EXIT
+        selected_profile = next((p for p in lkm_profiles if p.menu_key == choice), None)
+        if selected_profile:
+            res = _root_action_menu(
+                dev,
+                registry,
+                gki=False,
+                root_type=selected_profile.strategy_root_type,
+                breadcrumbs=f"{breadcrumbs} > {_resolve_root_type_label(selected_profile)}",
+            )
+            if res in (RouteResult.MAIN, RouteResult.RETURN, LoopAction.EXIT):
+                return res
+
+
+def _root_ksu_variants_menu(
+    dev: DeviceControllerProtocol,
+    registry: CommandRegistry,
+    breadcrumbs: str,
+) -> MenuReturn:
+    from .root_profiles import get_root_provider_profile
+
+    def _handler(action: str) -> MenuReturn:
+        if action == "lkm_mode":
+            return _root_lkm_variants_menu(
+                dev,
+                registry,
+                f"{breadcrumbs} > {get_string('menu_root_mode_lkm')}",
+            )
+        if action == "gki_mode":
+            profile = get_root_provider_profile("gki")
+            return _root_action_menu(
+                dev,
+                registry,
+                gki=True,
+                root_type="gki",
+                breadcrumbs=f"{breadcrumbs} > {_resolve_root_type_label(profile)}",
+            )
+        return None
+
+    return _loop_menu(
+        menu_data.get_root_ksu_modes_menu_data,
+        "menu_root_variants_ksu",
+        breadcrumbs,
+        _handler,
+    )
+
+
+def _root_apatch_variants_menu(
+    dev: DeviceControllerProtocol,
+    registry: CommandRegistry,
+    breadcrumbs: str,
+) -> MenuReturn:
+    from .root_profiles import get_root_provider_profile
+
+    def _handler(action: str) -> MenuReturn:
+        profile = get_root_provider_profile(action)
+        return _root_action_menu(
+            dev,
+            registry,
+            gki=True,
+            root_type=profile.strategy_root_type,
+            breadcrumbs=f"{breadcrumbs} > {_resolve_root_type_label(profile)}",
+        )
+
+    return _loop_menu(
+        menu_data.get_root_apatch_variants_menu_data,
+        "menu_root_variants_apatch",
+        breadcrumbs,
+        _handler,
+    )
+
+
+def root_menu(
+    dev: DeviceControllerProtocol,
+    registry: CommandRegistry,
+) -> MenuReturn:
+    main_title = get_string("menu_main_title")
+    breadcrumbs = f"{main_title} > {get_string('menu_main_root')}"
+
+    def _handler(action: str) -> MenuReturn:
+        if action == "ksu_variants":
+            return _root_ksu_variants_menu(
+                dev,
+                registry,
+                f"{breadcrumbs} > {get_string('menu_root_variants_ksu')}",
+            )
+        if action == "apatch_variants":
+            return _root_apatch_variants_menu(
+                dev,
+                registry,
+                f"{breadcrumbs} > {get_string('menu_root_variants_apatch')}",
+            )
+        return None
+
+    res = _loop_menu(
+        menu_data.get_root_variants_menu_data,
+        "menu_main_root",
+        main_title,
+        _handler,
+    )
+    if res == RouteResult.MAIN:
+        return None
+    return res
 
 
 def _execute_reboot_command(action: str) -> None:
