@@ -120,28 +120,16 @@ Generates `rawprogram` XMLs to allow flashing patched images and **wipes user da
 **`10. Modify XML for Flashing [KEEP DATA]`**
 Same as Step 9, but modifies XMLs to **preserve user data**.
 
-**`11. Apply Incremental OTA to Firmware`**
-Applies an Incremental OTA update package to firmware files. Handles payload patching, optional AVB re-signing, super partition rebuild, and XML updates.
-
-**`12. Unpack super partitions`**
-Extracts dynamic partition images from split `super_*.img` files.
-
-**`13. Repack super partitions`**
-Rebuilds split `super_*.img` outputs from dynamic partition images and updates rawprogram XML.
-
-**`14. Resign firmware with test keys`**
-Re-signs AVB images with AOSP test keys and rebuilds `vbmeta.img` / `vbmeta_system.img`.
-
-**`15. Flash firmware to device`**
+**`11. Flash firmware to device`**
 Manual full flash. Copies all patched files and flashes them using `fh_loader`.
 
-**`16. Flash selected partitions`**
+**`12. Flash selected partitions`**
 Flashes selected partitions to the device.
 
-**`17. Rebuild vbmeta for modified images`**
+**`13. Rebuild vbmeta for modified images`**
 Rebuilds `vbmeta.img` to include updated hash/chain descriptors for any modified partition images (e.g., after manual patching).
 
-**`18. Sign & Flash Custom Recovery`**
+**`14. Sign & Flash Custom Recovery`**
 Signs a custom recovery image (e.g., TWRP) with test keys and flashes it to the recovery partition.
 
 ## 4. Other Utilities

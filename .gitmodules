@@ -5,7 +5,3 @@
 	path = vendor/avb
 	url = https://android.googlesource.com/platform/external/avb
 	branch = refs/heads/main-kernel
-[submodule "vendor/update_engine"]
-	path = vendor/update_engine
-	url = https://android.googlesource.com/platform/system/update_engine
-	branch = android16-qpr2-release

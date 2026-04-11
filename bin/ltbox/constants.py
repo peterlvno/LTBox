@@ -37,9 +37,6 @@ class LTBoxConfig:
         self.working_dir = self.base_dir / "working"
         self.output_xml_dir = self.base_dir / "output_xml"
 
-        self.ota_dir = self.base_dir / "ota"
-        self.ota_working_dir = self.ota_dir / "ota_working"
-
         # --- File Name Constants ---
         self.fn_boot = "boot.img"
         self.fn_init_boot = "init_boot.img"
@@ -65,12 +62,6 @@ class LTBoxConfig:
         self.vendor_dir = self.base_dir / "vendor"
         self.avb_dir = self.vendor_dir / "avb"
         self.avb_testkeys_dir = self.avb_dir / "test" / "data"
-        self.update_engine_dir = self.vendor_dir / "update_engine"
-        if not (
-            self.update_engine_dir / "scripts" / "update_payload" / "__init__.py"
-        ).exists():
-            self.update_engine_dir = self.tools_dir / "update_engine"
-        self.update_engine_scripts_dir = self.update_engine_dir / "scripts"
 
         # --- Executables ---
         self.python_exe = self.python_dir / "python.exe"
@@ -83,13 +74,6 @@ class LTBoxConfig:
             self.avbtool_py = self.tools_dir / "avbtool.py"
         self.qdlrs_exe = self.tools_dir / "qdl-rs.exe"
         self.magiskboot_exe = self.tools_dir / "magiskboot.exe"
-        self.otatools_dir = self.tools_dir / "otatools"
-        self.otatools_linux_dir = self.otatools_dir / "linux"
-        self.otatools_linux_bin_dir = self.otatools_linux_dir / "bin"
-        self.otatools_linux_lib_dir = self.otatools_linux_dir / "lib"
-        self.otatools_linux_lib64_dir = self.otatools_linux_dir / "lib64"
-        self.otatools_lpmake = self.otatools_linux_bin_dir / "lpmake"
-        self.otatools_delta_generator = self.otatools_linux_bin_dir / "delta_generator"
 
     def load(self) -> None:
         if self._loaded:
@@ -242,11 +226,6 @@ IMAGE_NEW_DIR = CONF.image_new_dir
 WORKING_DIR = CONF.working_dir
 OUTPUT_XML_DIR = CONF.output_xml_dir
 
-OTA_DIR = CONF.ota_dir
-OTA_WORKING_DIR = CONF.ota_working_dir
-UPDATE_ENGINE_DIR = CONF.update_engine_dir
-UPDATE_ENGINE_SCRIPTS_DIR = CONF.update_engine_scripts_dir
-
 FN_BOOT = CONF.fn_boot
 FN_INIT_BOOT = CONF.fn_init_boot
 FN_VENDOR_BOOT = CONF.fn_vendor_boot
@@ -276,13 +255,6 @@ FASTBOOT_EXE = CONF.fastboot_exe
 AVBTOOL_PY = CONF.avbtool_py
 QDLRS_EXE = CONF.qdlrs_exe
 MAGISKBOOT_EXE = CONF.magiskboot_exe
-OTATOOLS_DIR = CONF.otatools_dir
-OTATOOLS_LINUX_DIR = CONF.otatools_linux_dir
-OTATOOLS_LINUX_BIN_DIR = CONF.otatools_linux_bin_dir
-OTATOOLS_LINUX_LIB_DIR = CONF.otatools_linux_lib_dir
-OTATOOLS_LINUX_LIB64_DIR = CONF.otatools_linux_lib64_dir
-OTATOOLS_LPMAKE = CONF.otatools_lpmake
-OTATOOLS_DELTA_GENERATOR = CONF.otatools_delta_generator
 
 KSU_APK_REPO = CONF.ksu_apk_repo
 KSU_APK_TAG = CONF.ksu_apk_tag

@@ -28,11 +28,5 @@ from .root.workflow import (
     sign_and_flash_recovery,
     unroot_device,
 )
-from .ota import (
-    apply_incremental_ota,
-    repack_super_images,
-    resign_firmware_with_testkeys,
-    unpack_super_images,
-)
 from .system import detect_slot, disable_ota, reenable_ota, get_slot_suffix
 from .xml import decrypt_x_files, modify_xml
