@@ -340,6 +340,76 @@ def test_advanced_menu_hides_convert_option_when_modify_region_off():
     assert "convert" not in option_actions
 
 
+def test_only_main_and_advanced_menus_include_exit_option():
+    main_actions = {
+        item.action
+        for item in menu_data.get_main_menu_data("ROW")
+        if item.item_type == "option"
+    }
+    advanced_actions = {
+        item.action
+        for item in menu_data.get_advanced_menu_data("ROW")
+        if item.item_type == "option"
+    }
+
+    submenu_builders = (
+        lambda: menu_data.get_root_variants_menu_data(),
+        lambda: menu_data.get_root_ksu_modes_menu_data(),
+        lambda: menu_data.get_root_apatch_variants_menu_data(),
+        lambda: menu_data.get_root_menu_data(gki=False, root_type="kernelsu"),
+        lambda: menu_data.get_settings_menu_data(
+            preset_label="1",
+            skip_adb_state="OFF",
+            modify_region_code_enabled=True,
+            target_region="ROW",
+        ),
+        lambda: menu_data.get_reboot_menu_data("device_status_adb"),
+    )
+
+    assert "exit" in main_actions
+    assert "exit" in advanced_actions
+
+    for build_menu in submenu_builders:
+        submenu_actions = {
+            item.action for item in build_menu() if item.item_type == "option"
+        }
+        assert "exit" not in submenu_actions
+
+
+def test_root_manual_submenus_do_not_offer_exit(monkeypatch):
+    monkeypatch.setattr(menu_router, "get_string", lambda key: key)
+
+    class FakeTerminalMenu:
+        instances = []
+
+        def __init__(self, *_args, **_kwargs):
+            self.options = []
+            type(self).instances.append(self)
+
+        def add_option(self, key, *_args):
+            self.options.append(key)
+
+        def add_separator(self, *_args):
+            pass
+
+        def ask(self, *_args):
+            return "b"
+
+    monkeypatch.setattr(menu_router, "TerminalMenu", FakeTerminalMenu)
+
+    root_type_menu = menu_router._build_root_type_menu("main")
+    assert "x" not in root_type_menu.options
+
+    result = menu_router._root_lkm_variants_menu(
+        MagicMock(),
+        MagicMock(),
+        "main > root > kernelsu",
+    )
+
+    assert result is menu_router.LoopAction.BACK
+    assert "x" not in FakeTerminalMenu.instances[-1].options
+
+
 @pytest.mark.parametrize("action", ["disable_ota", "reenable_ota"])
 def test_handle_skip_adb_menu_block_blocks_ota_actions(monkeypatch, action):
     mock_ui = MagicMock()

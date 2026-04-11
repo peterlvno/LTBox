@@ -240,7 +240,7 @@ def get_root_variants_menu_data() -> List[MenuItem]:
             action="apatch_variants",
         ),
         MenuSpec("separator"),
-        *_navigation_specs(include_back=True, include_exit=True),
+        *_navigation_specs(include_back=True),
     ]
     return _build_menu(specs)
 
@@ -260,7 +260,7 @@ def get_root_ksu_modes_menu_data() -> List[MenuItem]:
             action="gki_mode",
         ),
         MenuSpec("separator"),
-        *_navigation_specs(include_back=True, include_return=True, include_exit=True),
+        *_navigation_specs(include_back=True, include_return=True),
     ]
     return _build_menu(specs)
 
@@ -280,7 +280,7 @@ def get_root_apatch_variants_menu_data() -> List[MenuItem]:
             action="folkpatch",
         ),
         MenuSpec("separator"),
-        *_navigation_specs(include_back=True, include_return=True, include_exit=True),
+        *_navigation_specs(include_back=True, include_return=True),
     ]
     return _build_menu(specs)
 
@@ -305,9 +305,7 @@ def get_root_menu_data(gki: bool, root_type: str = "") -> List[MenuItem]:
     specs.extend(
         [
             MenuSpec("separator"),
-            *_navigation_specs(
-                include_back=True, include_return=True, include_exit=True
-            ),
+            *_navigation_specs(include_back=True, include_return=True),
         ]
     )
     return _build_menu(specs)

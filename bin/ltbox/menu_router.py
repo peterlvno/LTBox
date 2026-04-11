@@ -333,7 +333,6 @@ def _build_root_type_menu(main_title: str) -> TerminalMenu:
         menu.add_option(profile.menu_key, _resolve_root_type_label(profile))
 
     menu.add_option("b", get_string("menu_back"))
-    menu.add_option("x", get_string("menu_main_exit"))
 
     return menu
 
@@ -359,7 +358,6 @@ def _root_lkm_variants_menu(
         menu.add_separator()
         menu.add_option("b", get_string("menu_back"))
         menu.add_option("m", get_string("menu_root_m"))
-        menu.add_option("x", get_string("menu_main_exit"))
 
         choice = menu.ask(
             get_string("prompt_select"), get_string("err_invalid_selection")
@@ -368,8 +366,6 @@ def _root_lkm_variants_menu(
             return LoopAction.BACK
         if choice == "m":
             return LoopAction.RETURN
-        if choice == "x":
-            return LoopAction.EXIT
 
         selected_profile = next((p for p in lkm_profiles if p.menu_key == choice), None)
         if selected_profile:
