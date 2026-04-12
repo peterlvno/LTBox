@@ -422,7 +422,7 @@ def test_patch_chained_image_rollback_resigns_signed_image(tmp_path):
     )
 
 
-def test_process_boot_image_avb_skips_direct_erase_footer_call(tmp_path):
+def test_process_boot_image_avb_erases_footer_before_adding(tmp_path):
     backup_dir = tmp_path / "backup"
     backup_dir.mkdir()
     (backup_dir / "boot.bak.img").write_bytes(b"boot-bak")
@@ -450,10 +450,10 @@ def test_process_boot_image_avb_skips_direct_erase_footer_call(tmp_path):
 
         process_boot_image_avb(target, gki=True, backup_dir=backup_dir)
 
+    mock_run.assert_called_once_with("erase_footer", "--image", target)
     apply_footer.assert_called_once_with(
         image_path=target, image_info=boot_info, key_file=key_file
     )
-    mock_run.assert_not_called()
 
 
 def test_rebuild_vbmeta_with_single_image_uses_descriptor_update(tmp_path):

@@ -681,6 +681,15 @@ def process_boot_image_avb(
         else:
             utils.ui.info(get_string("img_warn_no_sig_key"))
 
+    try:
+        utils.ui.info(
+            get_string("img_avb_erase_footer").format(name=image_to_process.name)
+        )
+        _run_avbtool("erase_footer", "--image", image_to_process)
+        utils.ui.info(get_string("img_avb_erase_footer_ok"))
+    except Exception as e:
+        utils.ui.info(get_string("img_avb_erase_footer_fail").format(e=e))
+
     apply_avb_integrity_footer(
         image_path=image_to_process, image_info=boot_info, key_file=key_file
     )
