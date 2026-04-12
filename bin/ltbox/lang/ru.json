@@ -644,7 +644,7 @@
   "menu_root_1_lkm": "Дамп init_boot.img и vbmeta.img, патч и прошивка",
   "menu_root_2_gki": "Патч и прошивка boot.img (из папки 'image')",
   "menu_root_2_lkm": "Патч и прошивка init_boot.img и vbmeta.img (из папки 'image')",
-  "menu_root_m": "Назад в главное меню",
+  "menu_root_m": "Главное меню",
   "menu_root_mode_gki": "Режим GKI",
   "menu_root_mode_lkm": "Режим LKM",
   "menu_root_subtype_nightly": "Nightly (GitHub Actions)",

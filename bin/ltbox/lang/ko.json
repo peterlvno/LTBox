@@ -644,7 +644,7 @@
   "menu_root_1_lkm": "기기에서 init_boot.img & vbmeta.img 추출 및 패치 후 플래싱",
   "menu_root_2_gki": "image 폴더의 boot.img 파일로 패치 및 플래싱",
   "menu_root_2_lkm": "image 폴더의 init_boot.img & vbmeta.img 파일로 패치 및 플래싱",
-  "menu_root_m": "메인으로 돌아가기",
+  "menu_root_m": "메인",
   "menu_root_mode_gki": "GKI 모드",
   "menu_root_mode_lkm": "LKM 모드",
   "menu_root_subtype_nightly": "나이틀리 (GitHub Actions)",

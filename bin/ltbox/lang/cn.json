@@ -644,7 +644,7 @@
   "menu_root_1_lkm": "导出 init_boot.img 和 vbmeta.img，修补并刷入",
   "menu_root_2_gki": "修补并刷入 boot.img (从 'image' 文件夹)",
   "menu_root_2_lkm": "修补并刷入 init_boot.img 和 vbmeta.img (从 'image' 文件夹)",
-  "menu_root_m": "返回主菜单",
+  "menu_root_m": "主菜单",
   "menu_root_mode_gki": "GKI 模式",
   "menu_root_mode_lkm": "LKM 模式",
   "menu_root_subtype_nightly": "开发版 (GitHub Actions)",

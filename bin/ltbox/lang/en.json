@@ -644,7 +644,7 @@
   "menu_root_1_lkm": "Dump init_boot.img and vbmeta.img, patch, and flash",
   "menu_root_2_gki": "Patch and flash boot.img (from 'image' folder)",
   "menu_root_2_lkm": "Patch init_boot.img & vbmeta.img, and flash (from 'image' folder)",
-  "menu_root_m": "Back to Main Menu",
+  "menu_root_m": "Main",
   "menu_root_mode_gki": "GKI Mode",
   "menu_root_mode_lkm": "LKM Mode",
   "menu_root_subtype_nightly": "Nightly (GitHub Actions)",
