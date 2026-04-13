@@ -836,9 +836,14 @@ def download_magisk_nightly(
             download_resource(base_url, temp_zip)
             apk_path = target_dir / f"{name.replace(' ', '_')}.apk"
             with zipfile.ZipFile(temp_zip, "r") as zf:
-                apk_member = next(
-                    (m for m in zf.namelist() if m.endswith(".apk")), None
-                )
+                namelist = zf.namelist()
+                apk_member = None
+                for candidate in ["apk-ng-release.apk", "app-release.apk"]:
+                    if candidate in namelist:
+                        apk_member = candidate
+                        break
+                if not apk_member:
+                    apk_member = next((m for m in namelist if m.endswith(".apk")), None)
                 if not apk_member:
                     raise ToolError(get_string("dl_err_apatch_apk_missing_in_nightly"))
                 with zf.open(apk_member) as src, open(apk_path, "wb") as dst:
