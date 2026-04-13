@@ -763,27 +763,32 @@ _MAGISK_APK_ASSETS = {
 }
 
 
-def download_magisk_release(
-    target_dir: Path, repo: str = "", tag: str = "latest"
-) -> None:
-    apk_path = target_dir / "Magisk.apk"
-    repo = repo or "topjohnwu/Magisk"
-
-    with utils.ui.status(
-        get_string("dl_apatch_stable_downloading").format(name="Magisk")
-    ):
-        _download_and_move_github_asset(
-            f"https://github.com/{repo}",
-            tag,
-            r"Magisk.*\.apk$",
-            apk_path,
-        )
-
-    utils.ui.echo(get_string("dl_download_success").format(filename="Magisk.apk"))
+def prepare_magisk_apk(apk_path: Path, target_dir: Path) -> None:
     _extract_magisk_binaries(apk_path, target_dir)
 
     manager_apk = const.TOOLS_DIR / "manager.apk"
     shutil.copy(apk_path, manager_apk)
+
+
+def download_magisk_release(
+    target_dir: Path,
+    repo: str = "",
+    tag: str = "latest",
+    name: str = "Magisk",
+) -> None:
+    apk_path = target_dir / f"{name.replace(' ', '_')}.apk"
+    repo = repo or "topjohnwu/Magisk"
+
+    with utils.ui.status(get_string("dl_apatch_stable_downloading").format(name=name)):
+        _download_and_move_github_asset(
+            f"https://github.com/{repo}",
+            tag,
+            r".*\.apk$",
+            apk_path,
+        )
+
+    utils.ui.echo(get_string("dl_download_success").format(filename=apk_path.name))
+    prepare_magisk_apk(apk_path, target_dir)
 
 
 def download_magisk_nightly(
@@ -792,6 +797,7 @@ def download_magisk_nightly(
     repo: str = "",
     workflow_file: str = "",
     branch: Optional[str] = None,
+    name: str = "Magisk",
 ) -> None:
     repo = repo or "topjohnwu/Magisk"
     artifact_names = _get_matching_workflow_artifacts(
@@ -813,7 +819,7 @@ def download_magisk_nightly(
     if not target_artifact:
         raise ToolError(
             get_string("dl_err_apatch_artifact_missing").format(
-                name="Magisk", workflow_id=workflow_id, artifacts=artifact_names
+                name=name, workflow_id=workflow_id, artifacts=artifact_names
             )
         )
 
@@ -823,12 +829,12 @@ def download_magisk_nightly(
 
     with utils.ui.status(
         get_string("dl_apatch_nightly_downloading").format(
-            name="Magisk", workflow_id=workflow_id
+            name=name, workflow_id=workflow_id
         )
     ):
         try:
             download_resource(base_url, temp_zip)
-            apk_path = target_dir / "Magisk.apk"
+            apk_path = target_dir / f"{name.replace(' ', '_')}.apk"
             with zipfile.ZipFile(temp_zip, "r") as zf:
                 apk_member = next(
                     (m for m in zf.namelist() if m.endswith(".apk")), None
@@ -843,10 +849,7 @@ def download_magisk_nightly(
     utils.ui.echo(
         get_string("dl_download_success").format(filename=f"{target_artifact}.apk")
     )
-    _extract_magisk_binaries(apk_path, target_dir)
-
-    manager_apk = const.TOOLS_DIR / "manager.apk"
-    shutil.copy(apk_path, manager_apk)
+    prepare_magisk_apk(apk_path, target_dir)
 
 
 def _extract_magisk_binaries(apk_path: Path, target_dir: Path) -> None:

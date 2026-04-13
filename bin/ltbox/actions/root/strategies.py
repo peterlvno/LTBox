@@ -531,6 +531,8 @@ class MagiskRootStrategy(InitBootRootStrategy):
         self.is_nightly = False
         self.workflow_id: Optional[str] = None
         self.repo_config: Dict[str, Any] = {}
+        self.local_apk_path: Optional[Path] = None
+        self._resources_dirty = False
         self._staging_dir = const.TOOLS_DIR / "magisk_staging"
 
     @property
@@ -545,6 +547,14 @@ class MagiskRootStrategy(InitBootRootStrategy):
     def root_type(self) -> str:
         return self.provider.provider_id
 
+    @property
+    def display_name(self) -> str:
+        return self.provider.display_name
+
+    @property
+    def patch_image_name(self) -> str:
+        return f"init_boot.img ({self.provider.display_name})"
+
     def print_unroot_step(self, partition_map: Dict[str, str]) -> None:
         utils.ui.echo(get_string("act_unroot_step4_lkm"))
 
@@ -553,8 +563,27 @@ class MagiskRootStrategy(InitBootRootStrategy):
         self.source_label = selection.source_label
         self.is_nightly = selection.is_nightly
         self.workflow_id = selection.workflow_id
+        self.local_apk_path = None
+        self._resources_dirty = True
 
     def configure_source(self, breadcrumbs: Optional[str] = None) -> Union[bool, Any]:
+        if self.provider.local_apk_only:
+            cleanup_manager_apk()
+            custom_apk = _prompt_custom_magisk_apk()
+            if custom_apk is None:
+                return False
+            if custom_apk == "main":  # type: ignore
+                from ...menus.router import RouteResult
+
+                return RouteResult.MAIN
+            self.repo_config = {}
+            self.source_label = custom_apk.name
+            self.is_nightly = False
+            self.workflow_id = None
+            self.local_apk_path = custom_apk
+            self._resources_dirty = True
+            return True
+
         selection = select_magisk_source(
             self.provider.provider_id, breadcrumbs=breadcrumbs
         )
@@ -568,13 +597,17 @@ class MagiskRootStrategy(InitBootRootStrategy):
         return True
 
     def download_resources(self, kernel_version: Optional[str] = None) -> bool:
-        return download_magisk_resources(
+        ok = download_magisk_resources(
             profile=self.provider,
             staging_dir=self.staging_dir,
             repo_config=self.repo_config,
             is_nightly=self.is_nightly,
             workflow_id=self.workflow_id,
+            local_apk_path=self.local_apk_path,
         )
+        if ok:
+            self._resources_dirty = False
+        return ok
 
     def patch(
         self,
@@ -591,7 +624,9 @@ class MagiskRootStrategy(InitBootRootStrategy):
             shutil.copy(init_boot_source, init_boot_backup)
 
         # Ensure payload files are staged
-        if not all((self.staging_dir / name).exists() for name in self.payload_files):
+        if self._resources_dirty or not all(
+            (self.staging_dir / name).exists() for name in self.payload_files
+        ):
             if not self.download_resources():
                 return None
 
@@ -765,6 +800,124 @@ def _extract_manager_apk_from_zip(zip_path: Path) -> None:
             utils.ui.echo(get_string("gki_apk_found").format(filename=apk_name))
     except (zipfile.BadZipFile, OSError):
         pass
+
+
+def _custom_magisk_apk_dirs() -> List[Path]:
+    dirs = [const.MAGISK_DIR, const.BASE_DIR]
+    unique: List[Path] = []
+    for path in dirs:
+        if path not in unique:
+            unique.append(path)
+    return unique
+
+
+def _list_custom_magisk_apks() -> List[Path]:
+    const.MAGISK_DIR.mkdir(parents=True, exist_ok=True)
+
+    candidates: Dict[Path, Path] = {}
+    for directory in _custom_magisk_apk_dirs():
+        if not directory.exists():
+            continue
+        for apk_path in sorted(directory.glob("*.apk")):
+            if apk_path.name.lower() == "manager.apk":
+                continue
+            candidates.setdefault(apk_path.resolve(), apk_path)
+
+    return sorted(
+        candidates.values(),
+        key=lambda path: (
+            0 if path.parent == const.MAGISK_DIR else 1,
+            str(path).lower(),
+        ),
+    )
+
+
+def _display_custom_magisk_apk(apk_path: Path) -> str:
+    if apk_path.parent == const.MAGISK_DIR:
+        return apk_path.name
+    try:
+        return str(apk_path.relative_to(const.BASE_DIR))
+    except ValueError:
+        return apk_path.name
+
+
+def _prompt_custom_magisk_apk() -> Optional[Path]:
+    apks = _list_custom_magisk_apks()
+    if apks:
+        selected = _select_custom_magisk_apk(apks)
+        if selected is not None:
+            return selected
+        return None
+
+    utils.ui.echo("")
+    utils.ui.echo(get_string("magisk_local_apk_place"))
+    utils.ui.echo(get_string("act_file_location").format(path=const.MAGISK_DIR))
+
+    while True:
+        try:
+            input(get_string("magisk_local_apk_press_enter"))
+        except (KeyboardInterrupt, EOFError):
+            utils.ui.warn(get_string("magisk_local_apk_cancelled"))
+            return None
+
+        apks = _list_custom_magisk_apks()
+        if not apks:
+            utils.ui.warn(
+                get_string("magisk_local_apk_no_files").format(path=const.MAGISK_DIR)
+            )
+            continue
+
+        selected = _select_custom_magisk_apk(apks)
+        if selected is not None:
+            return selected
+
+
+def _select_custom_magisk_apk(apks: List[Path]) -> Optional[Path]:
+    if not apks:
+        return None
+
+    if len(apks) == 1:
+        utils.ui.echo(
+            get_string("magisk_local_apk_selected").format(
+                filename=_display_custom_magisk_apk(apks[0])
+            )
+        )
+        return apks[0]
+
+    from ...menus.terminal import TerminalMenu
+
+    menu = TerminalMenu(get_string("magisk_local_apk_select_title"))
+    apk_map: Dict[str, Path] = {}
+    for i, apk_path in enumerate(apks, 1):
+        key = str(i)
+        apk_map[key] = apk_path
+        menu.add_option(key, _display_custom_magisk_apk(apk_path))
+
+    menu.add_separator()
+    menu.add_option("c", get_string("cancel"))
+    menu.add_option("m", get_string("menu_root_m"))
+
+    choice = menu.ask(
+        get_string("prompt_select"),
+        get_string("err_invalid_selection"),
+    )
+
+    if choice == "c" or choice is None:
+        utils.ui.warn(get_string("magisk_local_apk_cancelled"))
+        return None
+    if choice == "m":
+        return "main"  # type: ignore
+
+    selected = apk_map.get(choice)
+    if selected:
+        utils.ui.echo(
+            get_string("magisk_local_apk_selected").format(
+                filename=_display_custom_magisk_apk(selected)
+            )
+        )
+        return selected
+
+    return None
 
 
 def get_root_strategy(gki: bool, root_type: str = "ksu") -> RootStrategy:

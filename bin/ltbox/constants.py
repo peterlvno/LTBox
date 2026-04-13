@@ -33,6 +33,7 @@ class LTBoxConfig:
 
         self.image_dir = self.base_dir / "image"
         self.kernel_dir = self.base_dir / "kernel"
+        self.magisk_dir = self.base_dir / "magisk"
         self.image_new_dir = self.base_dir / "image_new"
         self.working_dir = self.base_dir / "working"
         self.output_xml_dir = self.base_dir / "output_xml"
@@ -222,6 +223,7 @@ WORKING_BOOT_DIR = CONF.working_boot_dir
 OUTPUT_ANTI_ROLLBACK_DIR = CONF.output_anti_rollback_dir
 IMAGE_DIR = CONF.image_dir
 KERNEL_DIR = CONF.kernel_dir
+MAGISK_DIR = CONF.magisk_dir
 IMAGE_NEW_DIR = CONF.image_new_dir
 WORKING_DIR = CONF.working_dir
 OUTPUT_XML_DIR = CONF.output_xml_dir

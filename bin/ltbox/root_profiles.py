@@ -61,6 +61,7 @@ class RootProviderProfile:
     force_nightly: bool = False
     release_uses_tagged_build: bool = False
     nightly_branch: str = "main"
+    local_apk_only: bool = False
 
     @property
     def has_translated_menu_label(self) -> bool:
@@ -241,6 +242,20 @@ ROOT_PROFILES: tuple[RootProviderProfile, ...] = (
         strategy_root_type="magisk",
         direct_gki=False,
         nightly_branch="master",
+    ),
+    RootProviderProfile(
+        provider_id="other_forks",
+        display_name="Other forks",
+        family=RootProviderFamily.MAGISK,
+        settings_key="other_forks",
+        workflow_file="",
+        menu_key="10",
+        route_kind=RootRouteKind.DIRECT,
+        menu_label_literal="Other forks",
+        command_variant=RootCommandVariantId.MAGISK,
+        strategy_root_type="other_forks",
+        direct_gki=False,
+        local_apk_only=True,
     ),
 )
 

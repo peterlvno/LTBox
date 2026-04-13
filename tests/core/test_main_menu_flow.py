@@ -95,6 +95,34 @@ def test_root_menu_apatch_flow(monkeypatch):
     )
 
 
+def test_root_menu_magisk_other_forks_flow(monkeypatch):
+    received = []
+
+    def mock_loop_menu(data_fn, title_key, breadcrumbs, handler):
+        if title_key == "menu_main_root":
+            return handler("magisk_variants")
+        if title_key == "menu_root_variants_magisk":
+            return handler("other_forks")
+        return None
+
+    monkeypatch.setattr(menu_router, "_loop_menu", mock_loop_menu)
+
+    def mock_root_action_menu(dev, reg, gki, root_type, breadcrumbs):
+        received.append((gki, root_type, breadcrumbs))
+        return menu_router.RouteResult.MAIN
+
+    monkeypatch.setattr(menu_router, "_root_action_menu", mock_root_action_menu)
+    monkeypatch.setattr(menu_router, "get_string", lambda k: k)
+
+    menu_router.root_menu(MagicMock(), MagicMock())
+
+    assert received[0] == (
+        False,
+        "other_forks",
+        "menu_main_title > menu_main_root > menu_root_variants_magisk > Other forks",
+    )
+
+
 def test_loop_menu_propagates_main_result(monkeypatch):
     monkeypatch.setattr(
         menu_router,

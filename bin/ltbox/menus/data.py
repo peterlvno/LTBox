@@ -237,12 +237,6 @@ def get_root_magisk_variants_menu_data() -> List[MenuItem]:
         MenuSpec(
             "option",
             key="2",
-            text=lambda: get_string("menu_root_magisk_lygisk"),
-            action="lygisk",
-        ),
-        MenuSpec(
-            "option",
-            key="3",
             text=lambda: get_string("menu_root_magisk_other"),
             action="other_forks",
         ),

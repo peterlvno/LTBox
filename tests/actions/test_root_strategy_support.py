@@ -7,7 +7,9 @@ from ltbox.actions.root.strategies import (
     APatchStrategy,
     GkiRootStrategy,
     LkmRootStrategy,
+    MagiskRootStrategy,
     _prompt_custom_kernel_zip,
+    _prompt_custom_magisk_apk,
 )
 from ltbox.menus import router as menu_router
 
@@ -112,6 +114,109 @@ def test_lkm_strategy_configure_source_returns_main(monkeypatch):
     )
 
     assert strategy.configure_source("main > root") is menu_router.RouteResult.MAIN
+
+
+def test_magisk_strategy_configure_source_applies_prompt_selection():
+    selection = StrategySourceSelection(
+        repo_config={"repo": "owner/magisk"},
+        source_label="Nightly",
+        is_nightly=True,
+        workflow_id="run-777",
+    )
+    strategy = MagiskRootStrategy("magisk")
+
+    with patch(
+        "ltbox.actions.root.strategies.select_magisk_source",
+        return_value=selection,
+    ) as select_source:
+        strategy.configure_source("main > root")
+
+    select_source.assert_called_once_with("magisk", breadcrumbs="main > root")
+    assert strategy.repo_config == {"repo": "owner/magisk"}
+    assert strategy.source_label == "Nightly"
+    assert strategy.workflow_id == "run-777"
+    assert strategy.local_apk_path is None
+
+
+def test_magisk_strategy_download_resources_uses_local_apk_helper(tmp_path):
+    strategy = MagiskRootStrategy("other_forks")
+    strategy.local_apk_path = tmp_path / "MagiskAlpha.apk"
+    strategy.local_apk_path.write_bytes(b"apk")
+
+    with patch(
+        "ltbox.actions.root.strategies.download_magisk_resources",
+        return_value=True,
+    ) as download_resources:
+        assert strategy.download_resources() is True
+
+    download_resources.assert_called_once_with(
+        profile=strategy.provider,
+        staging_dir=strategy.staging_dir,
+        repo_config={},
+        is_nightly=False,
+        workflow_id=None,
+        local_apk_path=strategy.local_apk_path,
+    )
+
+
+def test_magisk_strategy_configure_source_uses_custom_apk_prompt_for_other_forks(
+    tmp_path,
+):
+    strategy = MagiskRootStrategy("other_forks")
+    apk_path = tmp_path / "MagiskAlpha.apk"
+    apk_path.write_bytes(b"apk")
+
+    with (
+        patch(
+            "ltbox.actions.root.strategies._prompt_custom_magisk_apk",
+            return_value=apk_path,
+        ),
+        patch("ltbox.actions.root.strategies.cleanup_manager_apk") as cleanup,
+    ):
+        assert strategy.configure_source("main > root > Other forks") is True
+
+    cleanup.assert_called_once_with()
+    assert strategy.local_apk_path == apk_path
+    assert strategy.source_label == apk_path.name
+    assert strategy.is_nightly is False
+    assert strategy.workflow_id is None
+
+
+def test_prompt_custom_magisk_apk_uses_root_apk_when_present(tmp_path):
+    apk_path = tmp_path / "MagiskAlpha.apk"
+    apk_path.write_bytes(b"apk")
+    magisk_dir = tmp_path / "magisk"
+
+    with (
+        patch("ltbox.actions.root.strategies.const.BASE_DIR", tmp_path),
+        patch("ltbox.actions.root.strategies.const.MAGISK_DIR", magisk_dir),
+        patch("builtins.input", side_effect=AssertionError("input should not run")),
+        patch("ltbox.actions.root.strategies.utils.ui.echo"),
+    ):
+        selected = _prompt_custom_magisk_apk()
+
+    assert selected == apk_path
+
+
+def test_prompt_custom_magisk_apk_allows_selection_when_multiple_exist(tmp_path):
+    magisk_dir = tmp_path / "magisk"
+    magisk_dir.mkdir()
+    first_apk = magisk_dir / "alpha.apk"
+    second_apk = tmp_path / "MagiskAlpha.apk"
+    first_apk.write_bytes(b"apk1")
+    second_apk.write_bytes(b"apk2")
+
+    with (
+        patch("ltbox.menus.terminal.TerminalMenu") as terminal_menu,
+        patch("ltbox.actions.root.strategies.const.BASE_DIR", tmp_path),
+        patch("ltbox.actions.root.strategies.const.MAGISK_DIR", magisk_dir),
+        patch("builtins.input", side_effect=AssertionError("input should not run")),
+        patch("ltbox.actions.root.strategies.utils.ui.echo"),
+    ):
+        terminal_menu.return_value.ask.return_value = "2"
+        selected = _prompt_custom_magisk_apk()
+
+    assert selected == second_apk
 
 
 def test_gki_strategy_configure_source_extracts_manager_apk(tmp_path):

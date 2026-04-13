@@ -392,21 +392,15 @@ def _root_magisk_variants_menu(
     current_breadcrumbs = f"{breadcrumbs} > {get_string('menu_root_variants_magisk')}"
 
     def _handler(action: str) -> MenuReturn:
-        if action == "magisk":
-            profile = get_root_provider_profile("magisk")
+        if action in ("magisk", "other_forks"):
+            profile = get_root_provider_profile(action)
             return _root_action_menu(
                 dev,
                 registry,
                 gki=False,
-                root_type="magisk",
+                root_type=profile.provider_id,
                 breadcrumbs=f"{current_breadcrumbs} > {profile.display_name}",
             )
-        if action in ("lygisk", "other_forks"):
-            label = "Lygisk" if action == "lygisk" else "Other forks"
-            ui.clear()
-            ui.echo(get_string("magisk_placeholder").format(name=label))
-            input(get_string("press_enter_to_continue"))
-            return None
         return None
 
     return _loop_menu(
