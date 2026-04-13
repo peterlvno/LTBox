@@ -53,19 +53,13 @@ jobs:
           install: gcc cmake make zlib-devel git
           cache: true
 
-      - name: Get MagiskbootAlone SHA
-        id: magiskboot-sha
-        run: |
-          $sha = (Invoke-RestMethod -Uri "https://api.github.com/repos/miner7222/MagiskbootAlone/commits/main" -Headers @{ "User-Agent" = "LTBox-CI" }).sha.Substring(0, 12)
-          "sha=$sha" >> $env:GITHUB_OUTPUT
-
       - name: Cache Compiled Tools
         uses: actions/cache@v5
         with:
           path: bin/tools
-          key: tools-bin-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.magiskboot-sha.outputs.sha }}-${{ hashFiles('tests/scripts/build_tools.py', 'tests/scripts/cache_fw.py', 'bin/ltbox/config.json', '.github/ci-tools.json', '.github/actions/setup-fw-env/action.yml', '.github/workflows/windows_test.yml') }}
+          key: tools-bin-v4-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vendor/MagiskbootAlone/**', 'tests/scripts/build_tools.py', 'tests/scripts/cache_fw.py', 'bin/ltbox/config.json', '.github/ci-tools.json', '.github/actions/setup-fw-env/action.yml', '.github/workflows/windows_test.yml') }}
           restore-keys: |
-            tools-bin-v3-${{ runner.os }}-${{ runner.arch }}-
+            tools-bin-v4-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Build magiskboot
         run: python tests/scripts/build_tools.py

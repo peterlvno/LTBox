@@ -1,51 +1,56 @@
-import json
 import os
 import shutil
 import subprocess
-import urllib.request
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).resolve().parents[2] / "bin" / "tools"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TOOLS_DIR = REPO_ROOT / "bin" / "tools"
+SUBMODULE_DIR = REPO_ROOT / "vendor" / "MagiskbootAlone"
 MAGISKBOOT_EXE = TOOLS_DIR / "magiskboot.exe"
 OPENSSL_EXE = TOOLS_DIR / "openssl.exe"
 VERSION_FILE = TOOLS_DIR / "magiskboot.version"
-REPO_URL = "https://github.com/miner7222/MagiskbootAlone.git"
-API_URL = "https://api.github.com/repos/miner7222/MagiskbootAlone/commits/main"
 
 
-def get_latest_sha():
-    req = urllib.request.Request(API_URL, headers={"User-Agent": "LTBox-Builder"})
-    with urllib.request.urlopen(req, timeout=10) as response:
-        data = json.loads(response.read().decode("utf-8"))
-        return data["sha"]
+def _get_submodule_sha() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(SUBMODULE_DIR),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
 
 
 def build():
     TOOLS_DIR.mkdir(parents=True, exist_ok=True)
-    try:
-        latest_sha = get_latest_sha()
-    except Exception as e:
-        print(f"[WARN] Failed to fetch latest SHA: {e}")
-        latest_sha = None
+
+    if not SUBMODULE_DIR.exists() or not (SUBMODULE_DIR / "CMakeLists.txt").exists():
+        print("[ERROR] vendor/MagiskbootAlone submodule not initialized.")
+        print("       Run: git submodule update --init vendor/MagiskbootAlone")
+        raise SystemExit(1)
+
+    current_sha = _get_submodule_sha()
 
     openssl_ready = OPENSSL_EXE.exists() if os.name == "nt" else True
     if MAGISKBOOT_EXE.exists() and VERSION_FILE.exists() and openssl_ready:
-        current_sha = VERSION_FILE.read_text(encoding="utf-8").strip()
-        if latest_sha is None or current_sha == latest_sha:
+        cached_sha = VERSION_FILE.read_text(encoding="utf-8").strip()
+        if cached_sha == current_sha:
             print("[INFO] Tools are up-to-date. Skipping build.")
             return
 
-    print("[INFO] Building magiskboot and fetching OpenSSL via MSYS2...")
-    build_dir = TOOLS_DIR / "magiskboot_src"
+    print("[INFO] Building magiskboot from vendor/MagiskbootAlone...")
+
+    # Copy submodule source to a temp build dir (avoid polluting the submodule)
+    build_dir = TOOLS_DIR / "magiskboot_build"
     if build_dir.exists():
-        if os.name == "nt":
+        shutil.rmtree(build_dir, ignore_errors=True)
+        if build_dir.exists() and os.name == "nt":
             subprocess.run(
                 ["cmd", "/c", "rmdir", "/s", "/q", str(build_dir)], check=False
             )
-        else:
-            shutil.rmtree(build_dir, ignore_errors=True)
 
-    subprocess.run(["git", "clone", REPO_URL, str(build_dir)], check=True)
+    shutil.copytree(SUBMODULE_DIR, build_dir, dirs_exist_ok=True)
 
     cpio_cpp_path = build_dir / "src" / "cpio.cpp"
     if cpio_cpp_path.exists():
@@ -67,13 +72,13 @@ def build():
             return
 
         print(
-            "[INFO] Installing MSYS2 dependencies (gcc, cmake, make, zlib-devel, git, openssl)..."
+            "[INFO] Installing MSYS2 dependencies (gcc, cmake, make, zlib-devel, openssl)..."
         )
         subprocess.run(
             [
                 str(bash_exe),
                 "-lc",
-                "pacman -S --noconfirm --needed gcc cmake make zlib-devel git openssl",
+                "pacman -S --noconfirm --needed gcc cmake make zlib-devel openssl",
             ],
             check=True,
         )
@@ -127,8 +132,7 @@ def build():
         if compiled_exe.exists():
             shutil.copy(compiled_exe, MAGISKBOOT_EXE)
 
-    if latest_sha:
-        VERSION_FILE.write_text(latest_sha, encoding="utf-8")
+    VERSION_FILE.write_text(current_sha, encoding="utf-8")
 
     shutil.rmtree(build_dir, ignore_errors=True)
     print("[INFO] Successfully built and cached tools.")
