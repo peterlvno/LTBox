@@ -534,6 +534,7 @@ class MagiskRootStrategy(InitBootRootStrategy):
         self.local_apk_path: Optional[Path] = None
         self._resources_dirty = False
         self._staging_dir = const.TOOLS_DIR / "magisk_staging"
+        self.preinit_device: str = ""
 
     @property
     def staging_dir(self) -> Path:
@@ -546,6 +547,14 @@ class MagiskRootStrategy(InitBootRootStrategy):
     @property
     def root_type(self) -> str:
         return self.provider.provider_id
+
+    def resolve_preinit_device(
+        self, dev: Optional[device.DeviceController] = None
+    ) -> None:
+        """Resolve PREINITDEVICE while ADB is still available."""
+        from ...patch.root import _resolve_magisk_preinit_device
+
+        self.preinit_device = _resolve_magisk_preinit_device(dev)
 
     @property
     def display_name(self) -> str:
@@ -633,7 +642,9 @@ class MagiskRootStrategy(InitBootRootStrategy):
         for name in self.payload_files:
             shutil.copy(self.staging_dir / name, work_dir / name)
 
-        return patch_magisk_boot(work_dir, magiskboot_exe, dev=dev)
+        return patch_magisk_boot(
+            work_dir, magiskboot_exe, dev=dev, preinit_device=self.preinit_device
+        )
 
 
 class LkmRootStrategy(InitBootRootStrategy):

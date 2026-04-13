@@ -368,29 +368,6 @@ class TestPatchMagiskBoot:
         assert result == tmp_path / "init_boot_patched.img"
         assert not any(call and call[0] == "dtb" for call in run_calls)
 
-    def test_magisk_patch_aborts_when_skip_adb_is_active(self, tmp_path):
-        work_dir = tmp_path / "work"
-        work_dir.mkdir()
-        (work_dir / "init_boot.img").write_bytes(b"\x00" * 64)
-
-        dev = MagicMock()
-        dev.skip_adb = True
-
-        with (
-            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
-            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
-            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
-            patch("ltbox.patch.root.utils.MagiskBootWrapper") as wrapper_cls,
-        ):
-            result = patch_magisk_boot(
-                work_dir=work_dir,
-                magiskboot_exe=tmp_path / "magiskboot.exe",
-                dev=dev,
-            )
-
-        assert result is None
-        wrapper_cls.assert_not_called()
-
     def test_vendor_ramdisk_fallback_is_not_used_for_magisk(self, tmp_path):
         work_dir = tmp_path / "work"
         work_dir.mkdir()

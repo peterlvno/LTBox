@@ -438,6 +438,7 @@ def patch_magisk_boot(
     work_dir: Path,
     magiskboot_exe: Path,
     dev: Optional[device.DeviceController] = None,
+    preinit_device: str = "",
 ) -> Optional[Path]:
     """Patch init_boot.img with Magisk. Replicates boot_patch.sh logic."""
 
@@ -451,10 +452,6 @@ def patch_magisk_boot(
             get_string("img_root_err_img_not_found").format(name=img_name),
             file=sys.stderr,
         )
-        return None
-
-    if dev is not None and dev.skip_adb:
-        print(get_string("magisk_err_skip_adb_required"), file=sys.stderr)
         return None
 
     mb = utils.MagiskBootWrapper(magiskboot_exe)
@@ -523,7 +520,8 @@ def patch_magisk_boot(
     print(get_string("magisk_creating_config"))
     keepverity = "true"
     keepforceencrypt = "true"
-    preinit_device = _resolve_magisk_preinit_device(dev)
+    if not preinit_device:
+        preinit_device = _resolve_magisk_preinit_device(dev)
     config_lines = [
         f"KEEPVERITY={keepverity}",
         f"KEEPFORCEENCRYPT={keepforceencrypt}",

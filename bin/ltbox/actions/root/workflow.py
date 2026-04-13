@@ -252,6 +252,13 @@ def patch_and_flash_root(
         wait_for_adb=True,
     )
 
+    # Resolve PREINITDEVICE while ADB is still available
+    if hasattr(session.strategy, "resolve_preinit_device"):
+        if dev.skip_adb:
+            utils.ui.error(get_string("magisk_err_skip_adb_required"))
+            return
+        session.strategy.resolve_preinit_device(dev)
+
     if not _patch_root_from_folder(
         session.strategy,
         session.gki,
@@ -481,6 +488,13 @@ def root_device(
     apk_installed = _install_manager_apk(
         dev, required=session.strategy.manager_apk_required
     )
+
+    # Resolve PREINITDEVICE while ADB is still available (before EDL dump)
+    if hasattr(session.strategy, "resolve_preinit_device"):
+        if dev.skip_adb:
+            utils.ui.error(get_string("magisk_err_skip_adb_required"))
+            return
+        session.strategy.resolve_preinit_device(dev)
 
     utils.ui.echo(get_string("act_root_step2"))
     partition_map = session.resolve_partition_map(dev)
