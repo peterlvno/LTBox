@@ -9,8 +9,8 @@ TOOLS_DIR = Path(__file__).resolve().parents[2] / "bin" / "tools"
 MAGISKBOOT_EXE = TOOLS_DIR / "magiskboot.exe"
 OPENSSL_EXE = TOOLS_DIR / "openssl.exe"
 VERSION_FILE = TOOLS_DIR / "magiskboot.version"
-REPO_URL = "https://github.com/Anatdx/MagiskbootAlone.git"
-API_URL = "https://api.github.com/repos/Anatdx/MagiskbootAlone/commits/main"
+REPO_URL = "https://github.com/miner7222/MagiskbootAlone.git"
+API_URL = "https://api.github.com/repos/miner7222/MagiskbootAlone/commits/main"
 
 
 def get_latest_sha():
