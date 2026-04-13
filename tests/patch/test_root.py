@@ -5,7 +5,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ltbox.patch.root import get_kernel_version, patch_boot_with_root_algo
+from ltbox.patch.root import (
+    get_kernel_version,
+    patch_boot_with_root_algo,
+    patch_magisk_boot,
+)
 
 
 class TestGetKernelVersion:
@@ -184,3 +188,80 @@ class TestPatchBootCommandBuild:
         for idx in m_indices:
             assert patch_cmd[idx + 2] == "-T"
             assert patch_cmd[idx + 3] == "kpm"
+
+
+class TestPatchMagiskBoot:
+    def test_already_patched_image_aborts_without_restore_and_reboots_system(
+        self, tmp_path
+    ):
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        (work_dir / "init_boot.img").write_bytes(b"\x00" * 64)
+        (work_dir / "ramdisk.cpio").write_bytes(b"\x00" * 64)
+
+        run_calls = []
+
+        class FakeWrapper:
+            def __init__(self, exe_path):
+                self.exe_path = exe_path
+
+            def run(self, *args, **kwargs):
+                run_calls.append(args)
+                result = MagicMock()
+                result.returncode = (
+                    1 if args[:3] == ("cpio", "ramdisk.cpio", "test") else 0
+                )
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+        dev = MagicMock()
+        dev.skip_adb = False
+
+        with (
+            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
+            patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
+        ):
+            result = patch_magisk_boot(
+                work_dir=work_dir,
+                magiskboot_exe=tmp_path / "magiskboot.exe",
+                dev=dev,
+            )
+
+        assert result is None
+        assert ("cpio", "ramdisk.cpio", "restore") not in run_calls
+        dev.adb.reboot.assert_called_once_with("system")
+
+    def test_vendor_ramdisk_fallback_is_not_used_for_magisk(self, tmp_path):
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        (work_dir / "init_boot.img").write_bytes(b"\x00" * 64)
+        vendor_dir = work_dir / "vendor_ramdisk"
+        vendor_dir.mkdir()
+        (vendor_dir / "init_boot.cpio").write_bytes(b"\x00" * 64)
+
+        class FakeWrapper:
+            def __init__(self, exe_path):
+                self.exe_path = exe_path
+
+            def run(self, *args, **kwargs):
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+        with (
+            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
+            patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
+        ):
+            result = patch_magisk_boot(
+                work_dir=work_dir,
+                magiskboot_exe=tmp_path / "magiskboot.exe",
+            )
+
+        assert result is None

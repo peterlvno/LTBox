@@ -598,7 +598,7 @@ class MagiskRootStrategy(InitBootRootStrategy):
         for name in self.payload_files:
             shutil.copy(self.staging_dir / name, work_dir / name)
 
-        return patch_magisk_boot(work_dir, magiskboot_exe)
+        return patch_magisk_boot(work_dir, magiskboot_exe, dev=dev)
 
 
 class LkmRootStrategy(InitBootRootStrategy):

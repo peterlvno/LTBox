@@ -7,7 +7,7 @@ from typing import List, Optional, Union
 
 from .. import constants as const
 from .. import device, downloader, utils
-from ..errors import ToolError
+from ..errors import DeviceCommandError, ToolError
 from ..i18n import get_string
 from ..root_profiles import RootProviderFamily, get_root_provider_profile
 
@@ -277,6 +277,7 @@ def patch_boot_with_root_algo(
 def patch_magisk_boot(
     work_dir: Path,
     magiskboot_exe: Path,
+    dev: Optional[device.DeviceController] = None,
 ) -> Optional[Path]:
     """Patch init_boot.img with Magisk. Replicates boot_patch.sh logic."""
 
@@ -294,24 +295,23 @@ def patch_magisk_boot(
 
     mb = utils.MagiskBootWrapper(magiskboot_exe)
 
+    def reboot_system_and_abort() -> None:
+        if dev is None or dev.skip_adb:
+            return
+        print(get_string("magisk_rebooting_system"))
+        try:
+            dev.adb.reboot("system")
+        except DeviceCommandError as error:
+            print(get_string("device_err_reboot").format(e=error), file=sys.stderr)
+
     # --- 1. Unpack ---
     print(get_string("img_root_step1").format(name="init_boot"))
     mb.run("unpack", img_name, cwd=work_dir)
 
     # --- 2. Find ramdisk ---
-    ramdisk = None
-    for path in [
-        "ramdisk.cpio",
-        "vendor_ramdisk/init_boot.cpio",
-        "vendor_ramdisk/ramdisk.cpio",
-    ]:
-        if (work_dir / path).exists():
-            ramdisk = path
-            break
-
+    ramdisk = "ramdisk.cpio"
     skip_backup = False
-    if ramdisk is None:
-        ramdisk = "ramdisk.cpio"
+    if not (work_dir / ramdisk).exists():
         skip_backup = True
 
     # --- 3. Check ramdisk status ---
@@ -339,21 +339,9 @@ def patch_magisk_boot(
             sha1 = sha1_proc.stdout.strip() if sha1_proc.stdout else ""
             shutil.copy(work_dir / ramdisk, work_dir / "ramdisk.cpio.orig")
         elif status == 1:
-            # Already Magisk-patched, restore original
-            mb.run(
-                "cpio",
-                ramdisk,
-                "extract .backup/.magisk config.orig",
-                "restore",
-                cwd=work_dir,
-            )
-            shutil.copy(work_dir / ramdisk, work_dir / "ramdisk.cpio.orig")
-            config_orig = work_dir / "config.orig"
-            if config_orig.exists():
-                for line in config_orig.read_text().splitlines():
-                    if line.startswith("SHA1="):
-                        sha1 = line.split("=", 1)[1]
-                config_orig.unlink()
+            print(get_string("magisk_already_patched_image"), file=sys.stderr)
+            reboot_system_and_abort()
+            return None
         elif status == 2:
             print(get_string("magisk_unsupported_patcher"), file=sys.stderr)
             return None
