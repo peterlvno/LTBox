@@ -724,7 +724,6 @@ def _install_manager_apk(
         utils.ui.echo("-" * width + "\n")
         return True
 
-    utils.ui.echo(get_string("act_wait_sys_adb"))
     try:
         dev.adb.wait_for_device()
         dev.adb.install(manager_apk)
