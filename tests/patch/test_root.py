@@ -5,7 +5,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ltbox.patch.root import get_kernel_version, patch_boot_with_root_algo
+from ltbox.patch.root import (
+    _find_magisk_preinit_device_from_mountinfo,
+    get_kernel_version,
+    patch_boot_with_root_algo,
+    patch_magisk_boot,
+)
 
 
 class TestGetKernelVersion:
@@ -184,3 +189,273 @@ class TestPatchBootCommandBuild:
         for idx in m_indices:
             assert patch_cmd[idx + 2] == "-T"
             assert patch_cmd[idx + 3] == "kpm"
+
+
+class TestPatchMagiskBoot:
+    def test_find_magisk_preinit_device_matches_official_metadata_selection(self):
+        mountinfo = "\n".join(
+            [
+                "23 1 8:1 / /vendor ro,seclabel - ext4 /dev/block/sda1 ro,seclabel",
+                "24 1 8:13 / /metadata rw,seclabel - ext4 /dev/block/sda13 rw,seclabel",
+                "25 1 254:0 / /data rw,seclabel - ext4 /dev/block/dm-0 rw,seclabel",
+            ]
+        )
+
+        result = _find_magisk_preinit_device_from_mountinfo(
+            mountinfo=mountinfo,
+            crypto_state="encrypted",
+            crypto_type="file",
+            crypto_metadata_enabled="true",
+        )
+
+        assert result == "sda13"
+
+    def test_includes_preinitdevice_in_magisk_config_when_detected(self, tmp_path):
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        (work_dir / "init_boot.img").write_bytes(b"\x00" * 64)
+        (work_dir / "ramdisk.cpio").write_bytes(b"\x00" * 64)
+        (work_dir / "magisk").write_bytes(b"\x00" * 64)
+        (work_dir / "stub.apk").write_bytes(b"\x00" * 64)
+        (work_dir / "init-ld").write_bytes(b"\x00" * 64)
+
+        captured_config = None
+
+        class FakeWrapper:
+            def __init__(self, exe_path):
+                self.exe_path = exe_path
+
+            def run(self, *args, **kwargs):
+                nonlocal captured_config
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+
+                if args[:3] == ("cpio", "ramdisk.cpio", "test"):
+                    return result
+                if args[:2] == ("sha1", "init_boot.img"):
+                    result.stdout = "deadbeef\n"
+                    return result
+                if args[:2] == ("cpio", "ramdisk.cpio"):
+                    captured_config = (work_dir / "config").read_text(encoding="utf-8")
+                    return result
+                if args[:2] == ("repack", "init_boot.img"):
+                    (work_dir / "new-boot.img").write_bytes(b"\x00" * 64)
+                    return result
+                return result
+
+        dev = MagicMock()
+        dev.skip_adb = False
+
+        with (
+            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
+            patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
+            patch(
+                "ltbox.patch.root._resolve_magisk_preinit_device", return_value="sda13"
+            ),
+        ):
+            result = patch_magisk_boot(
+                work_dir=work_dir,
+                magiskboot_exe=tmp_path / "magiskboot.exe",
+                dev=dev,
+            )
+
+        assert result == tmp_path / "init_boot_patched.img"
+        assert captured_config is not None
+        assert captured_config == (
+            "KEEPVERITY=true\n"
+            "KEEPFORCEENCRYPT=true\n"
+            "RECOVERYMODE=false\n"
+            "VENDORBOOT=false\n"
+            "PREINITDEVICE=sda13\n"
+            "SHA1=deadbeef\n"
+        )
+
+    def test_already_patched_image_aborts_without_restore_and_reboots_system(
+        self, tmp_path
+    ):
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        (work_dir / "init_boot.img").write_bytes(b"\x00" * 64)
+        (work_dir / "ramdisk.cpio").write_bytes(b"\x00" * 64)
+
+        run_calls = []
+
+        class FakeWrapper:
+            def __init__(self, exe_path):
+                self.exe_path = exe_path
+
+            def run(self, *args, **kwargs):
+                run_calls.append(args)
+                result = MagicMock()
+                result.returncode = (
+                    1 if args[:3] == ("cpio", "ramdisk.cpio", "test") else 0
+                )
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+        dev = MagicMock()
+        dev.skip_adb = False
+
+        with (
+            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
+            patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
+        ):
+            result = patch_magisk_boot(
+                work_dir=work_dir,
+                magiskboot_exe=tmp_path / "magiskboot.exe",
+                dev=dev,
+            )
+
+        assert result is None
+        assert ("cpio", "ramdisk.cpio", "restore") not in run_calls
+        dev.adb.reboot.assert_called_once_with("system")
+
+    def test_magisk_init_boot_patch_does_not_run_dtb_patch_steps(self, tmp_path):
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        (work_dir / "init_boot.img").write_bytes(b"\x00" * 64)
+        (work_dir / "ramdisk.cpio").write_bytes(b"\x00" * 64)
+        (work_dir / "magisk").write_bytes(b"\x00" * 64)
+        (work_dir / "stub.apk").write_bytes(b"\x00" * 64)
+        (work_dir / "init-ld").write_bytes(b"\x00" * 64)
+        (work_dir / "dtb").write_bytes(b"\x00" * 64)
+        (work_dir / "kernel_dtb").write_bytes(b"\x00" * 64)
+        (work_dir / "extra").write_bytes(b"\x00" * 64)
+
+        run_calls = []
+
+        class FakeWrapper:
+            def __init__(self, exe_path):
+                self.exe_path = exe_path
+
+            def run(self, *args, **kwargs):
+                run_calls.append(args)
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                if args[:2] == ("sha1", "init_boot.img"):
+                    result.stdout = "deadbeef\n"
+                if args[:2] == ("repack", "init_boot.img"):
+                    (work_dir / "new-boot.img").write_bytes(b"\x00" * 64)
+                return result
+
+        dev = MagicMock()
+        dev.skip_adb = False
+
+        with (
+            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
+            patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
+            patch(
+                "ltbox.patch.root._resolve_magisk_preinit_device", return_value="sda13"
+            ),
+        ):
+            result = patch_magisk_boot(
+                work_dir=work_dir,
+                magiskboot_exe=tmp_path / "magiskboot.exe",
+                dev=dev,
+            )
+
+        assert result == tmp_path / "init_boot_patched.img"
+        assert not any(call and call[0] == "dtb" for call in run_calls)
+
+    def test_magisk_cpio_patch_keeps_helper_env(self, tmp_path):
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        for name in [
+            "init_boot.img",
+            "ramdisk.cpio",
+            "magisk",
+            "stub.apk",
+            "init-ld",
+            "magiskinit",
+        ]:
+            (work_dir / name).write_bytes(b"\x00" * 64)
+
+        captured_env = None
+
+        class FakeWrapper:
+            def __init__(self, exe_path):
+                self.exe_path = exe_path
+
+            def run(self, *args, **kwargs):
+                nonlocal captured_env
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                if args[:2] == ("sha1", "init_boot.img"):
+                    result.stdout = "deadbeef\n"
+                if args[:2] == ("cpio", "ramdisk.cpio"):
+                    captured_env = kwargs.get("env", {})
+                if args[:2] == ("repack", "init_boot.img"):
+                    (work_dir / "new-boot.img").write_bytes(b"\x00" * 64)
+                return result
+
+        helper_path = tmp_path / "bin" / "tools" / "magiskboot_xz_helper.exe"
+        helper_path.parent.mkdir(parents=True)
+        helper_path.write_text("stub", encoding="utf-8")
+
+        with (
+            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
+            patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
+            patch("ltbox.patch.root.utils.const.TOOLS_DIR", helper_path.parent),
+        ):
+            from ltbox import utils
+
+            utils._get_tool_env.cache_clear()
+            result = patch_magisk_boot(
+                work_dir=work_dir,
+                magiskboot_exe=tmp_path / "magiskboot.exe",
+                preinit_device="sda13",
+            )
+            utils._get_tool_env.cache_clear()
+
+        assert result == tmp_path / "init_boot_patched.img"
+        assert captured_env is not None
+        assert captured_env["MAGISKBOOT_RUST_XZ_HELPER"] == str(helper_path)
+        assert captured_env["KEEPVERITY"] == "true"
+        assert captured_env["KEEPFORCEENCRYPT"] == "true"
+
+    def test_vendor_ramdisk_fallback_is_not_used_for_magisk(self, tmp_path):
+        work_dir = tmp_path / "work"
+        work_dir.mkdir()
+        (work_dir / "init_boot.img").write_bytes(b"\x00" * 64)
+        vendor_dir = work_dir / "vendor_ramdisk"
+        vendor_dir.mkdir()
+        (vendor_dir / "init_boot.cpio").write_bytes(b"\x00" * 64)
+
+        class FakeWrapper:
+            def __init__(self, exe_path):
+                self.exe_path = exe_path
+
+            def run(self, *args, **kwargs):
+                result = MagicMock()
+                result.returncode = 0
+                result.stdout = ""
+                result.stderr = ""
+                return result
+
+        with (
+            patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
+            patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
+            patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
+        ):
+            result = patch_magisk_boot(
+                work_dir=work_dir,
+                magiskboot_exe=tmp_path / "magiskboot.exe",
+            )
+
+        assert result is None

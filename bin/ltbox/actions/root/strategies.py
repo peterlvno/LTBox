@@ -12,7 +12,7 @@ from ...patch.avb import (
     rebuild_vbmeta_with_chained_images,
     vbmeta_has_chain_partition,
 )
-from ...patch.root import patch_boot_with_root_algo
+from ...patch.root import patch_boot_with_root_algo, patch_magisk_boot
 from ...root_profiles import (
     RootProviderFamily,
     get_root_provider_profile,
@@ -21,6 +21,7 @@ from .downloads import (
     cleanup_manager_apk,
     download_apatch_resources,
     download_lkm_resources,
+    download_magisk_resources,
 )
 from .prompts import (
     StrategySourceSelection,
@@ -29,6 +30,7 @@ from .prompts import (
     prompt_kpm_selection,
     select_apatch_source,
     select_lkm_source,
+    select_magisk_source,
     wait_for_kpm_files,
 )
 
@@ -506,6 +508,145 @@ class APatchStrategy(GkiRootStrategy):
         )
 
 
+class MagiskRootStrategy(InitBootRootStrategy):
+    spec = RootStrategySpec(
+        image_name=const.FN_INIT_BOOT,
+        backup_name=const.FN_INIT_BOOT_BAK,
+        output_dir=const.OUTPUT_ROOT_LKM_DIR,
+        backup_dir=const.BACKUP_INIT_BOOT_DIR,
+        required_files=[const.FN_INIT_BOOT, const.FN_VBMETA],
+        main_partition="init_boot",
+        display_name="Magisk",
+        unroot_detect_msg_key="act_unroot_lkm_detected",
+        unroot_menu_msg_key="act_unroot_menu_2_lkm",
+        menu_shortcut="1",
+        patch_image_name="init_boot.img (Magisk)",
+        requires_kernel_version=False,
+    )
+
+    def __init__(self, root_type: str = "magisk"):
+        self.provider = get_root_provider_profile(root_type)
+        if self.provider.family != RootProviderFamily.MAGISK:
+            raise ValueError(f"Expected a Magisk-family provider, got: {root_type}")
+        self.is_nightly = False
+        self.workflow_id: Optional[str] = None
+        self.repo_config: Dict[str, Any] = {}
+        self.local_apk_path: Optional[Path] = None
+        self._resources_dirty = False
+        self._staging_dir = const.TOOLS_DIR / "magisk_staging"
+        self.preinit_device: str = ""
+
+    @property
+    def staging_dir(self) -> Path:
+        return self._staging_dir
+
+    @property
+    def payload_files(self) -> List[str]:
+        return ["magiskinit", "magisk", "init-ld", "stub.apk"]
+
+    @property
+    def root_type(self) -> str:
+        return self.provider.provider_id
+
+    def resolve_preinit_device(
+        self, dev: Optional[device.DeviceController] = None
+    ) -> None:
+        """Resolve PREINITDEVICE while ADB is still available."""
+        from ...patch.root import _resolve_magisk_preinit_device
+
+        self.preinit_device = _resolve_magisk_preinit_device(dev)
+
+    @property
+    def display_name(self) -> str:
+        return self.provider.display_name
+
+    @property
+    def patch_image_name(self) -> str:
+        return f"init_boot.img ({self.provider.display_name})"
+
+    def print_unroot_step(self, partition_map: Dict[str, str]) -> None:
+        utils.ui.echo(get_string("act_unroot_step4_lkm"))
+
+    def _apply_source_selection(self, selection: StrategySourceSelection) -> None:
+        self.repo_config = selection.repo_config
+        self.source_label = selection.source_label
+        self.is_nightly = selection.is_nightly
+        self.workflow_id = selection.workflow_id
+        self.local_apk_path = None
+        self._resources_dirty = True
+
+    def configure_source(self, breadcrumbs: Optional[str] = None) -> Union[bool, Any]:
+        if self.provider.local_apk_only:
+            cleanup_manager_apk()
+            custom_apk = _prompt_custom_magisk_apk()
+            if custom_apk is None:
+                return False
+            if custom_apk == "main":  # type: ignore
+                from ...menus.router import RouteResult
+
+                return RouteResult.MAIN
+            self.repo_config = {}
+            self.source_label = custom_apk.name
+            self.is_nightly = False
+            self.workflow_id = None
+            self.local_apk_path = custom_apk
+            self._resources_dirty = True
+            return True
+
+        selection = select_magisk_source(
+            self.provider.provider_id, breadcrumbs=breadcrumbs
+        )
+        if selection is None:
+            return False
+        if selection == "main":  # type: ignore
+            from ...menus.router import RouteResult
+
+            return RouteResult.MAIN
+        self._apply_source_selection(selection)
+        return True
+
+    def download_resources(self, kernel_version: Optional[str] = None) -> bool:
+        ok = download_magisk_resources(
+            profile=self.provider,
+            staging_dir=self.staging_dir,
+            repo_config=self.repo_config,
+            is_nightly=self.is_nightly,
+            workflow_id=self.workflow_id,
+            local_apk_path=self.local_apk_path,
+        )
+        if ok:
+            self._resources_dirty = False
+        return ok
+
+    def patch(
+        self,
+        work_dir: Path,
+        dev: Optional[device.DeviceController] = None,
+        lkm_kernel_version: Optional[str] = None,
+    ) -> Optional[Path]:
+        magiskboot_exe = const.MAGISKBOOT_EXE
+
+        # Backup
+        init_boot_source = work_dir / self.image_name
+        init_boot_backup = const.BASE_DIR / self.backup_name
+        if init_boot_source.exists() and not init_boot_backup.exists():
+            shutil.copy(init_boot_source, init_boot_backup)
+
+        # Ensure payload files are staged
+        if self._resources_dirty or not all(
+            (self.staging_dir / name).exists() for name in self.payload_files
+        ):
+            if not self.download_resources():
+                return None
+
+        for name in self.payload_files:
+            shutil.copy(self.staging_dir / name, work_dir / name)
+
+        return patch_magisk_boot(
+            work_dir, magiskboot_exe, dev=dev, preinit_device=self.preinit_device
+        )
+
+
 class LkmRootStrategy(InitBootRootStrategy):
     spec = RootStrategySpec(
         image_name=const.FN_INIT_BOOT,
@@ -672,8 +813,123 @@ def _extract_manager_apk_from_zip(zip_path: Path) -> None:
         pass
 
 
+def _custom_magisk_apk_dirs() -> List[Path]:
+    return [const.MAGISK_DIR]
+
+
+def _list_custom_magisk_apks() -> List[Path]:
+    const.MAGISK_DIR.mkdir(parents=True, exist_ok=True)
+
+    candidates: Dict[Path, Path] = {}
+    for directory in _custom_magisk_apk_dirs():
+        if not directory.exists():
+            continue
+        for apk_path in sorted(directory.glob("*.apk")):
+            if apk_path.name.lower() == "manager.apk":
+                continue
+            candidates.setdefault(apk_path.resolve(), apk_path)
+
+    return sorted(
+        candidates.values(),
+        key=lambda path: (
+            0 if path.parent == const.MAGISK_DIR else 1,
+            str(path).lower(),
+        ),
+    )
+
+
+def _display_custom_magisk_apk(apk_path: Path) -> str:
+    if apk_path.parent == const.MAGISK_DIR:
+        return apk_path.name
+    try:
+        return str(apk_path.relative_to(const.BASE_DIR))
+    except ValueError:
+        return apk_path.name
+
+
+def _prompt_custom_magisk_apk() -> Optional[Path]:
+    apks = _list_custom_magisk_apks()
+    if apks:
+        selected = _select_custom_magisk_apk(apks)
+        if selected is not None:
+            return selected
+        return None
+
+    utils.ui.echo("")
+    utils.ui.echo(get_string("magisk_local_apk_place"))
+    utils.ui.echo(get_string("act_file_location").format(path=const.MAGISK_DIR))
+
+    while True:
+        try:
+            input(get_string("magisk_local_apk_press_enter"))
+        except (KeyboardInterrupt, EOFError):
+            utils.ui.warn(get_string("magisk_local_apk_cancelled"))
+            return None
+
+        apks = _list_custom_magisk_apks()
+        if not apks:
+            utils.ui.warn(
+                get_string("magisk_local_apk_no_files").format(path=const.MAGISK_DIR)
+            )
+            continue
+
+        selected = _select_custom_magisk_apk(apks)
+        if selected is not None:
+            return selected
+
+
+def _select_custom_magisk_apk(apks: List[Path]) -> Optional[Path]:
+    if not apks:
+        return None
+
+    if len(apks) == 1:
+        utils.ui.echo(
+            get_string("magisk_local_apk_selected").format(
+                filename=_display_custom_magisk_apk(apks[0])
+            )
+        )
+        return apks[0]
+
+    from ...menus.terminal import TerminalMenu
+
+    menu = TerminalMenu(get_string("magisk_local_apk_select_title"))
+    apk_map: Dict[str, Path] = {}
+    for i, apk_path in enumerate(apks, 1):
+        key = str(i)
+        apk_map[key] = apk_path
+        menu.add_option(key, _display_custom_magisk_apk(apk_path))
+
+    menu.add_separator()
+    menu.add_option("c", get_string("cancel"))
+    menu.add_option("m", get_string("menu_root_m"))
+
+    choice = menu.ask(
+        get_string("prompt_select"),
+        get_string("err_invalid_selection"),
+    )
+
+    if choice == "c" or choice is None:
+        utils.ui.warn(get_string("magisk_local_apk_cancelled"))
+        return None
+    if choice == "m":
+        return "main"  # type: ignore
+
+    selected = apk_map.get(choice)
+    if selected:
+        utils.ui.echo(
+            get_string("magisk_local_apk_selected").format(
+                filename=_display_custom_magisk_apk(selected)
+            )
+        )
+        return selected
+
+    return None
+
+
 def get_root_strategy(gki: bool, root_type: str = "ksu") -> RootStrategy:
     provider = get_root_provider_profile(root_type)
+    if provider.family == RootProviderFamily.MAGISK:
+        return MagiskRootStrategy(provider.provider_id)
     if provider.family == RootProviderFamily.APATCH:
         return APatchStrategy(provider.provider_id)
     if gki:

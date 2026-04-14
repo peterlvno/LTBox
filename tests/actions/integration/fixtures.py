@@ -9,6 +9,7 @@ import pytest
 
 _REAL_TOOLS_DIR = Path(__file__).resolve().parents[3] / "bin" / "tools"
 MAGISKBOOT_PATH = _REAL_TOOLS_DIR / "magiskboot.exe"
+MAGISKBOOT_XZ_HELPER_PATH = _REAL_TOOLS_DIR / "magiskboot_xz_helper.exe"
 KPTOOLS_PATH = _REAL_TOOLS_DIR / "kptools.exe"
 
 
@@ -65,6 +66,8 @@ def _copy_bundled_magiskboot(tools_dir: Path) -> Path:
 
     magiskboot_exe = tools_dir / "magiskboot.exe"
     shutil.copy(MAGISKBOOT_PATH, magiskboot_exe)
+    if MAGISKBOOT_XZ_HELPER_PATH.exists():
+        shutil.copy(MAGISKBOOT_XZ_HELPER_PATH, tools_dir / "magiskboot_xz_helper.exe")
     for dll_file in MAGISKBOOT_PATH.parent.glob("*.dll"):
         shutil.copy(dll_file, tools_dir / dll_file.name)
     return magiskboot_exe

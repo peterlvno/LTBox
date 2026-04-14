@@ -748,3 +748,127 @@ def _extract_apatch_kpimg(apk_path: Path, target_dir: Path):
 
     manager_apk = const.TOOLS_DIR / "manager.apk"
     shutil.copy(apk_path, manager_apk)
+
+
+# -- Magisk APK download & binary extraction --
+
+_MAGISK_APK_BINARIES = {
+    "lib/arm64-v8a/libmagiskinit.so": "magiskinit",
+    "lib/arm64-v8a/libmagisk.so": "magisk",
+    "lib/arm64-v8a/libinit-ld.so": "init-ld",
+}
+
+_MAGISK_APK_ASSETS = {
+    "assets/stub.apk": "stub.apk",
+}
+
+
+def prepare_magisk_apk(apk_path: Path, target_dir: Path) -> None:
+    _extract_magisk_binaries(apk_path, target_dir)
+
+    manager_apk = const.TOOLS_DIR / "manager.apk"
+    shutil.copy(apk_path, manager_apk)
+
+
+def download_magisk_release(
+    target_dir: Path,
+    repo: str = "",
+    tag: str = "latest",
+    name: str = "Magisk",
+) -> None:
+    apk_path = target_dir / f"{name.replace(' ', '_')}.apk"
+    repo = repo or "topjohnwu/Magisk"
+
+    with utils.ui.status(get_string("dl_apatch_stable_downloading").format(name=name)):
+        _download_and_move_github_asset(
+            f"https://github.com/{repo}",
+            tag,
+            r"^(?!.*app-debug).*\.apk$",
+            apk_path,
+        )
+
+    utils.ui.echo(get_string("dl_download_success").format(filename=apk_path.name))
+    prepare_magisk_apk(apk_path, target_dir)
+
+
+def download_magisk_nightly(
+    workflow_id: str,
+    target_dir: Path,
+    repo: str = "",
+    workflow_file: str = "",
+    branch: Optional[str] = None,
+    name: str = "Magisk",
+) -> None:
+    repo = repo or "topjohnwu/Magisk"
+    artifact_names = _get_matching_workflow_artifacts(
+        repo,
+        workflow_id,
+        workflow_file=workflow_file,
+        branch=branch,
+    )
+
+    # Look for an APK-producing artifact
+    target_artifact = None
+    for name in artifact_names:
+        lower = name.lower()
+        if "app-release" in lower or "magisk" in lower or "apk" in lower:
+            target_artifact = name
+            break
+    if not target_artifact and artifact_names:
+        target_artifact = artifact_names[0]
+    if not target_artifact:
+        raise ToolError(
+            get_string("dl_err_apatch_artifact_missing").format(
+                name=name, workflow_id=workflow_id, artifacts=artifact_names
+            )
+        )
+
+    download_name = _artifact_download_name(target_artifact)
+    base_url = f"https://nightly.link/{repo}/actions/runs/{workflow_id}/{download_name}"
+    temp_zip = target_dir / download_name
+
+    with utils.ui.status(
+        get_string("dl_apatch_nightly_downloading").format(
+            name=name, workflow_id=workflow_id
+        )
+    ):
+        try:
+            download_resource(base_url, temp_zip)
+            apk_path = target_dir / f"{name.replace(' ', '_')}.apk"
+            with zipfile.ZipFile(temp_zip, "r") as zf:
+                namelist = zf.namelist()
+                apk_member = None
+                for candidate in ["apk-ng-release.apk", "app-release.apk"]:
+                    if candidate in namelist:
+                        apk_member = candidate
+                        break
+                if not apk_member:
+                    apk_member = next((m for m in namelist if m.endswith(".apk")), None)
+                if not apk_member:
+                    raise ToolError(get_string("dl_err_apatch_apk_missing_in_nightly"))
+                with zf.open(apk_member) as src, open(apk_path, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+        finally:
+            _cleanup_files(temp_zip)
+
+    utils.ui.echo(
+        get_string("dl_download_success").format(filename=f"{target_artifact}.apk")
+    )
+    prepare_magisk_apk(apk_path, target_dir)
+
+
+def _extract_magisk_binaries(apk_path: Path, target_dir: Path) -> None:
+    utils.ui.echo(get_string("magisk_extracting_apk"))
+    with zipfile.ZipFile(apk_path, "r") as zf:
+        for zip_path, out_name in {
+            **_MAGISK_APK_BINARIES,
+            **_MAGISK_APK_ASSETS,
+        }.items():
+            out_file = target_dir / out_name
+            try:
+                with zf.open(zip_path) as src, open(out_file, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            except KeyError:
+                raise ToolError(
+                    get_string("magisk_extract_missing").format(name=zip_path)
+                )

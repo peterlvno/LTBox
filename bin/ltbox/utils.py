@@ -80,6 +80,9 @@ def _get_tool_env() -> dict:
     env = os.environ.copy()
     paths = [str(const.TOOLS_DIR)]
     env["PATH"] = os.pathsep.join(paths) + os.pathsep + env["PATH"]
+    magiskboot_xz_helper = const.TOOLS_DIR / "magiskboot_xz_helper.exe"
+    if magiskboot_xz_helper.exists():
+        env["MAGISKBOOT_RUST_XZ_HELPER"] = str(magiskboot_xz_helper)
     return env
 
 

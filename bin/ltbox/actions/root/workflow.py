@@ -252,6 +252,13 @@ def patch_and_flash_root(
         wait_for_adb=True,
     )
 
+    # Resolve PREINITDEVICE while ADB is still available
+    if hasattr(session.strategy, "resolve_preinit_device"):
+        if dev.skip_adb:
+            utils.ui.error(get_string("magisk_err_skip_adb_required"))
+            return
+        session.strategy.resolve_preinit_device(dev)
+
     if not _patch_root_from_folder(
         session.strategy,
         session.gki,
@@ -473,6 +480,13 @@ def root_device(
         strategy=strategy,
         wait_for_adb=True,
     )
+
+    # Resolve PREINITDEVICE while ADB is still available (before EDL dump)
+    if hasattr(session.strategy, "resolve_preinit_device"):
+        if dev.skip_adb:
+            utils.ui.error(get_string("magisk_err_skip_adb_required"))
+            return
+        session.strategy.resolve_preinit_device(dev)
 
     if not session.strategy.download_resources(session.lkm_kernel_version):
         utils.ui.error(get_string("err_download_resources_abort"))
@@ -710,7 +724,6 @@ def _install_manager_apk(
         utils.ui.echo("-" * width + "\n")
         return True
 
-    utils.ui.echo(get_string("act_wait_sys_adb"))
     try:
         dev.adb.wait_for_device()
         dev.adb.install(manager_apk)

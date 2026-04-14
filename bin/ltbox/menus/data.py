@@ -205,17 +205,43 @@ def get_root_variants_menu_data() -> List[MenuItem]:
         MenuSpec(
             "option",
             key="1",
+            text=lambda: get_string("menu_root_variants_magisk"),
+            action="magisk_variants",
+        ),
+        MenuSpec(
+            "option",
+            key="2",
             text=lambda: get_string("menu_root_variants_ksu"),
             action="ksu_variants",
         ),
         MenuSpec(
             "option",
-            key="2",
+            key="3",
             text=lambda: get_string("menu_root_variants_apatch"),
             action="apatch_variants",
         ),
         MenuSpec("separator"),
         *_navigation_specs(include_back=True),
+    ]
+    return _build_menu(specs)
+
+
+def get_root_magisk_variants_menu_data() -> List[MenuItem]:
+    specs = [
+        MenuSpec(
+            "option",
+            key="1",
+            text=lambda: "Magisk",
+            action="magisk",
+        ),
+        MenuSpec(
+            "option",
+            key="2",
+            text=lambda: get_string("menu_root_magisk_other"),
+            action="other_forks",
+        ),
+        MenuSpec("separator"),
+        *_navigation_specs(include_back=True, include_return=True),
     ]
     return _build_menu(specs)
 

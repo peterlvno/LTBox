@@ -5,3 +5,6 @@
 	path = vendor/avb
 	url = https://android.googlesource.com/platform/external/avb
 	branch = refs/heads/main-kernel
+[submodule "vendor/MagiskbootAlone"]
+	path = vendor/MagiskbootAlone
+	url = https://github.com/miner7222/MagiskbootAlone.git

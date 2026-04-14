@@ -228,6 +228,16 @@ def select_apatch_source(
     return _select_profile_source(profile, breadcrumbs)
 
 
+def select_magisk_source(
+    root_type: str,
+    breadcrumbs: Optional[str] = None,
+) -> Optional[StrategySourceSelection]:
+    profile = get_root_provider_profile(root_type)
+    if profile.family != RootProviderFamily.MAGISK:
+        raise ValueError(f"Expected a Magisk-family provider, got: {root_type}")
+    return _select_profile_source(profile, breadcrumbs)
+
+
 def select_lkm_source(
     root_type: str,
     breadcrumbs: Optional[str] = None,

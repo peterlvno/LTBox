@@ -14,6 +14,7 @@ from ltbox.downloader import (
     download_apatch_nightly,
     download_ksuinit_release,
     download_nightly_artifacts,
+    prepare_magisk_apk,
     extract_kernel_from_anykernel3_zip,
     extract_archive_files,
 )
@@ -305,3 +306,26 @@ def test_download_nightly_artifacts_validates_artifacts_before_download(tmp_path
             )
 
     download_resource.assert_not_called()
+
+
+def test_prepare_magisk_apk_extracts_payloads_and_copies_manager(tmp_path):
+    apk_path = tmp_path / "MagiskAlpha.apk"
+    tools_dir = tmp_path / "tools"
+    target_dir = tmp_path / "staging"
+    target_dir.mkdir()
+    tools_dir.mkdir()
+
+    with zipfile.ZipFile(apk_path, "w") as archive:
+        archive.writestr("lib/arm64-v8a/libmagiskinit.so", b"magiskinit")
+        archive.writestr("lib/arm64-v8a/libmagisk.so", b"magisk64")
+        archive.writestr("lib/arm64-v8a/libinit-ld.so", b"init-ld")
+        archive.writestr("assets/stub.apk", b"stub")
+
+    with patch("ltbox.downloader.const.TOOLS_DIR", tools_dir):
+        prepare_magisk_apk(apk_path, target_dir)
+
+    assert (target_dir / "magiskinit").read_bytes() == b"magiskinit"
+    assert (target_dir / "magisk").read_bytes() == b"magisk64"
+    assert (target_dir / "init-ld").read_bytes() == b"init-ld"
+    assert (target_dir / "stub.apk").read_bytes() == b"stub"
+    assert (tools_dir / "manager.apk").read_bytes() == apk_path.read_bytes()

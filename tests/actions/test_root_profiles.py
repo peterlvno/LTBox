@@ -9,6 +9,7 @@ def test_root_provider_profiles_pin_nightly_workflow_file_and_branch():
         "resukisu": ("build-manager.yml", "main"),
         "apatch": ("build.yml", "main"),
         "folkpatch": ("build.yml", "main"),
+        "magisk": ("ci.yml", "master"),
     }
 
     for provider_id, (workflow_file, branch) in expected.items():

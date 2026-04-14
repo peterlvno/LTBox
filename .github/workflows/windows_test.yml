@@ -18,8 +18,52 @@ jobs:
     with:
       task: architecture
 
+  build-tools:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+
+      - name: Setup Python & Dependencies
+        uses: ./.github/actions/setup-python-deps
+        with:
+          python-version: '3.14'
+
+      - name: Cache and Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          install: gcc cmake make zlib-devel git
+          cache: true
+
+      - name: Cache Compiled Tools
+        uses: actions/cache@v5
+        with:
+          path: bin/tools
+          key: tools-bin-v4-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vendor/MagiskbootAlone/**', 'tests/scripts/build_tools.py', 'tests/scripts/cache_fw.py', 'bin/ltbox/config.json', '.github/ci-tools.json', '.github/actions/setup-fw-env/action.yml', '.github/workflows/windows_test.yml') }}
+          restore-keys: |
+            tools-bin-v4-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Build magiskboot
+        run: python tests/scripts/build_tools.py
+
+      - name: Bundle CI tools
+        run: python .github/scripts/release/bundle-tools.py
+
+      - name: Upload tools artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tools-exe
+          path: |
+            bin/tools/magiskboot.exe
+            bin/tools/magiskboot_xz_helper.exe
+            bin/tools/openssl.exe
+            bin/tools/*.dll
+
   integration-test:
-    needs: unit-test
+    needs: [unit-test, build-tools]
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -46,33 +90,12 @@ jobs:
           fw-password: ${{ secrets.TEST_FW_PASSWORD }}
           fw-url: ${{ secrets.TEST_FW_URL }}
 
-      - name: Cache and Setup MSYS2
-        uses: msys2/setup-msys2@v2
+      - name: Download tools artifact
+        uses: actions/download-artifact@v8
         with:
-          msystem: MSYS
-          install: gcc cmake make zlib-devel git
-          cache: true
-
-      - name: Cache Compiled Tools
-        uses: actions/cache@v5
-        with:
+          name: tools-exe
           path: bin/tools
-          key: tools-bin-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/scripts/build_tools.py', 'tests/scripts/cache_fw.py', 'bin/ltbox/config.json', '.github/ci-tools.json', '.github/actions/setup-fw-env/action.yml', '.github/workflows/windows_test.yml') }}
-          restore-keys: |
-            tools-bin-v2-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Bundle CI tools
-        run: python .github/scripts/release/bundle-tools.py
 
       - name: Run Integration Tests
         run: |
           pytest -s tests/ -m integration --run-integration --cov=bin/ltbox --cov-report=term-missing
-
-      - name: Upload tools artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: tools-exe
-          path: |
-            bin/tools/magiskboot.exe
-            bin/tools/openssl.exe
-            bin/tools/*.dll

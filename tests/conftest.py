@@ -1,3 +1,4 @@
+import os
 import sys
 import pytest
 from pathlib import Path
@@ -8,6 +9,11 @@ from tests.actions.integration.fixtures import firmware_file_getter  # noqa: F40
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN_PATH = ROOT / "bin"
+INTEGRATION_TOOL_FILES = (
+    "magiskboot.exe",
+    "magiskboot_xz_helper.exe",
+    "openssl.exe",
+)
 
 if str(BIN_PATH) not in sys.path:
     sys.path.insert(0, str(BIN_PATH))
@@ -40,9 +46,18 @@ def pytest_collection_modifyitems(config, items):
                 item.add_marker(skip_integration)
 
 
+def _integration_tools_ready() -> bool:
+    tools_dir = ROOT / "bin" / "tools"
+    return all((tools_dir / name).exists() for name in INTEGRATION_TOOL_FILES)
+
+
 @pytest.fixture(scope="session")
 def integration_tools(request):
     if not request.config.getoption("--run-integration"):
+        return
+
+    if os.environ.get("LTBOX_FORCE_TOOL_BUILD") != "1" and _integration_tools_ready():
+        print("\n[INFO] Using prebuilt tools from bin/tools.", flush=True)
         return
 
     print("\n[INFO] Setting up external tools for integration tests...", flush=True)

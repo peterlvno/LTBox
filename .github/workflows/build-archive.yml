@@ -56,6 +56,7 @@ jobs:
           $requiredFiles = @(
             'bin/tools/qdl-rs.exe',
             'bin/tools/magiskboot.exe',
+            'bin/tools/magiskboot_xz_helper.exe',
             'bin/tools/adb.exe',
             'bin/tools/fastboot.exe',
             'bin/tools/avbtool.py',

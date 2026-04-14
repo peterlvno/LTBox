@@ -42,6 +42,11 @@
     "tag": "latest",
     "workflow": ""
   },
+  "magisk": {
+    "repo": "topjohnwu/Magisk",
+    "tag": "latest",
+    "workflow": ""
+  },
   "edl": {
     "loader_filename": "xbl_s_devprg_ns.melf"
   },
