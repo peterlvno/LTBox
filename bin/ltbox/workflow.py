@@ -168,7 +168,7 @@ def _dump_images(ctx: TaskContext) -> None:
     if (not ctx.skip_dp_workflow) or extra_dumps:
         actions.dump_partitions(
             dev=ctx.dev,
-            skip_reset=False,
+            skip_reset=True,
             additional_targets=extra_dumps,
             default_targets=not ctx.skip_dp_workflow,
         )
@@ -226,10 +226,13 @@ def _check_and_patch_arb(ctx: TaskContext) -> None:
 
 
 def _flash_images(ctx: TaskContext) -> None:
+    # Skip programmer loading if we just dumped partitions and stayed in EDL
+    skip_reset_edl = not ctx.skip_dp_workflow or ctx.tb320fc_arb_fallback
     skip_dp = ctx.skip_dp_flash or (ctx.skip_dp_workflow and not ctx.use_backup_dp)
+
     actions.flash_full_firmware(
         dev=ctx.dev,
-        skip_reset_edl=True,
+        skip_reset_edl=skip_reset_edl,
         skip_dp=skip_dp,
         wipe=bool(ctx.wipe),
     )
