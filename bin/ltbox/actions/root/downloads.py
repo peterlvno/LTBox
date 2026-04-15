@@ -242,8 +242,8 @@ def download_lkm_resources(
             staging_dir=staging_dir,
             repo_config=repo_config,
             workflow_id=resolved_workflow_id,
-            workflow_file=profile.workflow_file,
-            branch=profile.nightly_branch,
+            workflow_file=profile.workflow_file if is_nightly else "",
+            branch=profile.nightly_branch if is_nightly else None,
             kernel_version=kernel_version,
             download_all_ksuinit=is_tagged_build,
         )
