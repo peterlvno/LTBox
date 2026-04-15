@@ -115,14 +115,28 @@ def apply_avb_integrity_footer(
         )
     )
 
+    image_size = image_path.stat().st_size
+    partition_size = int(image_info["partition_size"])
+    # AOSP avbtool requires partition_size to be block-aligned and reserves
+    # MAX_VBMETA_SIZE (64 KiB) + MAX_FOOTER_SIZE (4 KiB) = 69632 bytes.
+    # Fall back to --dynamic_partition_size when these constraints are not met.
+    _BLOCK_SIZE = 4096
+    _MAX_METADATA = 65536 + 4096
+    use_dynamic = (
+        partition_size % _BLOCK_SIZE != 0 or image_size + _MAX_METADATA > partition_size
+    )
+
     cmd: List[Any] = [
         "add_hash_footer",
         "--image",
         image_path,
         "--algorithm",
         image_info["algorithm"],
-        "--partition_size",
-        image_info["partition_size"],
+        *(
+            ["--dynamic_partition_size"]
+            if use_dynamic
+            else ["--partition_size", partition_size]
+        ),
         "--partition_name",
         image_info["name"],
         "--rollback_index",
