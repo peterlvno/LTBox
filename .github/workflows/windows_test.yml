@@ -21,51 +21,11 @@ jobs:
   build-avbtool-rs:
     uses: ./.github/workflows/build-avbtool-rs.yml
 
-  build-tools:
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: true
-
-      - name: Setup Python & Dependencies
-        uses: ./.github/actions/setup-python-deps
-        with:
-          python-version: '3.14'
-
-      - name: Cache and Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MSYS
-          install: gcc cmake make zlib-devel git
-          cache: true
-
-      - name: Cache Compiled Tools
-        uses: actions/cache@v5
-        with:
-          path: bin/tools
-          key: tools-bin-v4-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('vendor/MagiskbootAlone/**', 'tests/scripts/build_tools.py', 'tests/scripts/cache_fw.py', 'bin/ltbox/config.json', '.github/ci-tools.json', '.github/actions/setup-fw-env/action.yml', '.github/workflows/windows_test.yml') }}
-          restore-keys: |
-            tools-bin-v4-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Build magiskboot
-        run: python tests/scripts/build_tools.py
-
-      - name: Bundle CI tools
-        run: python .github/scripts/release/bundle-tools.py
-
-      - name: Upload tools artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: tools-exe
-          path: |
-            bin/tools/magiskboot.exe
-            bin/tools/magiskboot_xz_helper.exe
-            bin/tools/*.dll
+  build-magiskboot-rs:
+    uses: ./.github/workflows/build-magiskboot-rs.yml
 
   integration-test:
-    needs: [unit-test, build-tools, build-avbtool-rs]
+    needs: [unit-test, build-magiskboot-rs, build-avbtool-rs]
     runs-on: windows-latest
     timeout-minutes: 30
     env:
@@ -92,10 +52,10 @@ jobs:
           fw-password: ${{ secrets.TEST_FW_PASSWORD }}
           fw-url: ${{ secrets.TEST_FW_URL }}
 
-      - name: Download tools artifact
+      - name: Download magiskboot-rs artifact
         uses: actions/download-artifact@v8
         with:
-          name: tools-exe
+          name: magiskboot-rs-windows
           path: bin/tools
 
       - name: Download avbtool-rs artifact

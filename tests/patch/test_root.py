@@ -464,7 +464,7 @@ class TestPatchMagiskBoot:
         assert result == tmp_path / "init_boot_patched.img"
         assert not any(call and call[0] == "dtb" for call in run_calls)
 
-    def test_magisk_cpio_patch_keeps_helper_env(self, tmp_path):
+    def test_magisk_cpio_patch_passes_env_vars(self, tmp_path):
         work_dir = tmp_path / "work"
         work_dir.mkdir()
         for name in [
@@ -497,16 +497,15 @@ class TestPatchMagiskBoot:
                     (work_dir / "new-boot.img").write_bytes(b"\x00" * 64)
                 return result
 
-        helper_path = tmp_path / "bin" / "tools" / "magiskboot_xz_helper.exe"
-        helper_path.parent.mkdir(parents=True)
-        helper_path.write_text("stub", encoding="utf-8")
+        tools_dir = tmp_path / "bin" / "tools"
+        tools_dir.mkdir(parents=True)
 
         with (
             patch("ltbox.patch.root.const.BASE_DIR", tmp_path),
             patch("ltbox.patch.root.const.FN_INIT_BOOT", "init_boot.img"),
             patch("ltbox.patch.root.const.FN_INIT_BOOT_ROOT", "init_boot_patched.img"),
             patch("ltbox.patch.root.utils.MagiskBootWrapper", FakeWrapper),
-            patch("ltbox.patch.root.utils.const.TOOLS_DIR", helper_path.parent),
+            patch("ltbox.patch.root.utils.const.TOOLS_DIR", tools_dir),
         ):
             from ltbox import utils
 
@@ -520,7 +519,6 @@ class TestPatchMagiskBoot:
 
         assert result == tmp_path / "init_boot_patched.img"
         assert captured_env is not None
-        assert captured_env["MAGISKBOOT_RUST_XZ_HELPER"] == str(helper_path)
         assert captured_env["KEEPVERITY"] == "true"
         assert captured_env["KEEPFORCEENCRYPT"] == "true"
 
