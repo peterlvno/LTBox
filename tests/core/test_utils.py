@@ -12,24 +12,7 @@ from ltbox.process_runner import CommandResult, CommandRunner, RunOptions
 
 
 class TestUtils:
-    def test_get_tool_env_sets_magiskboot_helper_when_present(self, tmp_path):
-        tools_dir = tmp_path / "tools"
-        tools_dir.mkdir()
-        helper = tools_dir / "magiskboot_xz_helper.exe"
-        helper.write_text("stub", encoding="utf-8")
-
-        utils._get_tool_env.cache_clear()
-        with (
-            patch("ltbox.utils.const.TOOLS_DIR", tools_dir),
-            patch.dict("ltbox.utils.os.environ", {"PATH": "C:\\base"}, clear=True),
-        ):
-            env = utils._get_tool_env()
-
-        assert env["MAGISKBOOT_RUST_XZ_HELPER"] == str(helper)
-        assert env["PATH"].split(";")[0] == str(tools_dir)
-        utils._get_tool_env.cache_clear()
-
-    def test_get_tool_env_skips_magiskboot_helper_when_missing(self, tmp_path):
+    def test_get_tool_env_prepends_tools_dir_to_path(self, tmp_path):
         tools_dir = tmp_path / "tools"
         tools_dir.mkdir()
 
@@ -40,7 +23,6 @@ class TestUtils:
         ):
             env = utils._get_tool_env()
 
-        assert "MAGISKBOOT_RUST_XZ_HELPER" not in env
         assert env["PATH"].split(";")[0] == str(tools_dir)
         utils._get_tool_env.cache_clear()
 

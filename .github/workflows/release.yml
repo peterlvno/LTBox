@@ -23,6 +23,9 @@ jobs:
   build-avbtool-rs:
     uses: ./.github/workflows/build-avbtool-rs.yml
 
+  build-magiskboot-rs:
+    uses: ./.github/workflows/build-magiskboot-rs.yml
+
   preflight:
     needs: test
     runs-on: windows-latest
@@ -50,7 +53,7 @@ jobs:
           "- Config version matches tag ?" >> $env:GITHUB_STEP_SUMMARY
 
   build:
-    needs: [preflight, build-qdlrs, build-avbtool-rs]
+    needs: [preflight, build-qdlrs, build-avbtool-rs, build-magiskboot-rs]
     uses: ./.github/workflows/build-archive.yml
     with:
       tag-name: ${{ needs.preflight.outputs.tag_name }}

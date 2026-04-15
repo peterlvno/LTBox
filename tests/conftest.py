@@ -9,10 +9,7 @@ from tests.actions.integration.fixtures import firmware_file_getter  # noqa: F40
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN_PATH = ROOT / "bin"
-INTEGRATION_TOOL_FILES = (
-    "magiskboot.exe",
-    "magiskboot_xz_helper.exe",
-)
+INTEGRATION_TOOL_FILES = ("magiskboot.exe",)
 
 if str(BIN_PATH) not in sys.path:
     sys.path.insert(0, str(BIN_PATH))

@@ -1,9 +1,9 @@
 [submodule "vendor/qdlrs"]
 	path = vendor/qdlrs
 	url = https://github.com/miner7222/qdlrs.git
-[submodule "vendor/MagiskbootAlone"]
-	path = vendor/MagiskbootAlone
-	url = https://github.com/miner7222/MagiskbootAlone.git
 [submodule "vendor/avbtool-rs"]
 	path = vendor/avbtool-rs
 	url = https://github.com/miner7222/avbtool-rs
+[submodule "vendor/magiskboot-rs"]
+	path = vendor/magiskboot-rs
+	url = https://github.com/miner7222/magiskboot-rs
