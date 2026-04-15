@@ -293,6 +293,8 @@ def flash_selected_partitions(
     utils.ui.clear()
 
     slot_suffix = _resolve_selected_partition_slot(selected_bases, partition_groups)
+    utils.ui.clear()
+
     flash_targets = _build_selected_partition_flash_targets(
         selected_bases,
         partition_groups,
