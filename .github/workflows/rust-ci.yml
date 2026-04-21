@@ -45,7 +45,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust (stable + fmt + clippy)
         uses: dtolnay/rust-toolchain@stable
@@ -84,7 +84,7 @@ jobs:
         shell: pwsh
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up MSVC for ${{ matrix.msvc_arch }}
         uses: ilammy/msvc-dev-cmd@v1
@@ -170,7 +170,7 @@ jobs:
           "zip=$zipName" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}-${{ steps.meta.outputs.tag }}
           path: |
@@ -188,7 +188,7 @@ jobs:
       contents: write
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
