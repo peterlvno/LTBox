@@ -115,15 +115,21 @@ jobs:
           "is_release=${{ startsWith(github.ref, 'refs/tags/v') }}" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: cargo build --release
-        # Cross-compile quirk: msvc-dev-cmd puts the ARM64 LLVM shipped
-        # with VS first on PATH. The `ring` crate's build script then
-        # picks that `clang.exe` to build its C sources, but the runner
-        # itself is x64, so the ARM64 `clang.exe` fails with OS error
-        # 216 (EXE machine-type mismatch). Point cc-rs at the x64
-        # clang that ships in `C:\Program Files\LLVM\bin` for the
-        # aarch64 target only.
+        # Cross-compile quirks for aarch64-pc-windows-msvc on an x64
+        # runner:
+        # 1. msvc-dev-cmd puts the ARM64 LLVM shipped with VS first on
+        #    PATH. cc-rs would then resolve `clang` against that, but
+        #    the runner host is x64, so the ARM64 `clang.exe` fails
+        #    with OS error 216 (EXE machine-type mismatch).
+        # 2. cc-rs adds MSVC-style flags like `/source-charset:utf-8`
+        #    whenever the target is `*-msvc`. The plain `clang.exe`
+        #    driver is gnu-style and interprets `/…` as a file path,
+        #    so it dies with `no such file or directory`. `clang-cl`
+        #    is the MSVC-compatible driver that accepts those flags.
+        # Point cc-rs at the x64 `clang-cl.exe` that ships in
+        # `C:\Program Files\LLVM\bin` for the aarch64 target only.
         env:
-          CC_aarch64_pc_windows_msvc: ${{ matrix.target == 'aarch64-pc-windows-msvc' && 'C:\Program Files\LLVM\bin\clang.exe' || '' }}
+          CC_aarch64_pc_windows_msvc: ${{ matrix.target == 'aarch64-pc-windows-msvc' && 'C:\Program Files\LLVM\bin\clang-cl.exe' || '' }}
         run: cargo build --release --target ${{ matrix.target }} -p ltbox-gui
 
       - name: cargo test (host arch only)
