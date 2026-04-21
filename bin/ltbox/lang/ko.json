@@ -346,6 +346,7 @@
   "device_enable_usb_debug": "[!] USB 디버깅을 활성화하고 USB로 연결하세요.",
   "device_err_check_edl": "[X] EDL 확인 오류: {e}",
   "device_err_check_fastboot": "[X] Fastboot 확인 오류: {e}",
+  "device_err_edl_port_timeout": "[X] {timeout}초 내에 EDL 포트가 안정화되지 않았습니다 (마지막 감지: {port}). 큰 파티션 작업 후 EDL 재진입에 시간이 더 필요할 수 있습니다.",
   "device_err_edl_read": "[X] qdl-rs 읽기 오류: {e}",
   "device_err_edl_tools_missing": "qdl-rs.exe 실행 파일이 없습니다.",
   "device_err_edl_write": "[X] qdl-rs 쓰기 오류: {e}",

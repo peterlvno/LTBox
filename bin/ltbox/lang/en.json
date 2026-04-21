@@ -346,6 +346,7 @@
   "device_enable_usb_debug": "[!] Enable USB Debugging and connect via USB.",
   "device_err_check_edl": "[X] EDL check error: {e}",
   "device_err_check_fastboot": "[X] fastboot check error: {e}",
+  "device_err_edl_port_timeout": "[X] EDL port did not stabilize within {timeout}s (last known: {port}). The device may need more time to re-enter EDL after a large partition operation.",
   "device_err_edl_read": "[X] qdl-rs read error: {e}",
   "device_err_edl_tools_missing": "Missing qdl-rs.exe executable",
   "device_err_edl_write": "[X] qdl-rs write error: {e}",

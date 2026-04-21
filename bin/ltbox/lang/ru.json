@@ -346,6 +346,7 @@
   "device_enable_usb_debug": "[!] Активируйте отладку по USB и подключите устройство к USB порту.",
   "device_err_check_edl": "[X] Ошибка проверки EDL: {e}",
   "device_err_check_fastboot": "[X] Ошибка проверки Fastboot: {e}",
+  "device_err_edl_port_timeout": "[X] EDL-порт не стабилизировался за {timeout}с (последний: {port}). После большой операции с разделом устройству может потребоваться больше времени на возврат в EDL.",
   "device_err_edl_read": "[X] qdl-rs - ошибка чтения: {e}",
   "device_err_edl_tools_missing": "Отсутствует исполняемый файл qdl-rs.exe",
   "device_err_edl_write": "[X] qdl-rs - ошибка записи: {e}",

@@ -346,6 +346,7 @@
   "device_enable_usb_debug": "[!] 请开启 USB 调试并连接。",
   "device_err_check_edl": "[X] EDL 检查错误: {e}",
   "device_err_check_fastboot": "[X] Fastboot 检查错误: {e}",
+  "device_err_edl_port_timeout": "[X] EDL 端口在 {timeout} 秒内未能稳定 (上次检测: {port})。大分区操作后重新进入 EDL 可能需要更长时间。",
   "device_err_edl_read": "[X] qdl-rs 读取错误: {e}",
   "device_err_edl_tools_missing": "缺失 qdl-rs.exe 可执行文件",
   "device_err_edl_write": "[X] qdl-rs 写入错误: {e}",

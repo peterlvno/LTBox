@@ -77,6 +77,7 @@ def test_edl_flash_rawprogram_sends_pre_erase_and_reset(tmp_path):
     with (
         patch("ltbox.device.edl.const.QDLRS_EXE", qdlrs),
         patch.object(manager, "load_programmer_safe"),
+        patch.object(manager, "_ensure_edl_port", side_effect=lambda p, **kw: p),
         patch.object(manager, "_run_command") as mock_run,
     ):
         manager.flash_rawprogram(
@@ -121,6 +122,7 @@ def test_edl_flash_rawprogram_skips_erase_and_reset_when_disabled(tmp_path):
     with (
         patch("ltbox.device.edl.const.QDLRS_EXE", qdlrs),
         patch.object(manager, "load_programmer_safe"),
+        patch.object(manager, "_ensure_edl_port", side_effect=lambda p, **kw: p),
         patch.object(manager, "_run_command") as mock_run,
     ):
         manager.flash_rawprogram(
@@ -214,6 +216,49 @@ def test_edl_reset_to_edl_calls_reset_with_edl_mode(tmp_path):
     assert "--reset-mode" in cmd
     rm_idx = cmd.index("--reset-mode")
     assert cmd[rm_idx + 1] == "edl"
+
+
+def _mock_clock(step: float = 0.5):
+    return [i * step for i in range(200)]
+
+
+def test_ensure_edl_port_ignores_stale_port_until_reconnect_finishes():
+    manager = EdlManager()
+
+    with (
+        patch("ltbox.device.edl.time.sleep", return_value=None),
+        patch("ltbox.device.edl.time.monotonic", side_effect=_mock_clock()),
+        patch(
+            "ltbox.device.edl.find_edl_port",
+            side_effect=["COM6", None, "COM7", "COM7"],
+        ),
+    ):
+        assert manager._ensure_edl_port("COM6", timeout=30.0) == "COM7"
+
+
+def test_ensure_edl_port_returns_visible_port_when_no_disconnect_happens():
+    manager = EdlManager()
+
+    with (
+        patch("ltbox.device.edl.time.sleep", return_value=None),
+        patch("ltbox.device.edl.time.monotonic", side_effect=_mock_clock()),
+        patch("ltbox.device.edl.find_edl_port", side_effect=["COM6"] * 30),
+    ):
+        assert manager._ensure_edl_port("COM6", timeout=30.0) == "COM6"
+
+
+def test_ensure_edl_port_raises_when_port_never_returns():
+    from ltbox.device import DeviceCommandError
+
+    manager = EdlManager()
+
+    with (
+        patch("ltbox.device.edl.time.sleep", return_value=None),
+        patch("ltbox.device.edl.time.monotonic", side_effect=_mock_clock(step=1.0)),
+        patch("ltbox.device.edl.find_edl_port", return_value=None),
+    ):
+        with pytest.raises(DeviceCommandError):
+            manager._ensure_edl_port("COM6", timeout=10.0)
 
 
 def test_edl_session_logs_single_reset_message():

@@ -88,27 +88,51 @@ class EdlManager(BaseDeviceManager):
             timeout=timeout,
         )
 
-    def _ensure_edl_port(self, port: str, timeout: float = 20.0) -> str:
-        """Wait for an EDL port to become stable after a qdl-rs reset.
+    def _ensure_edl_port(self, port: str, timeout: float = 45.0) -> str:
+        """Wait for a stable EDL port to appear after a qdl-rs reset.
 
-        qdl-rs resets the device to EDL after every command. The COM port
-        may still be visible briefly before the device disconnects, so we
-        must wait for it to disappear and reappear to avoid racing.
+        qdl-rs resets the device to EDL after each operation. The old COM
+        port may linger briefly before USB disconnect, and the post-reset
+        port may flap while Windows re-enumerates. Two phases:
+
+        1. If a port is visible right after the grace period, watch up to
+           5s for it to disconnect. If it stays, it is not a stale remnant
+           and we trust it.
+        2. Otherwise, poll until the same port is observed on two
+           consecutive checks (1s apart) — that is the new stable port.
+
+        Raises DeviceCommandError on timeout so callers never spawn
+        qdl-rs against a vanished COM device.
         """
-        # Give the device time to start its reset cycle
-        time.sleep(2.0)
-        found = find_edl_port()
-        if found:
-            return found
         deadline = time.monotonic() + timeout
+        # Grace period for the reset cycle to begin tearing down the port.
+        time.sleep(2.0)
+
+        initial = find_edl_port()
+        if initial is not None:
+            disconnect_deadline = min(deadline, time.monotonic() + 5.0)
+            saw_disconnect = False
+            while time.monotonic() < disconnect_deadline:
+                time.sleep(1.0)
+                if find_edl_port() is None:
+                    saw_disconnect = True
+                    break
+            if not saw_disconnect:
+                return initial
+
+        last: Optional[str] = None
         while time.monotonic() < deadline:
             time.sleep(1.0)
-            found = find_edl_port()
-            if found:
-                # Allow Sahara to fully initialize after COM port appears
-                time.sleep(1.0)
-                return found
-        return port
+            current = find_edl_port()
+            if current is not None and current == last:
+                return current
+            last = current
+
+        raise DeviceCommandError(
+            get_string("device_err_edl_port_timeout").format(
+                port=port, timeout=int(timeout)
+            )
+        )
 
     def _base_cmd(self, port: str, loader_path: Path) -> list[str]:
         return [
