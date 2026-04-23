@@ -5859,19 +5859,20 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                     View::SystemUpdate => self.sysupdate.reset(),
                     View::Unroot => self.unroot.reset(),
                     View::Advanced => {
-                        if self.flash_parts_open {
-                            self.flash_parts.reset();
-                        } else if self.dump_parts_open {
-                            self.dump_parts.reset();
-                        } else if self.dump_phys_open {
-                            self.dump_phys.reset();
-                        } else if self.flash_phys_open {
-                            self.flash_phys.reset();
-                        } else {
-                            self.adv_wizard.reset();
-                            self.adv_confirm = None;
-                            self.adv_confirm_path = None;
-                        }
+                        // "Start over" on any Advanced sub-wizard should
+                        // return to the Advanced grid, not step 0 of the
+                        // currently open sub-flow.
+                        self.flash_parts_open = false;
+                        self.dump_parts_open = false;
+                        self.dump_phys_open = false;
+                        self.flash_phys_open = false;
+                        self.flash_parts.reset();
+                        self.dump_parts.reset();
+                        self.dump_phys.reset();
+                        self.flash_phys.reset();
+                        self.adv_wizard.reset();
+                        self.adv_confirm = None;
+                        self.adv_confirm_path = None;
                     }
                     _ => {}
                 }
@@ -6400,7 +6401,7 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                     let conn = self.connection;
                     let loader = self.dump_phys.loader_path.clone().unwrap_or_default();
                     let luns = self.dump_phys.selected_luns();
-                    self.log_lines.push(format!(
+                    self.log_push(format!(
                         "[DumpPhys] Dumping {} LUN(s) to {}",
                         luns.len(),
                         folder
@@ -11466,6 +11467,18 @@ fn is_critical_dump_label(label: &str) -> bool {
         .any(|base| l == *base || l.starts_with(&format!("{base}_")))
 }
 
+/// Forward buffered worker logs to the stdout tap queue immediately.
+///
+/// Long-running advanced actions often collect lines in a local `Vec<String>`
+/// and only hand that vec back on completion, which makes the exec card look
+/// stalled. Emitting lines here lets the UI drain them every 500 ms via
+/// `DrainStdoutTap`.
+fn flush_worker_logs(log: &mut Vec<String>) {
+    for line in log.drain(..) {
+        println!("{line}");
+    }
+}
+
 /// Dump selected partitions to `output_folder` as `<label>.img`. Reopens
 /// the EDL session (previous scan left device waiting at Sahara), runs
 /// the reads back-to-back, then reboots to system.
@@ -11548,12 +11561,15 @@ fn dump_physical_execute(
 ) -> Vec<String> {
     let mut log = Vec::new();
     if ensure_edl(conn, "DumpPhys", &mut log).is_err() {
-        return log;
+        flush_worker_logs(&mut log);
+        return Vec::new();
     }
+    flush_worker_logs(&mut log);
     let out_dir = std::path::PathBuf::from(&output_folder);
     if let Err(e) = std::fs::create_dir_all(&out_dir) {
         log.push(format!("[DumpPhys] create output folder failed: {e}"));
-        return log;
+        flush_worker_logs(&mut log);
+        return Vec::new();
     }
 
     std::thread::sleep(std::time::Duration::from_secs(2));
@@ -11562,9 +11578,11 @@ fn dump_physical_execute(
         Ok(s) => s,
         Err(e) => {
             log.push(format!("[DumpPhys] EDL session open failed: {e}"));
-            return log;
+            flush_worker_logs(&mut log);
+            return Vec::new();
         }
     };
+    flush_worker_logs(&mut log);
 
     for lun in &luns {
         let out_path = out_dir.join(format!("lun_{lun}.img"));
@@ -11572,20 +11590,24 @@ fn dump_physical_execute(
             "[DumpPhys] Dumping LUN {lun} → {}",
             out_path.display()
         ));
+        flush_worker_logs(&mut log);
         if let Err(e) = session.dump_physical_storage(*lun, &out_path, &mut log) {
             log.push(format!("[DumpPhys] LUN {lun} failed: {e}"));
         }
+        flush_worker_logs(&mut log);
     }
 
     log.push(format!(
         "[DumpPhys] Stabilizing USB endpoint ({}s)...",
         EDL_POST_DUMP_STABILIZE.as_secs()
     ));
+    flush_worker_logs(&mut log);
     std::thread::sleep(EDL_POST_DUMP_STABILIZE);
     log.push("[DumpPhys] Resetting device to system...".to_string());
     let _ = session.reset(&mut log);
     log.push("[DumpPhys] Done.".to_string());
-    log
+    flush_worker_logs(&mut log);
+    Vec::new()
 }
 
 /// Whole-LUN raw flash. Each `(lun, path)` pair is written verbatim
