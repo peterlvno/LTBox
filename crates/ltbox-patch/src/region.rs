@@ -89,7 +89,7 @@ pub fn patch_vendor_boot(
         let count = count_occurrences(&data, from);
         if count > 0 {
             info!("Replacing pattern {} ({count} occurrences)", hex_str(from));
-            data = replace_all(&data, from, to);
+            data = replace_all(&data, from, to)?;
             total_count += count;
         }
     }
@@ -151,7 +151,7 @@ pub fn patch_country_code(
             continue;
         }
         info!("Replacing country code {from} → {to} ({n} occurrences)");
-        data = replace_all(&data, from.as_bytes(), to.as_bytes());
+        data = replace_all(&data, from.as_bytes(), to.as_bytes())?;
         total_count += n;
     }
     if total_count == 0 {
@@ -183,12 +183,22 @@ fn count_occurrences(haystack: &[u8], needle: &[u8]) -> usize {
         .count()
 }
 
-fn replace_all(data: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
-    assert_eq!(
-        from.len(),
-        to.len(),
-        "Pattern replacement must be same length"
-    );
+/// In-place pattern substitution, same-length only.
+///
+/// Unequal-length replacement would shift every byte after the match and
+/// break AVB digests of the containing image — safer to refuse than to
+/// let the caller ship a corrupt vendor_boot. Python v2 used
+/// `bytes.replace` which accepts unequal lengths silently; the Rust port
+/// surfaces the mismatch instead of panicking (the prior `assert_eq!`
+/// took down the GUI thread on a user-edited `config.json`).
+fn replace_all(data: &[u8], from: &[u8], to: &[u8]) -> Result<Vec<u8>> {
+    if from.len() != to.len() {
+        return Err(LtboxError::Patch(format!(
+            "region pattern length mismatch: from={} to={}",
+            from.len(),
+            to.len()
+        )));
+    }
     let mut result = data.to_vec();
     let mut pos = 0;
     while pos + from.len() <= result.len() {
@@ -199,7 +209,7 @@ fn replace_all(data: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
             pos += 1;
         }
     }
-    result
+    Ok(result)
 }
 
 fn hex_str(data: &[u8]) -> String {
@@ -213,8 +223,16 @@ mod tests {
     #[test]
     fn replace_all_works() {
         let data = b"hello.PRC.world.PRC.end";
-        let result = replace_all(data, b".PRC", b".ROW");
+        let result = replace_all(data, b".PRC", b".ROW").unwrap();
         assert_eq!(&result, b"hello.ROW.world.ROW.end");
+    }
+
+    #[test]
+    fn replace_all_rejects_length_mismatch() {
+        let data = b"hello.PRC.end";
+        let err = replace_all(data, b".PRC", b".RO").unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("length mismatch"), "unexpected: {msg}");
     }
 
     #[test]
