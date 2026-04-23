@@ -53,14 +53,14 @@ pub fn patch_init_boot(work_dir: &Path, log: &mut Vec<String>) -> Result<PathBuf
     let has_init = boot::cpio(work_dir, "ramdisk.cpio", &["exists init"])?;
     if has_init == 0 {
         log.push(format!("[KSU] {}", tr("log_ksu_cpio_mv_init")));
-        boot::cpio(work_dir, "ramdisk.cpio", &["mv init init.real"])?;
+        boot::cpio_checked(work_dir, "ramdisk.cpio", &["mv init init.real"])?;
     } else {
         log.push(format!("[KSU] {}", tr("log_ksu_no_stock_init")));
     }
 
     log.push(format!("[KSU] {}", tr("log_ksu_cpio_add")));
-    boot::cpio(work_dir, "ramdisk.cpio", &["add 0755 init init"])?;
-    boot::cpio(
+    boot::cpio_checked(work_dir, "ramdisk.cpio", &["add 0755 init init"])?;
+    boot::cpio_checked(
         work_dir,
         "ramdisk.cpio",
         &["add 0755 kernelsu.ko kernelsu.ko"],

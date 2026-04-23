@@ -5,8 +5,11 @@ use std::path::Path;
 
 use ltbox_core::{LtboxError, Result};
 
-/// Unpack a boot image into components.
-pub fn unpack(image: &Path, work_dir: &Path) -> Result<i32> {
+/// Unpack a boot image into components. Non-zero magiskboot exit becomes `Err`.
+/// v2 parity: `MagiskBootWrapper.run` defaults to `check=True`, raising on
+/// any non-zero rc. Exit 2 (chromeos HDR) is vanishingly rare on TB3xx and
+/// needs `--nodecompress` on repack anyway — safer to surface it.
+pub fn unpack(image: &Path, work_dir: &Path) -> Result<()> {
     let name = image
         .file_name()
         .and_then(|n| n.to_str())
@@ -15,20 +18,31 @@ pub fn unpack(image: &Path, work_dir: &Path) -> Result<i32> {
     if image != dst {
         fs::copy(image, &dst).map_err(|e| LtboxError::BootImage(e.to_string()))?;
     }
-    run_magiskboot(work_dir, &["unpack", name])
+    check_magiskboot("unpack", run_magiskboot(work_dir, &["unpack", name])?)
 }
 
-/// Repack boot image from components.
+/// Repack boot image from components. Non-zero magiskboot exit becomes `Err`.
 pub fn repack(orig_image: &str, work_dir: &Path) -> Result<()> {
-    run_magiskboot(work_dir, &["repack", orig_image])?;
-    Ok(())
+    check_magiskboot("repack", run_magiskboot(work_dir, &["repack", orig_image])?)
 }
 
-/// CPIO operations on ramdisk.
+/// CPIO operations on ramdisk. Raw exit code — caller decides what's an error.
+/// Use [`cpio_checked`] for mutating commands where non-zero means failure.
+/// Leave this untouched for `test` / `exists` whose rc is a status flag.
 pub fn cpio(work_dir: &Path, cpio_file: &str, commands: &[&str]) -> Result<i32> {
     let mut args = vec!["cpio", cpio_file];
     args.extend_from_slice(commands);
     run_magiskboot(work_dir, &args)
+}
+
+/// CPIO operations that must succeed — non-zero magiskboot exit becomes `Err`.
+/// Use for `add`, `mv`, `mkdir`, `backup`, `patch`, etc. where any failure
+/// leaves the ramdisk half-patched and the repack unsafe to ship.
+pub fn cpio_checked(work_dir: &Path, cpio_file: &str, commands: &[&str]) -> Result<()> {
+    check_magiskboot(
+        &format!("cpio {}", commands.join(" ")),
+        cpio(work_dir, cpio_file, commands)?,
+    )
 }
 
 /// CPIO operations with extra env vars set for the duration of the call.
@@ -39,15 +53,32 @@ pub fn cpio(work_dir: &Path, cpio_file: &str, commands: &[&str]) -> Result<i32> 
 /// forceencrypt fstab flags — the opposite of what stock-preserving root
 /// wants. Env is process-global; the CWD lock held by `run_magiskboot_with_env`
 /// serializes the set/restore so concurrent calls don't leak values.
+///
+/// Always checked: patch is a mutation, a non-zero rc means nothing to repack.
 pub fn cpio_with_env(
     work_dir: &Path,
     cpio_file: &str,
     commands: &[&str],
     envs: &[(&str, &str)],
-) -> Result<i32> {
+) -> Result<()> {
     let mut args = vec!["cpio", cpio_file];
     args.extend_from_slice(commands);
-    run_magiskboot_with_env(work_dir, &args, envs)
+    check_magiskboot(
+        &format!("cpio {}", commands.join(" ")),
+        run_magiskboot_with_env(work_dir, &args, envs)?,
+    )
+}
+
+/// Map magiskboot exit code to a `Result`. Exit 0 = success; anything else
+/// surfaces as `LtboxError::BootImage` with the operation label.
+fn check_magiskboot(op: &str, code: i32) -> Result<()> {
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(LtboxError::BootImage(format!(
+            "magiskboot {op} failed (exit={code})"
+        )))
+    }
 }
 
 /// SHA1 hash of a file (computed in Rust, no magiskboot needed).
@@ -56,16 +87,17 @@ pub fn sha1(file_path: &Path) -> Result<String> {
     Ok(sha1_hash(&data))
 }
 
-/// Compress a file.
+/// Compress a file. Non-zero magiskboot exit becomes `Err`.
 pub fn compress(work_dir: &Path, format: &str, input: &str, output: &str) -> Result<()> {
-    run_magiskboot(work_dir, &[&format!("compress={format}"), input, output])?;
-    Ok(())
+    check_magiskboot(
+        "compress",
+        run_magiskboot(work_dir, &[&format!("compress={format}"), input, output])?,
+    )
 }
 
-/// Cleanup temporary files.
+/// Cleanup temporary files. Non-zero magiskboot exit becomes `Err`.
 pub fn cleanup(work_dir: &Path) -> Result<()> {
-    run_magiskboot(work_dir, &["cleanup"])?;
-    Ok(())
+    check_magiskboot("cleanup", run_magiskboot(work_dir, &["cleanup"])?)
 }
 
 /// Get kernel version from a kernel binary.
