@@ -2574,6 +2574,13 @@ fn pick_folder_task(
     pickers::pick_folder_for(kind, recents, on_pick)
 }
 
+fn loader_file_spec(target_i18n_key: &'static str) -> pickers::FilePickSpec {
+    // Loader selection accepts any filename as long as the extension is a
+    // known Firehose loader type.
+    pickers::FilePickSpec::single(target_i18n_key)
+        .with_filter("EDL loader", &["melf", "mbn", "elf"])
+}
+
 #[derive(Debug, Clone)]
 enum Message {
     // Window controls
@@ -3196,23 +3203,32 @@ impl App {
         }
     }
 
-    /// Remember `folder` under [`LoaderFolder`] and resolve the fixed-name
-    /// EDL loader (`xbl_s_devprg_ns.melf`) inside it. Used by every
-    /// "select loader" Browse button — the user now picks the folder
-    /// holding the loader rather than clicking through to the file,
-    /// which avoids a common mis-pick (selecting `xbl_a.melf` etc.).
+    /// Resolve loader input from the unified picker path.
     ///
-    /// Returns the loader's full path on success, or a user-facing error
-    /// message on miss. Callers route the error into the relevant
-    /// wizard's `*_error` field so the UI shows it next to Browse.
-    ///
-    /// [`LoaderFolder`]: pickers::PickerKind::LoaderFolder
-    fn resolve_loader_folder(&mut self, folder: &str) -> std::result::Result<String, String> {
-        let dir = std::path::Path::new(folder);
-        self.remember_recent(pickers::PickerKind::LoaderFolder, folder);
-        find_edl_loader(dir)
-            .map(|p| p.to_string_lossy().to_string())
-            .ok_or_else(|| format!("xbl_s_devprg_ns.melf not found in {folder}"))
+    /// Preferred path is a file (`*.melf`, `*.mbn`, `*.elf`) and accepts
+    /// any filename with one of those extensions. A directory is still
+    /// accepted for backwards compatibility with older recents entries
+    /// and is resolved via [`find_edl_loader`].
+    fn resolve_loader_input(&mut self, selected_path: &str) -> std::result::Result<String, String> {
+        let path = std::path::Path::new(selected_path);
+        if path.is_file() {
+            self.remember_recent(pickers::PickerKind::File, selected_path);
+            if is_loader_file(path) {
+                return Ok(selected_path.to_string());
+            }
+            return Err(format!(
+                "Unsupported loader file: {selected_path} (expected .melf, .mbn, or .elf)"
+            ));
+        }
+
+        if path.is_dir() {
+            self.remember_recent(pickers::PickerKind::LoaderFolder, selected_path);
+            return find_edl_loader(path)
+                .map(|p| p.to_string_lossy().to_string())
+                .ok_or_else(|| format!("xbl_s_devprg_ns.melf not found in {selected_path}"));
+        }
+
+        Err(format!("Path does not exist: {selected_path}"))
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -6069,21 +6085,15 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 );
             }
             Message::FlashPartsSelectLoader => {
-                // Folder-pick: user picks the directory containing
-                // `xbl_s_devprg_ns.melf`. The handler resolves the
-                // fixed-name loader inside. Previously a file-pick,
-                // which forced the user to know which `*.melf` to click
-                // (several ship per firmware — picking `xbl_a.melf`
-                // here is a silent wrong answer).
-                return pick_folder_task(
-                    pickers::PickerKind::LoaderFolder,
+                return pickers::pick_file_for(
+                    loader_file_spec("picker_target_edl_loader"),
                     &self.recent_paths,
                     Message::FlashPartsLoaderChosen,
                 );
             }
             Message::FlashPartsLoaderChosen(path) => {
                 if let Some(p) = path {
-                    match self.resolve_loader_folder(&p) {
+                    match self.resolve_loader_input(&p) {
                         Ok(loader) => {
                             self.flash_parts.loader_path = Some(loader);
                             self.flash_parts.scan_error = None;
@@ -6204,15 +6214,15 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 self.end_op();
             }
             Message::DumpPartsSelectLoader => {
-                return pick_folder_task(
-                    pickers::PickerKind::LoaderFolder,
+                return pickers::pick_file_for(
+                    loader_file_spec("picker_target_edl_loader"),
                     &self.recent_paths,
                     Message::DumpPartsLoaderChosen,
                 );
             }
             Message::DumpPartsLoaderChosen(path) => {
                 if let Some(p) = path {
-                    match self.resolve_loader_folder(&p) {
+                    match self.resolve_loader_input(&p) {
                         Ok(loader) => {
                             self.dump_parts.loader_path = Some(loader);
                             self.dump_parts.scan_error = None;
@@ -6330,15 +6340,15 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             }
             // -- Physical Storage: Dump --------------------------------------
             Message::DumpPhysSelectLoader => {
-                return pick_folder_task(
-                    pickers::PickerKind::LoaderFolder,
+                return pickers::pick_file_for(
+                    loader_file_spec("picker_target_edl_loader"),
                     &self.recent_paths,
                     Message::DumpPhysLoaderChosen,
                 );
             }
             Message::DumpPhysLoaderChosen(path) => {
                 if let Some(p) = path {
-                    match self.resolve_loader_folder(&p) {
+                    match self.resolve_loader_input(&p) {
                         Ok(loader) => {
                             self.dump_phys.loader_path = Some(loader);
                             self.dump_phys.loader_error = None;
@@ -6408,15 +6418,15 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             }
             // -- Physical Storage: Flash -------------------------------------
             Message::FlashPhysSelectLoader => {
-                return pick_folder_task(
-                    pickers::PickerKind::LoaderFolder,
+                return pickers::pick_file_for(
+                    loader_file_spec("picker_target_edl_loader"),
                     &self.recent_paths,
                     Message::FlashPhysLoaderChosen,
                 );
             }
             Message::FlashPhysLoaderChosen(path) => {
                 if let Some(p) = path {
-                    match self.resolve_loader_folder(&p) {
+                    match self.resolve_loader_input(&p) {
                         Ok(loader) => {
                             self.flash_phys.loader_path = Some(loader);
                             self.flash_phys.loader_error = None;
@@ -6517,13 +6527,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                     self.error_msg = Some(format!("{:?} not reachable from {:?}", target, conn));
                     return Task::none();
                 }
-                // EDL needs a loader for Firehose before Power(reset).
-                // v2 parity: `_reboot_from_edl` requires `xbl_s_devprg_ns.melf`.
-                // Folder-pick keeps this consistent with the wizard loader
-                // pickers; the handler resolves the file inside.
+                // EDL needs a Firehose loader before Power(reset).
                 if matches!(conn, ConnectionStatus::Edl) {
-                    return pickers::pick_folder_for(
-                        pickers::PickerKind::LoaderFolder,
+                    return pickers::pick_file_for(
+                        loader_file_spec("picker_target_edl_loader"),
                         &self.recent_paths,
                         move |path| Message::RebootEdlWithLoader(target, path),
                     );
@@ -6606,15 +6613,13 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 );
             }
             Message::RebootEdlWithLoader(target, path) => {
-                let Some(loader_folder) = path else {
+                let Some(loader_input) = path else {
                     self.log_push("[Reboot] Cancelled — no EDL loader selected".to_string());
                     return Task::none();
                 };
-                // Folder-pick resolves to `xbl_s_devprg_ns.melf` inside;
-                // remember_recent in resolve_loader_folder keeps the MRU
-                // even if resolution fails (user may just have pointed at
-                // the wrong folder and want to try again from there).
-                let loader = match self.resolve_loader_folder(&loader_folder) {
+                // Accept direct loader files. Legacy folder paths from
+                // older recents remain supported via resolve_loader_input.
+                let loader = match self.resolve_loader_input(&loader_input) {
                     Ok(p) => std::path::PathBuf::from(p),
                     Err(msg) => {
                         self.error_msg = Some(msg);
@@ -11602,6 +11607,13 @@ fn find_edl_loader(dir: &std::path::Path) -> Option<std::path::PathBuf> {
     None
 }
 
+fn is_loader_file(path: &std::path::Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "melf" | "mbn" | "elf"))
+        .unwrap_or(false)
+}
+
 // Device portrait handles — built once, cloned each render.
 // Unknown models fall through to `GENERIC_TABLET_SVG_HANDLE`.
 static TB320FC_HANDLE: std::sync::LazyLock<iced::widget::image::Handle> =
@@ -11963,5 +11975,13 @@ mod tests {
         w.rows[0].state = FlashRowState::Erase;
         w.rows[0].file_path = None;
         assert!(w.can_next());
+    }
+
+    #[test]
+    fn loader_file_check_is_extension_based() {
+        assert!(is_loader_file(std::path::Path::new("xbl_anything.melf")));
+        assert!(is_loader_file(std::path::Path::new("firehose_loader.MBN")));
+        assert!(is_loader_file(std::path::Path::new("prog.elf")));
+        assert!(!is_loader_file(std::path::Path::new("xbl_s_devprg_ns.bin")));
     }
 }
