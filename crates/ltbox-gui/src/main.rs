@@ -5859,9 +5859,19 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                     View::SystemUpdate => self.sysupdate.reset(),
                     View::Unroot => self.unroot.reset(),
                     View::Advanced => {
-                        self.adv_wizard.reset();
-                        self.adv_confirm = None;
-                        self.adv_confirm_path = None;
+                        if self.flash_parts_open {
+                            self.flash_parts.reset();
+                        } else if self.dump_parts_open {
+                            self.dump_parts.reset();
+                        } else if self.dump_phys_open {
+                            self.dump_phys.reset();
+                        } else if self.flash_phys_open {
+                            self.flash_phys.reset();
+                        } else {
+                            self.adv_wizard.reset();
+                            self.adv_confirm = None;
+                            self.adv_confirm_path = None;
+                        }
                     }
                     _ => {}
                 }
@@ -9532,12 +9542,16 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     /// Advanced wizard. PatchDevinfo: source/country/confirm/exec.
     /// Others: source/confirm/exec.
     fn view_adv_wizard(&self) -> Element<'_, Message> {
+        let is_exec = self.adv_wizard.step == self.adv_wizard.exec_step();
+        if self.log_popup_open && is_exec {
+            return self.log_popup_view();
+        }
+
         let step_labels: Vec<&str> = self.adv_wizard.steps().iter().map(|k| self.t(k)).collect();
         let step_bar = wizard_step_bar(&step_labels, self.adv_wizard.step);
 
         let needs_country = self.adv_wizard.needs_country();
         let is_confirm = self.adv_wizard.is_confirm_step();
-        let is_exec = self.adv_wizard.step == self.adv_wizard.exec_step();
 
         let body: Element<'_, Message> = if is_exec {
             self.exec_step_view()
@@ -9754,6 +9768,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     // -- Flash Partitions wizard ------------------------------------------
 
     fn view_flash_parts_wizard(&self) -> Element<'_, Message> {
+        if self.log_popup_open && self.flash_parts.step >= 3 {
+            return self.log_popup_view();
+        }
+
         let step_labels: Vec<&str> = FLASH_PARTS_STEPS.iter().map(|k| self.t(k)).collect();
         let step_bar = wizard_step_bar(&step_labels, self.flash_parts.step);
 
@@ -10057,6 +10075,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     // -- Dump Partitions wizard ------------------------------------------
 
     fn view_dump_parts_wizard(&self) -> Element<'_, Message> {
+        if self.log_popup_open && self.dump_parts.step >= 2 {
+            return self.log_popup_view();
+        }
+
         let step_labels: Vec<&str> = DUMP_PARTS_STEPS.iter().map(|k| self.t(k)).collect();
         let step_bar = wizard_step_bar(&step_labels, self.dump_parts.step);
 
@@ -10227,6 +10249,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     // -- Physical Storage: Dump wizard -----------------------------------
 
     fn view_dump_phys_wizard(&self) -> Element<'_, Message> {
+        if self.log_popup_open && self.dump_phys.step >= 2 {
+            return self.log_popup_view();
+        }
+
         let step_labels: Vec<&str> = DUMP_PHYS_STEPS.iter().map(|k| self.t(k)).collect();
         let step_bar = wizard_step_bar(&step_labels, self.dump_phys.step);
 
@@ -10377,6 +10403,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     // -- Physical Storage: Flash wizard ----------------------------------
 
     fn view_flash_phys_wizard(&self) -> Element<'_, Message> {
+        if self.log_popup_open && self.flash_phys.step >= 3 {
+            return self.log_popup_view();
+        }
+
         let step_labels: Vec<&str> = FLASH_PHYS_STEPS.iter().map(|k| self.t(k)).collect();
         let step_bar = wizard_step_bar(&step_labels, self.flash_phys.step);
 
