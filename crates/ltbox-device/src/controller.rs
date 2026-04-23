@@ -72,11 +72,16 @@ impl DeviceController {
             self.mode = DeviceMode::Fastboot;
             return Ok(());
         }
-        if !self.skip_adb {
-            info!("Rebooting to bootloader via ADB...");
-            self.adb.wait_for_device()?;
-            self.adb.reboot("bootloader")?;
+        // skip_adb means we can't issue an ADB reboot — so waiting on a
+        // Fastboot device that nothing is going to produce would hang the
+        // GUI for the whole fastboot wait timeout. Surface immediately so
+        // the caller can prompt the user for a manual transition.
+        if self.skip_adb {
+            return Err(ControllerError::NoDevice);
         }
+        info!("Rebooting to bootloader via ADB...");
+        self.adb.wait_for_device()?;
+        self.adb.reboot("bootloader")?;
         info!("Waiting for Fastboot...");
         let _ = FastbootDevice::wait_for_device()?;
         self.mode = DeviceMode::Fastboot;
@@ -89,6 +94,8 @@ impl DeviceController {
             return Ok(());
         }
 
+        // Try every transition that doesn't need ADB first, so the skip_adb
+        // user with the device in Fastboot still gets a chance via OEM EDL.
         if FastbootDevice::check_device() {
             info!("Device in Fastboot, attempting EDL transition...");
             if let Ok(mut dev) = FastbootDevice::open() {
@@ -99,15 +106,26 @@ impl DeviceController {
                         return Ok(());
                     }
                 }
-                // OEM EDL failed: continue boot then reboot via ADB.
-                if !self.skip_adb {
-                    info!("OEM EDL failed, falling back to ADB...");
-                    let _ = dev.continue_boot();
-                    self.adb.wait_for_device()?;
-                    self.adb.reboot("edl")?;
+                // OEM EDL didn't land the device in EDL. Without ADB there
+                // is no second-chance transition available — bail instead
+                // of blocking on `edl::wait_for_device()` that cannot
+                // complete.
+                if self.skip_adb {
+                    return Err(ControllerError::NoDevice);
                 }
+                info!("OEM EDL failed, falling back to ADB...");
+                let _ = dev.continue_boot();
+                self.adb.wait_for_device()?;
+                self.adb.reboot("edl")?;
+            } else if self.skip_adb {
+                return Err(ControllerError::NoDevice);
             }
-        } else if !self.skip_adb {
+        } else if self.skip_adb {
+            // No EDL, no Fastboot, skip_adb: nothing we can do to drive
+            // the transition. Refuse instead of blocking for the whole
+            // edl::wait_for_device timeout.
+            return Err(ControllerError::NoDevice);
+        } else {
             info!("Rebooting to EDL via ADB...");
             self.adb.wait_for_device()?;
             self.adb.reboot("edl")?;
