@@ -336,7 +336,9 @@ enum AdvAction {
     WriteArb,
     ConvertXml,
     DumpPartitions,
+    DumpPhysical,
     FlashPartitions,
+    FlashPhysical,
     RebuildVbmeta,
     SignRecovery,
 }
@@ -352,7 +354,9 @@ impl AdvAction {
             Self::WriteArb => "adv_write_arb",
             Self::ConvertXml => "adv_convert_xml",
             Self::DumpPartitions => "adv_dump_partitions",
+            Self::DumpPhysical => "adv_dump_physical",
             Self::FlashPartitions => "adv_flash_partitions",
+            Self::FlashPhysical => "adv_flash_physical",
             Self::RebuildVbmeta => "adv_rebuild_vbmeta",
             Self::SignRecovery => "adv_sign_recovery",
         }
@@ -368,7 +372,9 @@ impl AdvAction {
             Self::WriteArb => "adv_write_arb_desc",
             Self::ConvertXml => "adv_convert_xml_desc",
             Self::DumpPartitions => "adv_dump_partitions_desc",
+            Self::DumpPhysical => "adv_dump_physical_desc",
             Self::FlashPartitions => "adv_flash_partitions_desc",
+            Self::FlashPhysical => "adv_flash_physical_desc",
             Self::RebuildVbmeta => "adv_rebuild_vbmeta_desc",
             Self::SignRecovery => "adv_sign_recovery_desc",
         }
@@ -386,7 +392,9 @@ impl AdvAction {
             Self::WriteArb => "adv_src_write_arb",
             Self::ConvertXml => "adv_src_convert_xml",
             Self::DumpPartitions => "adv_src_dump_partitions",
+            Self::DumpPhysical => "adv_src_dump_physical",
             Self::FlashPartitions => "adv_src_flash_partitions",
+            Self::FlashPhysical => "adv_src_flash_physical",
             Self::RebuildVbmeta => "adv_src_rebuild_vbmeta",
             Self::SignRecovery => "adv_src_sign_recovery",
         }
@@ -404,7 +412,9 @@ impl AdvAction {
             Self::WriteArb => "write_arb",
             Self::ConvertXml => "convert_xml",
             Self::DumpPartitions => "dump_partitions",
+            Self::DumpPhysical => "dump_physical",
             Self::FlashPartitions => "flash_partitions",
+            Self::FlashPhysical => "flash_physical",
             Self::RebuildVbmeta => "rebuild_vbmeta",
             Self::SignRecovery => "sign_recovery",
         }
@@ -487,7 +497,9 @@ const ADV_SECTIONS: &[AdvSection] = &[
         items: &[
             AdvAction::ConvertXml,
             AdvAction::DumpPartitions,
+            AdvAction::DumpPhysical,
             AdvAction::FlashPartitions,
+            AdvAction::FlashPhysical,
             AdvAction::RebuildVbmeta,
             AdvAction::SignRecovery,
         ],
@@ -2089,6 +2101,118 @@ impl DumpPartsWizard {
     }
 }
 
+// =========================================================================
+// Physical Storage wizards (Advanced → Dump/Flash Physical)
+//
+// LUN-level counterparts to the partition wizards. No GPT scan — the
+// user picks which of LUN 0..=5 to hit, and the exec pass reads/writes
+// the whole LUN. Mirrors qdlrs `Dump` (whole-disk variant) and
+// `OverwriteStorage` commands.
+// =========================================================================
+
+const PHYS_LUN_COUNT: usize = 6;
+
+#[derive(Default)]
+struct DumpPhysWizard {
+    step: usize, // 0=Loader, 1=Select, 2=Exec
+    loader_path: Option<String>,
+    selected: [bool; PHYS_LUN_COUNT],
+    output_dir: Option<String>,
+    loader_error: Option<String>,
+}
+
+const DUMP_PHYS_STEPS: &[&str] = &[
+    "dump_parts_step_loader",
+    "phys_step_select",
+    "dump_parts_step_dump",
+];
+
+impl DumpPhysWizard {
+    fn reset(&mut self) {
+        *self = Self::default();
+    }
+    fn back(&mut self) {
+        if self.step > 0 {
+            self.step -= 1;
+        }
+    }
+    fn can_next(&self) -> bool {
+        match self.step {
+            0 => self.loader_path.is_some(),
+            1 => self.selected.iter().any(|&s| s),
+            _ => false,
+        }
+    }
+    fn selected_luns(&self) -> Vec<u8> {
+        self.selected
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &s)| if s { Some(i as u8) } else { None })
+            .collect()
+    }
+}
+
+#[derive(Default)]
+struct FlashPhysWizard {
+    step: usize, // 0=Loader, 1=Select, 2=Confirm, 3=Exec
+    loader_path: Option<String>,
+    selected: [bool; PHYS_LUN_COUNT],
+    file_paths: [Option<String>; PHYS_LUN_COUNT],
+    loader_error: Option<String>,
+}
+
+const FLASH_PHYS_STEPS: &[&str] = &[
+    "flash_parts_step_loader",
+    "phys_step_select",
+    "flash_step_confirm",
+    "flash_step_flash",
+];
+
+impl FlashPhysWizard {
+    fn reset(&mut self) {
+        *self = Self::default();
+    }
+    fn next(&mut self) {
+        if self.step < FLASH_PHYS_STEPS.len() - 1 {
+            self.step += 1;
+        }
+    }
+    fn back(&mut self) {
+        if self.step > 0 {
+            self.step -= 1;
+        }
+    }
+    fn can_next(&self) -> bool {
+        match self.step {
+            0 => self.loader_path.is_some(),
+            // At least one row selected AND every selected row has a file.
+            1 => {
+                let any = self.selected.iter().any(|&s| s);
+                let all_have_file = self
+                    .selected
+                    .iter()
+                    .zip(self.file_paths.iter())
+                    .all(|(&s, f)| !s || f.is_some());
+                any && all_have_file
+            }
+            2 => true,
+            _ => false,
+        }
+    }
+    /// (LUN, file_path) pairs for every selected, file-bound row.
+    fn active_pairs(&self) -> Vec<(u8, String)> {
+        (0..PHYS_LUN_COUNT)
+            .filter_map(|i| {
+                if self.selected[i] {
+                    self.file_paths[i].clone().map(|p| (i as u8, p))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
 /// Human-readable auto-unit byte formatter (B/KB/MB/GB).
 fn format_bytes_auto(bytes: u64) -> String {
     const KB: f64 = 1024.0;
@@ -2515,6 +2639,26 @@ enum Message {
     DumpPartsSelectFolder,
     DumpPartsFolderChosen(Option<String>),
     DumpPartsExecDone(Vec<String>),
+    // Advanced → Physical Storage wizards (whole-LUN, no GPT scan).
+    DumpPhysSelectLoader,
+    DumpPhysLoaderChosen(Option<String>),
+    DumpPhysToggleRow(usize),
+    DumpPhysNext,
+    DumpPhysBack,
+    DumpPhysClose,
+    DumpPhysSelectFolder,
+    DumpPhysFolderChosen(Option<String>),
+    DumpPhysExecDone(Vec<String>),
+    FlashPhysSelectLoader,
+    FlashPhysLoaderChosen(Option<String>),
+    FlashPhysToggleRow(usize),
+    FlashPhysPickRowFile(usize),
+    FlashPhysRowFileChosen(usize, Option<String>),
+    FlashPhysNext,
+    FlashPhysBack,
+    FlashPhysClose,
+    FlashPhysExecStart,
+    FlashPhysExecDone(Vec<String>),
     // Reboot: RebootRequest stages a target; popup resolves to
     // RebootConfirm / RebootDismiss.
     RebootRequest(RebootTarget),
@@ -2636,6 +2780,10 @@ struct App {
     flash_parts_open: bool,
     dump_parts: DumpPartsWizard,
     dump_parts_open: bool,
+    dump_phys: DumpPhysWizard,
+    dump_phys_open: bool,
+    flash_phys: FlashPhysWizard,
+    flash_phys_open: bool,
     /// Phases of the running op. Populated at exec start, cleared on
     /// `end_op`.
     op_steps: Vec<OpStep>,
@@ -2713,6 +2861,10 @@ impl Default for App {
             flash_parts_open: false,
             dump_parts: DumpPartsWizard::default(),
             dump_parts_open: false,
+            dump_phys: DumpPhysWizard::default(),
+            dump_phys_open: false,
+            flash_phys: FlashPhysWizard::default(),
+            flash_phys_open: false,
             op_steps: Vec::new(),
             current_op_step: 0,
             log_popup_open: false,
@@ -4771,14 +4923,20 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             }
             // Advanced
             Message::AdvConfirm(a) => {
-                // FlashPartitions / DumpPartitions preempt the grid with
-                // their own wizards.
+                // Flash/Dump Partitions + Physical Storage preempt the
+                // grid with their own dedicated wizards.
                 if matches!(a, AdvAction::FlashPartitions) {
                     self.flash_parts.reset();
                     self.flash_parts_open = true;
                 } else if matches!(a, AdvAction::DumpPartitions) {
                     self.dump_parts.reset();
                     self.dump_parts_open = true;
+                } else if matches!(a, AdvAction::DumpPhysical) {
+                    self.dump_phys.reset();
+                    self.dump_phys_open = true;
+                } else if matches!(a, AdvAction::FlashPhysical) {
+                    self.flash_phys.reset();
+                    self.flash_phys_open = true;
                 } else {
                     return self.update(Message::AdvWizOpen(a));
                 }
@@ -5089,8 +5247,11 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                         }
                                         session.reset(&mut log).ok();
                                     }
-                                    AdvAction::FlashPartitions | AdvAction::DumpPartitions => {
-                                        log.push("[Advanced] Use dedicated wizard for partition flash/dump".to_string());
+                                    AdvAction::FlashPartitions
+                                    | AdvAction::DumpPartitions
+                                    | AdvAction::FlashPhysical
+                                    | AdvAction::DumpPhysical => {
+                                        log.push("[Advanced] Use dedicated wizard for partition/physical flash/dump".to_string());
                                     }
                                     AdvAction::RegionConvert => {
                                         // Auto-detect source region (PRC/ROW) and
@@ -5974,6 +6135,164 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 self.log_extend(lines);
                 self.end_op();
             }
+            // -- Physical Storage: Dump --------------------------------------
+            Message::DumpPhysSelectLoader => {
+                return Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .add_filter("EDL loader (*.melf *.mbn)", &["melf", "mbn"])
+                            .pick_file()
+                            .await
+                            .map(|f| f.path().to_string_lossy().to_string())
+                    },
+                    Message::DumpPhysLoaderChosen,
+                );
+            }
+            Message::DumpPhysLoaderChosen(path) => {
+                if let Some(p) = path {
+                    self.dump_phys.loader_path = Some(p);
+                    self.dump_phys.loader_error = None;
+                }
+            }
+            Message::DumpPhysToggleRow(idx) => {
+                if let Some(slot) = self.dump_phys.selected.get_mut(idx) {
+                    *slot = !*slot;
+                }
+            }
+            Message::DumpPhysNext => match self.dump_phys.step {
+                0 => self.dump_phys.step = 1, // loader → select
+                1 => return self.update(Message::DumpPhysSelectFolder),
+                _ => {}
+            },
+            Message::DumpPhysBack => self.dump_phys.back(),
+            Message::DumpPhysClose => {
+                self.dump_phys_open = false;
+                self.dump_phys.reset();
+            }
+            Message::DumpPhysSelectFolder => {
+                return pick_folder_task(Message::DumpPhysFolderChosen);
+            }
+            Message::DumpPhysFolderChosen(path) => {
+                if let Some(folder) = path {
+                    self.dump_phys.output_dir = Some(folder.clone());
+                    self.dump_phys.step = 2;
+                    self.begin_op(View::Advanced);
+                    self.error_msg = None;
+                    let conn = self.connection;
+                    let loader = self.dump_phys.loader_path.clone().unwrap_or_default();
+                    let luns = self.dump_phys.selected_luns();
+                    self.log_lines.push(format!(
+                        "[DumpPhys] Dumping {} LUN(s) to {}",
+                        luns.len(),
+                        folder
+                    ));
+                    return Task::perform(
+                        async move {
+                            tokio::task::spawn_blocking(move || {
+                                ltbox_core::runtime::run_heavy(move || {
+                                    dump_physical_execute(conn, loader, folder, luns)
+                                })
+                                .unwrap_or_else(|e| {
+                                    vec![format!("[DumpPhys] heavy thread error: {e}")]
+                                })
+                            })
+                            .await
+                            .unwrap_or_else(|_| vec!["[DumpPhys] task panicked".to_string()])
+                        },
+                        Message::DumpPhysExecDone,
+                    );
+                }
+            }
+            Message::DumpPhysExecDone(lines) => {
+                self.log_extend(lines);
+                self.end_op();
+            }
+            // -- Physical Storage: Flash -------------------------------------
+            Message::FlashPhysSelectLoader => {
+                return Task::perform(
+                    async {
+                        rfd::AsyncFileDialog::new()
+                            .add_filter("EDL loader (*.melf *.mbn)", &["melf", "mbn"])
+                            .pick_file()
+                            .await
+                            .map(|f| f.path().to_string_lossy().to_string())
+                    },
+                    Message::FlashPhysLoaderChosen,
+                );
+            }
+            Message::FlashPhysLoaderChosen(path) => {
+                if let Some(p) = path {
+                    self.flash_phys.loader_path = Some(p);
+                    self.flash_phys.loader_error = None;
+                }
+            }
+            Message::FlashPhysToggleRow(idx) => {
+                if let Some(slot) = self.flash_phys.selected.get_mut(idx) {
+                    *slot = !*slot;
+                }
+            }
+            Message::FlashPhysPickRowFile(idx) => {
+                return Task::perform(
+                    async move {
+                        let file = rfd::AsyncFileDialog::new()
+                            .add_filter("Storage image", &["img", "bin", "mbn", "melf", "elf"])
+                            .pick_file()
+                            .await
+                            .map(|f| f.path().to_string_lossy().to_string());
+                        (idx, file)
+                    },
+                    |(idx, path)| Message::FlashPhysRowFileChosen(idx, path),
+                );
+            }
+            Message::FlashPhysRowFileChosen(idx, path) => {
+                if idx < PHYS_LUN_COUNT
+                    && let Some(p) = path
+                {
+                    self.flash_phys.file_paths[idx] = Some(p);
+                    // Picking a file implicitly selects the row.
+                    self.flash_phys.selected[idx] = true;
+                }
+            }
+            Message::FlashPhysNext => match self.flash_phys.step {
+                0 => self.flash_phys.step = 1,
+                1 => self.flash_phys.next(), // → Confirm
+                2 => return self.update(Message::FlashPhysExecStart),
+                _ => {}
+            },
+            Message::FlashPhysBack => self.flash_phys.back(),
+            Message::FlashPhysClose => {
+                self.flash_phys_open = false;
+                self.flash_phys.reset();
+            }
+            Message::FlashPhysExecStart => {
+                self.flash_phys.next(); // advance to Exec screen
+                self.begin_op(View::Advanced);
+                self.error_msg = None;
+                let conn = self.connection;
+                let loader = self.flash_phys.loader_path.clone().unwrap_or_default();
+                let pairs = self.flash_phys.active_pairs();
+                self.log_lines
+                    .push(format!("[FlashPhys] Flashing {} LUN(s)", pairs.len()));
+                return Task::perform(
+                    async move {
+                        tokio::task::spawn_blocking(move || {
+                            ltbox_core::runtime::run_heavy(move || {
+                                flash_physical_execute(conn, loader, pairs)
+                            })
+                            .unwrap_or_else(|e| {
+                                vec![format!("[FlashPhys] heavy thread error: {e}")]
+                            })
+                        })
+                        .await
+                        .unwrap_or_else(|_| vec!["[FlashPhys] task panicked".to_string()])
+                    },
+                    Message::FlashPhysExecDone,
+                );
+            }
+            Message::FlashPhysExecDone(lines) => {
+                self.log_extend(lines);
+                self.end_op();
+            }
             Message::RebootRequest(target) => {
                 if self.busy {
                     return Task::none();
@@ -6460,7 +6779,11 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
         // scrollable+padding wrapper so the step bar isn't pinched and
         // the 280 px browse card doesn't stretch.
         if self.current_view == View::Advanced
-            && (self.flash_parts_open || self.dump_parts_open || self.adv_wizard.action.is_some())
+            && (self.flash_parts_open
+                || self.dump_parts_open
+                || self.dump_phys_open
+                || self.flash_phys_open
+                || self.adv_wizard.action.is_some())
         {
             return self.view_advanced();
         }
@@ -8928,12 +9251,18 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     // -- Advanced (grid) --------------------------------------------------
 
     fn view_advanced(&self) -> Element<'_, Message> {
-        // FlashPartitions / DumpPartitions preempt the grid.
+        // Dedicated wizards preempt the grid.
         if self.flash_parts_open {
             return self.view_flash_parts_wizard();
         }
         if self.dump_parts_open {
             return self.view_dump_parts_wizard();
+        }
+        if self.dump_phys_open {
+            return self.view_dump_phys_wizard();
+        }
+        if self.flash_phys_open {
+            return self.view_flash_phys_wizard();
         }
         if self.adv_wizard.action.is_some() {
             return self.view_adv_wizard();
@@ -9665,6 +9994,374 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
         container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    // -- Physical Storage: Dump wizard -----------------------------------
+
+    fn view_dump_phys_wizard(&self) -> Element<'_, Message> {
+        let step_labels: Vec<&str> = DUMP_PHYS_STEPS.iter().map(|k| self.t(k)).collect();
+        let step_bar = wizard_step_bar(&step_labels, self.dump_phys.step);
+
+        let body: Element<'_, Message> = match self.dump_phys.step {
+            0 => self.dump_phys_loader_step(),
+            1 => self.dump_phys_select_step(),
+            _ => self.exec_step_view(),
+        };
+
+        let nav = if self.dump_phys.step < 2 {
+            let is_dump_step = self.dump_phys.step == 1;
+            let label = if is_dump_step {
+                self.t("btn_dump").to_string()
+            } else {
+                self.t("btn_next").to_string()
+            };
+            let can = self.dump_phys.can_next() && !self.busy;
+            wizard_nav_generic(
+                true,
+                &label,
+                can,
+                self.t("btn_back"),
+                if self.dump_phys.step == 0 {
+                    Message::DumpPhysClose
+                } else {
+                    Message::DumpPhysBack
+                },
+                Message::DumpPhysNext,
+            )
+        } else {
+            container(text("")).into()
+        };
+
+        column![step_bar, body, nav]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    fn dump_phys_loader_step(&self) -> Element<'_, Message> {
+        let selected = self.dump_phys.loader_path.is_some();
+        let status = match (&self.dump_phys.loader_path, &self.dump_phys.loader_error) {
+            (_, Some(e)) => format!("⚠ {e}"),
+            (Some(p), None) => p.clone(),
+            _ => self.t("dump_parts_loader_placeholder").to_string(),
+        };
+        let btn = button(
+            container(
+                column![
+                    text(self.t("btn_browse_file").to_string())
+                        .size(14)
+                        .center(),
+                    text(self.t("dump_parts_loader_desc").to_string())
+                        .size(11)
+                        .style(muted_style)
+                        .center(),
+                ]
+                .spacing(6)
+                .width(Length::Fill)
+                .align_x(iced::Alignment::Center),
+            )
+            .padding([20, 24])
+            .width(280)
+            .style(move |t: &Theme| sel_card_style(t, selected)),
+        )
+        .on_press(Message::DumpPhysSelectLoader)
+        .padding(0)
+        .style(|_t: &Theme, _s| button::Style {
+            background: None,
+            ..Default::default()
+        });
+        let status_color = if self.dump_phys.loader_error.is_some() {
+            iced::Color::from_rgb(0.9, 0.2, 0.2)
+        } else if selected {
+            GREEN
+        } else {
+            LABEL
+        };
+        let col = column![
+            text(self.t("dump_parts_loader_title").to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            btn,
+            text(status).size(12).color(status_color).center(),
+        ]
+        .spacing(14)
+        .padding(28)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
+    fn dump_phys_select_step(&self) -> Element<'_, Message> {
+        let header = row![
+            text(" ").size(11).width(32),
+            text(self.t("phys_col_storage").to_string())
+                .size(11)
+                .width(Length::Fill)
+                .style(muted_style),
+        ]
+        .spacing(8)
+        .padding([6, 10])
+        .align_y(iced::Alignment::Center);
+
+        let mut list = column![header, widget::rule::horizontal(1)].spacing(0);
+        for idx in 0..PHYS_LUN_COUNT {
+            let checked = self.dump_phys.selected[idx];
+            let cb =
+                iced::widget::checkbox(checked).on_toggle(move |_| Message::DumpPhysToggleRow(idx));
+            let data_row = iced::widget::row![
+                container(cb).width(32),
+                text(format!("LUN {idx}")).size(12).width(Length::Fill),
+            ]
+            .spacing(8)
+            .padding([4, 10])
+            .align_y(iced::Alignment::Center);
+            list = list.push(data_row);
+        }
+
+        let scrolled = scrollable(list).height(Length::Fill).width(Length::Fill);
+
+        let col = column![
+            text(self.t("phys_select_title").to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            text(self.t("phys_select_subtitle").to_string())
+                .size(13)
+                .style(muted_style)
+                .center(),
+            widget::rule::horizontal(1),
+            scrolled,
+        ]
+        .spacing(10)
+        .padding(20)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    // -- Physical Storage: Flash wizard ----------------------------------
+
+    fn view_flash_phys_wizard(&self) -> Element<'_, Message> {
+        let step_labels: Vec<&str> = FLASH_PHYS_STEPS.iter().map(|k| self.t(k)).collect();
+        let step_bar = wizard_step_bar(&step_labels, self.flash_phys.step);
+
+        let body: Element<'_, Message> = match self.flash_phys.step {
+            0 => self.flash_phys_loader_step(),
+            1 => self.flash_phys_select_step(),
+            2 => self.flash_phys_confirm_step(),
+            _ => self.exec_step_view(),
+        };
+
+        let nav = if self.flash_phys.step < 3 {
+            let label = match self.flash_phys.step {
+                0 => self.t("btn_next").to_string(),
+                1 => self.t("btn_next").to_string(),
+                2 => self.t("btn_start").to_string(),
+                _ => self.t("btn_next").to_string(),
+            };
+            let is_start = self.flash_phys.step == 2;
+            let can = self.flash_phys.can_next() && !(self.busy && is_start);
+            wizard_nav_generic(
+                true,
+                &label,
+                can,
+                self.t("btn_back"),
+                if self.flash_phys.step == 0 {
+                    Message::FlashPhysClose
+                } else {
+                    Message::FlashPhysBack
+                },
+                Message::FlashPhysNext,
+            )
+        } else {
+            container(text("")).into()
+        };
+
+        column![step_bar, body, nav]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    fn flash_phys_loader_step(&self) -> Element<'_, Message> {
+        let selected = self.flash_phys.loader_path.is_some();
+        let status = match (&self.flash_phys.loader_path, &self.flash_phys.loader_error) {
+            (_, Some(e)) => format!("⚠ {e}"),
+            (Some(p), None) => p.clone(),
+            _ => self.t("dump_parts_loader_placeholder").to_string(),
+        };
+        let btn = button(
+            container(
+                column![
+                    text(self.t("btn_browse_file").to_string())
+                        .size(14)
+                        .center(),
+                    text(self.t("dump_parts_loader_desc").to_string())
+                        .size(11)
+                        .style(muted_style)
+                        .center(),
+                ]
+                .spacing(6)
+                .width(Length::Fill)
+                .align_x(iced::Alignment::Center),
+            )
+            .padding([20, 24])
+            .width(280)
+            .style(move |t: &Theme| sel_card_style(t, selected)),
+        )
+        .on_press(Message::FlashPhysSelectLoader)
+        .padding(0)
+        .style(|_t: &Theme, _s| button::Style {
+            background: None,
+            ..Default::default()
+        });
+        let status_color = if self.flash_phys.loader_error.is_some() {
+            iced::Color::from_rgb(0.9, 0.2, 0.2)
+        } else if selected {
+            GREEN
+        } else {
+            LABEL
+        };
+        let col = column![
+            text(self.t("dump_parts_loader_title").to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            btn,
+            text(status).size(12).color(status_color).center(),
+        ]
+        .spacing(14)
+        .padding(28)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
+    fn flash_phys_select_step(&self) -> Element<'_, Message> {
+        let header = row![
+            text(" ").size(11).width(32),
+            text(self.t("phys_col_storage").to_string())
+                .size(11)
+                .width(Length::FillPortion(2))
+                .style(muted_style),
+            text(self.t("flash_parts_col_file").to_string())
+                .size(11)
+                .width(Length::FillPortion(3))
+                .style(muted_style),
+        ]
+        .spacing(8)
+        .padding([6, 10])
+        .align_y(iced::Alignment::Center);
+
+        let mut list = column![header, widget::rule::horizontal(1)].spacing(0);
+        for idx in 0..PHYS_LUN_COUNT {
+            let checked = self.flash_phys.selected[idx];
+            let cb = iced::widget::checkbox(checked)
+                .on_toggle(move |_| Message::FlashPhysToggleRow(idx));
+
+            let file_disp = self.flash_phys.file_paths[idx]
+                .as_ref()
+                .map(|p| {
+                    std::path::Path::new(p)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| p.clone())
+                })
+                .unwrap_or_default();
+
+            let data_row = iced::widget::row![
+                container(cb).width(32),
+                text(format!("LUN {idx}"))
+                    .size(12)
+                    .width(Length::FillPortion(2)),
+                text(file_disp).size(12).width(Length::FillPortion(3)),
+            ]
+            .spacing(8)
+            .padding([4, 10])
+            .align_y(iced::Alignment::Center);
+
+            let clickable = iced::widget::mouse_area(data_row)
+                .on_double_click(Message::FlashPhysPickRowFile(idx));
+            list = list.push(clickable);
+        }
+
+        let scrolled = scrollable(list).height(Length::Fill).width(Length::Fill);
+
+        let col = column![
+            text(self.t("phys_select_title").to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            text(self.t("flash_phys_select_subtitle").to_string())
+                .size(13)
+                .style(muted_style)
+                .center(),
+            widget::rule::horizontal(1),
+            scrolled,
+        ]
+        .spacing(10)
+        .padding(20)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    fn flash_phys_confirm_step(&self) -> Element<'_, Message> {
+        let pairs = self.flash_phys.active_pairs();
+
+        let mut col = column![
+            text(self.t("flash_parts_confirm_title").to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            text(self.t("flash_phys_confirm_subtitle").to_string())
+                .size(13)
+                .style(muted_style)
+                .center(),
+            widget::rule::horizontal(1),
+        ]
+        .spacing(10)
+        .padding(28)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+
+        if !pairs.is_empty() {
+            let mut list = column![
+                text(self.t("flash_parts_confirm_flash_hdr").to_string())
+                    .size(14)
+                    .style(on_surface_style)
+            ]
+            .spacing(4);
+            for (lun, path) in &pairs {
+                let fname = std::path::Path::new(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.clone());
+                list = list.push(
+                    text(format!("• LUN {lun} ← {fname}"))
+                        .size(12)
+                        .style(muted_style),
+                );
+            }
+            col = col.push(container(list).padding(14).width(Length::Fill));
+        }
+
+        container(scrollable(col).height(Length::Fill).width(Length::Fill))
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
@@ -10508,6 +11205,101 @@ fn dump_parts_execute(
     log.push("[DumpParts] Resetting device to system...".to_string());
     let _ = session.reset(&mut log);
     log.push("[DumpParts] Done.".to_string());
+    log
+}
+
+/// Whole-LUN dump. Walks each selected LUN and writes it as
+/// `lun_N.img` into `output_folder`. Unlike `dump_parts_execute` there
+/// is no prior scan phase — the LUN set comes straight from the user's
+/// checkboxes.
+fn dump_physical_execute(
+    conn: ConnectionStatus,
+    loader_path: String,
+    output_folder: String,
+    luns: Vec<u8>,
+) -> Vec<String> {
+    let mut log = Vec::new();
+    if ensure_edl(conn, "DumpPhys", &mut log).is_err() {
+        return log;
+    }
+    let out_dir = std::path::PathBuf::from(&output_folder);
+    if let Err(e) = std::fs::create_dir_all(&out_dir) {
+        log.push(format!("[DumpPhys] create output folder failed: {e}"));
+        return log;
+    }
+
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    let loader = std::path::PathBuf::from(&loader_path);
+    let mut session = match ltbox_device::edl::EdlSession::open(&loader, true, &mut log) {
+        Ok(s) => s,
+        Err(e) => {
+            log.push(format!("[DumpPhys] EDL session open failed: {e}"));
+            return log;
+        }
+    };
+
+    for lun in &luns {
+        let out_path = out_dir.join(format!("lun_{lun}.img"));
+        log.push(format!(
+            "[DumpPhys] Dumping LUN {lun} → {}",
+            out_path.display()
+        ));
+        if let Err(e) = session.dump_physical_storage(*lun, &out_path, &mut log) {
+            log.push(format!("[DumpPhys] LUN {lun} failed: {e}"));
+        }
+    }
+
+    log.push("[DumpPhys] Resetting device to system...".to_string());
+    let _ = session.reset(&mut log);
+    log.push("[DumpPhys] Done.".to_string());
+    log
+}
+
+/// Whole-LUN raw flash. Each `(lun, path)` pair is written verbatim
+/// from sector 0. Mirrors qdlrs `OverwriteStorage`.
+fn flash_physical_execute(
+    conn: ConnectionStatus,
+    loader_path: String,
+    pairs: Vec<(u8, String)>,
+) -> Vec<String> {
+    let mut log = Vec::new();
+    if ensure_edl(conn, "FlashPhys", &mut log).is_err() {
+        return log;
+    }
+
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    let loader = std::path::PathBuf::from(&loader_path);
+    let mut session = match ltbox_device::edl::EdlSession::open(&loader, true, &mut log) {
+        Ok(s) => s,
+        Err(e) => {
+            log.push(format!("[FlashPhys] EDL session open failed: {e}"));
+            return log;
+        }
+    };
+
+    for (lun, path) in &pairs {
+        let img = std::path::Path::new(path);
+        if !img.exists() {
+            log.push(format!(
+                "[FlashPhys] Skipping LUN {lun}: image {} missing",
+                path
+            ));
+            continue;
+        }
+        log.push(format!(
+            "[FlashPhys] Flashing LUN {lun} ← {}",
+            img.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.clone()),
+        ));
+        if let Err(e) = session.flash_physical_storage(*lun, img, &mut log) {
+            log.push(format!("[FlashPhys] LUN {lun} failed: {e}"));
+        }
+    }
+
+    log.push("[FlashPhys] Resetting device to system...".to_string());
+    let _ = session.reset(&mut log);
+    log.push("[FlashPhys] Done.".to_string());
     log
 }
 

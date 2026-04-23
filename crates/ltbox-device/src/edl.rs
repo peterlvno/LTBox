@@ -408,6 +408,69 @@ impl EdlSession {
         Ok(())
     }
 
+    /// Total sector count of a physical LUN. Probes the primary GPT
+    /// header (sector 1) and returns `backup_lba + 1`, since
+    /// `backup_lba` points at the backup header (last sector of the
+    /// disk). Used by the Physical Storage Dump wizard to size a
+    /// whole-LUN read without an explicit disk-size query.
+    pub fn physical_lun_sector_count(&mut self, lun: u8, log: &mut Vec<String>) -> Result<u64> {
+        let mut buf = Cursor::new(Vec::<u8>::new());
+        qdl::firehose_read_storage(&mut self.dev, &mut buf, 1, 0, lun, 1)
+            .map_err(|e| EdlError::Session(format!("GPT probe failed: {e}")))?;
+        buf.rewind()?;
+        let header = gptman::GPTHeader::read_from(&mut buf)
+            .map_err(|e| EdlError::Session(format!("GPT header parse failed: {e}")))?;
+        let total = header.backup_lba + 1;
+        log.push(format!("[EDL] LUN {lun}: {total} sectors total"));
+        Ok(total)
+    }
+
+    /// Whole-LUN dump to a file. Reads every sector from LUN `lun`
+    /// (count derived from the GPT header's `alternate_lba`) straight
+    /// into `output`. Mirrors qdlrs `Dump` but without GPT decoding —
+    /// the caller gets a raw physical image.
+    pub fn dump_physical_storage(
+        &mut self,
+        lun: u8,
+        output: &Path,
+        log: &mut Vec<String>,
+    ) -> Result<()> {
+        let total = self.physical_lun_sector_count(lun, log)?;
+        let mut out_file = std::fs::File::create(output)?;
+        log.push(format!(
+            "[EDL] $ dump LUN {lun} → {} ({total} sectors)",
+            output.display()
+        ));
+        qdl::firehose_read_storage(&mut self.dev, &mut out_file, total as usize, 0, lun, 0)
+            .map_err(|e| EdlError::Session(format!("Physical LUN read failed: {e}")))?;
+        log.push(format!("[EDL] dumped LUN {lun}"));
+        Ok(())
+    }
+
+    /// Whole-LUN raw flash. Mirrors qdlrs `OverwriteStorage`: empty
+    /// partition name + start sector "0", file sector count derived
+    /// from the image length. No GPT lookup, no bounds check — the
+    /// image is written verbatim to sector 0 of `lun`.
+    pub fn flash_physical_storage(
+        &mut self,
+        lun: u8,
+        image: &Path,
+        log: &mut Vec<String>,
+    ) -> Result<()> {
+        let mut file = std::fs::File::open(image)?;
+        let file_len = file.metadata()?.len();
+        let sector_size = self.dev.fh_config().storage_sector_size as u64;
+        let num_sectors = file_len.div_ceil(sector_size) as usize;
+        log.push(format!(
+            "[EDL] $ flash LUN {lun} ← {} ({file_len} bytes, {num_sectors} sectors)",
+            image.display()
+        ));
+        qdl::firehose_program_storage(&mut self.dev, &mut file, "", num_sectors, 0, lun, "0")
+            .map_err(|e| EdlError::Session(format!("Physical LUN write failed: {e}")))?;
+        log.push(format!("[EDL] flashed LUN {lun}"));
+        Ok(())
+    }
+
     /// Erase a sector range. Used by the Flash Partitions wizard when
     /// the user flags a row as "erase". `start_sector` is passed through
     /// Firehose as a string so negative offsets (e.g. "-1") stay valid.
