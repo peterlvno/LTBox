@@ -318,7 +318,27 @@ impl EdlSession {
             tr("log_edl_lookup_partition")
         ));
         let (start, end) = self.find_partition(part_name, slot, lun)?;
-        let sectors = (end - start + 1) as usize;
+        // Reject degenerate GPT entries up-front: end<start wraps under
+        // u64, end==start is a zero-sector partition (valid but nothing to
+        // dump), and a sector count past usize::MAX cannot be allocated.
+        // Firehose's `start_sector` protocol field is u32 so also refuse
+        // >u32::MAX starting LBAs rather than silently truncating.
+        let span = end
+            .checked_sub(start)
+            .and_then(|d| d.checked_add(1))
+            .ok_or_else(|| {
+                EdlError::Session(format!(
+                    "Partition {part_name} GPT range invalid: start={start} end={end}"
+                ))
+            })?;
+        let sectors = usize::try_from(span).map_err(|_| {
+            EdlError::Session(format!("Partition {part_name} span {span} exceeds usize"))
+        })?;
+        let start_u32 = u32::try_from(start).map_err(|_| {
+            EdlError::Session(format!(
+                "Partition {part_name} start LBA {start} exceeds Firehose u32 limit"
+            ))
+        })?;
         log.push(format!(
             "[EDL] {} {part_name}: LBA {start}-{end} ({sectors} sectors)",
             tr("log_edl_found_partition")
@@ -330,15 +350,8 @@ impl EdlSession {
             tr("log_edl_dump_cmd"),
             output.display()
         ));
-        qdl::firehose_read_storage(
-            &mut self.dev,
-            &mut out_file,
-            sectors,
-            slot,
-            lun,
-            start as u32,
-        )
-        .map_err(|e| EdlError::Session(format!("Partition read failed: {e}")))?;
+        qdl::firehose_read_storage(&mut self.dev, &mut out_file, sectors, slot, lun, start_u32)
+            .map_err(|e| EdlError::Session(format!("Partition read failed: {e}")))?;
         log.push(format!("[EDL] {} {part_name}", tr("log_edl_dumped")));
         Ok(())
     }
@@ -645,17 +658,13 @@ impl EdlSession {
                 if !Self::wipe_labels(label) {
                     continue;
                 }
-                let num_sectors: usize = node
-                    .attribute("num_partition_sectors")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
+                let ctx = format!("{} <program label={label}>", xml_path.display());
+                let num_sectors: usize =
+                    parse_xml_attr(&node, "num_partition_sectors", 0usize, &ctx)?;
                 if num_sectors == 0 {
                     continue;
                 }
-                let lun: u8 = node
-                    .attribute("physical_partition_number")
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
+                let lun: u8 = parse_xml_attr(&node, "physical_partition_number", 0u8, &ctx)?;
                 let start_sector = node.attribute("start_sector").unwrap_or("0");
                 log.push(format!(
                     "[EDL] erase {label} (LUN {lun}, start {start_sector}, {num_sectors} sectors)"
@@ -707,29 +716,18 @@ impl EdlSession {
     ) -> Result<()> {
         let label = node.attribute("label").unwrap_or("").trim().to_string();
         let filename = node.attribute("filename").unwrap_or("").trim().to_string();
-        let num_sectors: usize = node
-            .attribute("num_partition_sectors")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let ctx = format!("<program label={label}>");
+        let num_sectors: usize = parse_xml_attr(node, "num_partition_sectors", 0usize, &ctx)?;
 
         // Skip GPT placeholders / empty entries (qdl CLI `parse_program_cmd`).
         if filename.is_empty() || num_sectors == 0 {
             return Ok(());
         }
 
-        let lun: u8 = node
-            .attribute("physical_partition_number")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
-        let slot: u8 = node
-            .attribute("slot")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let lun: u8 = parse_xml_attr(node, "physical_partition_number", 0u8, &ctx)?;
+        let slot: u8 = parse_xml_attr(node, "slot", 0u8, &ctx)?;
         let start_sector = node.attribute("start_sector").unwrap_or("0");
-        let file_sector_offset: u64 = node
-            .attribute("file_sector_offset")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let file_sector_offset: u64 = parse_xml_attr(node, "file_sector_offset", 0u64, &ctx)?;
         let sector_size: u64 = self.dev.fh_config().storage_sector_size as u64;
 
         let image_path = xml_dir.join(&filename);
@@ -772,17 +770,12 @@ impl EdlSession {
         node: &roxmltree::Node<'_, '_>,
         log: &mut Vec<String>,
     ) -> Result<()> {
-        let num_sectors: usize = node
-            .attribute("num_partition_sectors")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let ctx = "<erase>";
+        let num_sectors: usize = parse_xml_attr(node, "num_partition_sectors", 0usize, ctx)?;
         if num_sectors == 0 {
             return Ok(());
         }
-        let lun: u8 = node
-            .attribute("physical_partition_number")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        let lun: u8 = parse_xml_attr(node, "physical_partition_number", 0u8, ctx)?;
         let start_sector = node.attribute("start_sector").unwrap_or("0");
 
         log.push(format!(
@@ -808,22 +801,11 @@ impl EdlSession {
             if filename != "DISK" {
                 continue;
             }
-            let byte_off: u64 = node
-                .attribute("byte_offset")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            let lun: u8 = node
-                .attribute("physical_partition_number")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            let slot: u8 = node
-                .attribute("slot")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-            let size: u64 = node
-                .attribute("size_in_bytes")
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
+            let ctx = "<patch>";
+            let byte_off: u64 = parse_xml_attr(&node, "byte_offset", 0u64, ctx)?;
+            let lun: u8 = parse_xml_attr(&node, "physical_partition_number", 0u8, ctx)?;
+            let slot: u8 = parse_xml_attr(&node, "slot", 0u8, ctx)?;
+            let size: u64 = parse_xml_attr(&node, "size_in_bytes", 0u64, ctx)?;
             let start_sector = node.attribute("start_sector").unwrap_or("0");
             let value = node.attribute("value").unwrap_or("");
 
@@ -842,6 +824,35 @@ impl EdlSession {
             .map_err(|e| EdlError::Session(format!("Patch failed: {e}")))?;
         }
         Ok(())
+    }
+}
+
+/// Parse an XML attribute, distinguishing three cases:
+///   - attribute absent → returns `default`
+///   - attribute present and parseable → returns the parsed value
+///   - attribute present but malformed → returns
+///     `EdlError::Session` with context
+///
+/// Silently defaulting a malformed value (e.g. `num_partition_sectors="bogus"`
+/// → 0) lets a corrupt rawprogram XML steer a flash at sector 0 or skip a
+/// real partition entirely. Values that are legitimately optional (e.g.
+/// `slot`, `file_sector_offset`) still default cleanly when absent.
+fn parse_xml_attr<T>(
+    node: &roxmltree::Node<'_, '_>,
+    attr: &str,
+    default: T,
+    context: &str,
+) -> Result<T>
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::fmt::Display,
+{
+    match node.attribute(attr) {
+        None => Ok(default),
+        Some(raw) => raw
+            .trim()
+            .parse::<T>()
+            .map_err(|e| EdlError::Session(format!("{context}: invalid {attr}='{raw}': {e}"))),
     }
 }
 
