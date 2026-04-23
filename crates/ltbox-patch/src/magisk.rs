@@ -16,35 +16,70 @@ use crate::boot;
 /// Files extracted from the APK and staged for the magiskboot cpio pass.
 pub const PAYLOAD_FILES: &[&str] = &["magisk", "magiskinit", "init-ld", "stub.apk"];
 
+/// Map the three crypto getprops to the `encrypt_type` v2 uses to gate
+/// `/data` eligibility. `"none"` = unencrypted, `"file"` = FBE,
+/// `"block"` = full-disk, `"metadata"` = metadata crypto. Matches the
+/// cascade in `_find_magisk_preinit_device_from_mountinfo` from
+/// `bin/ltbox/patch/root.py`.
+pub fn derive_encrypt_type(
+    crypto_state: &str,
+    crypto_type: &str,
+    crypto_metadata_enabled: &str,
+) -> &'static str {
+    if crypto_state.trim() != "encrypted" {
+        "none"
+    } else if crypto_type.trim() == "block" {
+        "block"
+    } else if crypto_metadata_enabled.trim() == "true" {
+        "metadata"
+    } else {
+        "file"
+    }
+}
+
 /// Resolve Magisk's `PREINITDEVICE` partition name from `/proc/self/mountinfo`.
 /// Returns the bare partition name (e.g. `"metadata"`), not a block path.
 ///
 /// Priority: `/metadata` > `/persist` | `/mnt/vendor/persist` > `/klogdump` >
 /// `/cache` > `/data`. Within a tier, ext4 beats f2fs. Read-only, non-`/`-root,
 /// pseudo-fs, and device-mapper mounts are filtered out.
-pub fn resolve_preinit_device(mountinfo: &str) -> Option<String> {
+///
+/// `encrypt_type` gates `/data` eligibility: `"none"` (plain) and `"file"`
+/// (FBE) keep `/data` eligible; `"block"` / `"metadata"` devices cannot use
+/// userdata for preinit because the partition is unavailable pre-unlock.
+/// Mirrors `bin/ltbox/patch/root.py::_find_magisk_preinit_device_from_mountinfo`.
+///
+/// Also drops dynamic-major partitions (majors 240-254) unless the source
+/// path carries `/by-name/` or contains `/vd` — prevents grabbing a
+/// super-partition lvm mapping that disappears at next boot.
+pub fn resolve_preinit_device(mountinfo: &str, encrypt_type: &str) -> Option<String> {
     const PRIO_METADATA: u32 = 5;
     const PRIO_PERSIST: u32 = 4;
     const PRIO_KLOGDUMP: u32 = 3;
     const PRIO_CACHE: u32 = 2;
     const PRIO_DATA: u32 = 1;
 
-    fn priority_for_mount(target: &str) -> Option<u32> {
+    const DYN_MAJOR_MIN: u32 = 240;
+    const DYN_MAJOR_MAX: u32 = 254;
+
+    let data_ok = encrypt_type == "none" || encrypt_type == "file";
+
+    let priority_for_mount = |target: &str| -> Option<u32> {
         match target {
             "/metadata" => Some(PRIO_METADATA),
             "/persist" | "/mnt/vendor/persist" => Some(PRIO_PERSIST),
             "/klogdump" => Some(PRIO_KLOGDUMP),
             "/cache" => Some(PRIO_CACHE),
-            "/data" => Some(PRIO_DATA),
+            "/data" if data_ok => Some(PRIO_DATA),
             _ => None,
         }
-    }
+    };
 
     // (priority, fs_preference, partition_name); higher tuple wins under Ord (ext4=1, f2fs=0).
     let mut candidates: Vec<(u32, u32, String)> = Vec::new();
 
     for line in mountinfo.lines() {
-        // mountinfo: `mount_id parent root mount_point options - fs_type source super_options`
+        // mountinfo: `mount_id parent major:minor root mount_point options - fs_type source super_options`
         let (pre, post) = match line.split_once(" - ") {
             Some(p) => p,
             None => continue,
@@ -54,6 +89,10 @@ pub fn resolve_preinit_device(mountinfo: &str) -> Option<String> {
         if pre_parts.len() < 6 || post_parts.len() < 3 {
             continue;
         }
+        let device_major: u32 = pre_parts[2]
+            .split_once(':')
+            .and_then(|(maj, _)| maj.parse().ok())
+            .unwrap_or(0);
         let root = pre_parts[3];
         let target = pre_parts[4];
         let mount_opts = pre_parts[5];
@@ -81,6 +120,17 @@ pub fn resolve_preinit_device(mountinfo: &str) -> Option<String> {
             trimmed.ends_with("by-name") || trimmed.ends_with("block")
         };
         if !parent_ok {
+            continue;
+        }
+
+        // Dynamic-major filter: super-partition lvm entries get majors in
+        // 240..=254 and vanish on the next boot. Keep them only when the
+        // source path signals a stable name (`/by-name/`) or a virtual-disk
+        // mapping (`/vd`).
+        if (DYN_MAJOR_MIN..=DYN_MAJOR_MAX).contains(&device_major)
+            && !source.contains("/vd")
+            && !source.contains("/by-name/")
+        {
             continue;
         }
 
@@ -275,8 +325,13 @@ mod tests {
     use super::*;
 
     // Minimal mountinfo line template; only parser-relevant fields matter.
+    // `major` matters for the dynamic-major filter; default 259 is ufs/sda.
     fn line(target: &str, opts: &str, fs: &str, source: &str) -> String {
         format!("1 1 259:1 / {target} {opts} shared:1 - {fs} {source} rw",)
+    }
+
+    fn line_major(major: u32, target: &str, opts: &str, fs: &str, source: &str) -> String {
+        format!("1 1 {major}:1 / {target} {opts} shared:1 - {fs} {source} rw",)
     }
 
     #[test]
@@ -296,7 +351,10 @@ mod tests {
                 "/dev/block/by-name/metadata"
             ),
         );
-        assert_eq!(resolve_preinit_device(&info).as_deref(), Some("metadata"));
+        assert_eq!(
+            resolve_preinit_device(&info, "file").as_deref(),
+            Some("metadata")
+        );
     }
 
     #[test]
@@ -317,7 +375,7 @@ mod tests {
             ),
         );
         assert_eq!(
-            resolve_preinit_device(&info).as_deref(),
+            resolve_preinit_device(&info, "file").as_deref(),
             Some("vendor_persist")
         );
     }
@@ -330,23 +388,84 @@ mod tests {
             "ext4",
             "/dev/block/by-name/metadata",
         );
-        assert_eq!(resolve_preinit_device(&info), None);
+        assert_eq!(resolve_preinit_device(&info, "file"), None);
     }
 
     #[test]
     fn drops_device_mapper_sources() {
         let info = line("/metadata", "rw", "ext4", "/dev/block/dm-5");
-        assert_eq!(resolve_preinit_device(&info), None);
+        assert_eq!(resolve_preinit_device(&info, "file"), None);
     }
 
     #[test]
     fn drops_tmpfs_mounts() {
         let info = "1 1 0:1 / /metadata rw shared:1 - tmpfs tmpfs rw".to_string();
-        assert_eq!(resolve_preinit_device(&info), None);
+        assert_eq!(resolve_preinit_device(&info, "file"), None);
     }
 
     #[test]
     fn empty_returns_none() {
-        assert_eq!(resolve_preinit_device(""), None);
+        assert_eq!(resolve_preinit_device("", "file"), None);
+    }
+
+    #[test]
+    fn data_eligible_when_unencrypted_or_fbe() {
+        let info = line(
+            "/data",
+            "rw,seclabel",
+            "f2fs",
+            "/dev/block/by-name/userdata",
+        );
+        assert_eq!(
+            resolve_preinit_device(&info, "none").as_deref(),
+            Some("userdata")
+        );
+        assert_eq!(
+            resolve_preinit_device(&info, "file").as_deref(),
+            Some("userdata")
+        );
+    }
+
+    #[test]
+    fn data_dropped_on_block_or_metadata_crypto() {
+        let info = line(
+            "/data",
+            "rw,seclabel",
+            "f2fs",
+            "/dev/block/by-name/userdata",
+        );
+        assert_eq!(resolve_preinit_device(&info, "block"), None);
+        assert_eq!(resolve_preinit_device(&info, "metadata"), None);
+    }
+
+    #[test]
+    fn drops_dynamic_major_without_stable_hint() {
+        // major 253 (dm-crypt / super lvm) + no `/vd` or `/by-name/` in path → drop.
+        let info = line_major(253, "/metadata", "rw,seclabel", "ext4", "/dev/block/dm-0");
+        assert_eq!(resolve_preinit_device(&info, "file"), None);
+    }
+
+    #[test]
+    fn keeps_dynamic_major_with_by_name() {
+        let info = line_major(
+            253,
+            "/metadata",
+            "rw,seclabel",
+            "ext4",
+            "/dev/block/by-name/metadata",
+        );
+        assert_eq!(
+            resolve_preinit_device(&info, "file").as_deref(),
+            Some("metadata")
+        );
+    }
+
+    #[test]
+    fn encrypt_type_cascade() {
+        assert_eq!(derive_encrypt_type("unencrypted", "", ""), "none");
+        assert_eq!(derive_encrypt_type("encrypted", "block", ""), "block");
+        assert_eq!(derive_encrypt_type("encrypted", "file", "true"), "metadata");
+        assert_eq!(derive_encrypt_type("encrypted", "file", "false"), "file");
+        assert_eq!(derive_encrypt_type("encrypted", "file", ""), "file");
     }
 }

@@ -4528,23 +4528,39 @@ impl App {
                     .unwrap_or_else(|| "?".to_string());
                 self.log_push(format!("[Root] Starting: {fam_label}"));
                 // Resolve Magisk preinit device while ADB still exists
-                // — it vanishes past EDL. v2 parity: walk /proc/self/mountinfo.
+                // — it vanishes past EDL. v2 parity: walk /proc/self/mountinfo
+                // AND gate /data on the device's encryption state, else a
+                // metadata-encrypted device lands preinit on userdata and
+                // boot-loops after the first wipe cycle.
                 let preinit_device: String = if matches!(family, Some(Family::Magisk))
                     && matches!(
                         self.connection,
                         ConnectionStatus::Adb | ConnectionStatus::AdbRecovery
                     ) {
                     let mut adb = ltbox_device::adb::AdbManager::new();
-                    let mountinfo = if adb.check_device().unwrap_or(false) {
-                        adb.shell("cat /proc/self/mountinfo").unwrap_or_default()
+                    let (mountinfo, encrypt_type) = if adb.check_device().unwrap_or(false) {
+                        let mi = adb.shell("cat /proc/self/mountinfo").unwrap_or_default();
+                        let cs = adb.shell("getprop ro.crypto.state").unwrap_or_default();
+                        let ct = adb.shell("getprop ro.crypto.type").unwrap_or_default();
+                        let cme = adb
+                            .shell("getprop ro.crypto.metadata.enabled")
+                            .unwrap_or_default();
+                        (
+                            mi,
+                            ltbox_patch::magisk::derive_encrypt_type(&cs, &ct, &cme).to_string(),
+                        )
                     } else {
-                        String::new()
+                        (String::new(), String::from("file"))
                     };
                     if mountinfo.is_empty() {
                         self.log_push("[Magisk] Preinit device: (ADB unavailable — falling back to runtime detection)".to_string());
                         String::new()
                     } else {
-                        match ltbox_patch::magisk::resolve_preinit_device(&mountinfo) {
+                        self.log_push(format!(
+                            "[Magisk] Crypto state: encrypt_type={encrypt_type}"
+                        ));
+                        match ltbox_patch::magisk::resolve_preinit_device(&mountinfo, &encrypt_type)
+                        {
                             Some(name) => {
                                 self.log_push(format!("[Magisk] Preinit device: {name} (resolved from /proc/self/mountinfo)"));
                                 name
