@@ -1952,17 +1952,12 @@ impl SysUpdateWizard {
 
 /// Tri-state row action — clicking the checkbox cycles through these
 /// in order. Flash requires a `file_path`; Erase wipes the sector range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 enum FlashRowState {
+    #[default]
     Unchecked,
     Flash,
     Erase,
-}
-
-impl Default for FlashRowState {
-    fn default() -> Self {
-        Self::Unchecked
-    }
 }
 
 impl FlashRowState {
