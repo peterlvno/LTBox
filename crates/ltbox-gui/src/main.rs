@@ -3253,6 +3253,14 @@ impl App {
         }
     }
 
+    fn country_popup_selected_code(&self) -> Option<&str> {
+        if self.adv_needs_country {
+            self.adv_wizard.country.as_deref()
+        } else {
+            self.wf_config.country_code.as_deref()
+        }
+    }
+
     fn log_text_for_save(&self, source: LogSaveSource) -> String {
         match source {
             LogSaveSource::Main => self.log_lines.join("\n"),
@@ -7322,9 +7330,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
 
     fn country_popup_view(&self) -> Element<'_, Message> {
         let mut list = column![].spacing(2);
+        let selected_code = self.country_popup_selected_code();
         for entry in COUNTRY_CODES {
             let code = entry.code.to_string();
-            let selected = self.wf_config.country_code.as_deref() == Some(entry.code);
+            let selected = selected_code == Some(entry.code);
             let label = format!("{} — {}", entry.code, entry.name);
             let bg_color = if selected {
                 ACCENT
@@ -12882,6 +12891,71 @@ mod tests {
                 AdvAction::FlashPhysical,
             ]
         );
+    }
+
+    fn assert_template_call_replaces(source: &str, key: &str, placeholders: &[&str]) {
+        let needle = format!("tr(\"{key}\")");
+        let pos = source.find(&needle).expect("template key must be used");
+        let end = (pos + 2_000).min(source.len());
+        let window = &source[pos..end];
+        let compact_window: String = window.chars().filter(|c| !c.is_whitespace()).collect();
+        for placeholder in placeholders {
+            let replacement = format!(".replace(\"{{{placeholder}}}\"");
+            assert!(
+                compact_window.contains(&replacement),
+                "{key} must replace {{{placeholder}}} near its log call"
+            );
+        }
+    }
+
+    #[test]
+    fn high_risk_log_templates_replace_visible_placeholders() {
+        let main_rs = include_str!("main.rs");
+        let edl_rs = include_str!("../../ltbox-device/src/edl.rs");
+
+        assert_template_call_replaces(
+            edl_rs,
+            "log_edl_flash_program_cmd",
+            &["label", "image", "lun", "start", "sectors"],
+        );
+        assert_template_call_replaces(
+            main_rs,
+            "live_country_dump_partition",
+            &["label", "lun", "start", "sectors"],
+        );
+        assert_template_call_replaces(main_rs, "live_dump_phys_dumping_lun", &["lun", "path"]);
+        assert_template_call_replaces(main_rs, "live_dump_phys_lun_failed", &["lun", "error"]);
+    }
+
+    #[test]
+    fn country_popup_selection_uses_opening_flow_context() {
+        let app = App {
+            adv_needs_country: true,
+            adv_wizard: AdvWizard {
+                country: Some("KR".to_string()),
+                ..AdvWizard::default()
+            },
+            wf_config: WorkflowConfig {
+                country_code: Some("CN".to_string()),
+                ..WorkflowConfig::default()
+            },
+            ..App::default()
+        };
+        assert_eq!(app.country_popup_selected_code(), Some("KR"));
+
+        let app = App {
+            adv_needs_country: false,
+            adv_wizard: AdvWizard {
+                country: Some("KR".to_string()),
+                ..AdvWizard::default()
+            },
+            wf_config: WorkflowConfig {
+                country_code: Some("CN".to_string()),
+                ..WorkflowConfig::default()
+            },
+            ..App::default()
+        };
+        assert_eq!(app.country_popup_selected_code(), Some("CN"));
     }
 
     #[test]
