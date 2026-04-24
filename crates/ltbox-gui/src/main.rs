@@ -2549,6 +2549,51 @@ fn transition_to_edl(ll: &LiveLabels, log: &mut Vec<String>) -> std::result::Res
 
 /// M3 neutral pill — translucent `on_surface` fill, muted text, 4 dp
 /// corners. Small secondary actions (Cancel / Show log / Save log).
+fn install_root_manager_apk(
+    manager_apk: &std::path::Path,
+    log: &mut Vec<String>,
+) -> std::result::Result<(), String> {
+    let mut adb = ltbox_device::adb::AdbManager::new();
+    if !adb.check_device().unwrap_or(false) {
+        return Err("ADB device is not connected".to_string());
+    }
+    let path = manager_apk.to_string_lossy().to_string();
+    live!(
+        log,
+        "[Root] Installing manager APK: {}",
+        manager_apk.display()
+    );
+    adb.install(&path)
+        .map_err(|e| format!("Manager APK install failed: {e}"))?;
+    live!(log, "[Root] Manager APK installed");
+    Ok(())
+}
+
+fn wait_and_install_root_manager_apk(
+    manager_apk: &std::path::Path,
+    timeout: std::time::Duration,
+    log: &mut Vec<String>,
+) -> std::result::Result<(), String> {
+    let deadline = std::time::Instant::now() + timeout;
+    live!(
+        log,
+        "[Root] Waiting up to {}s for ADB to install manager APK",
+        timeout.as_secs()
+    );
+    loop {
+        match install_root_manager_apk(manager_apk, log) {
+            Ok(()) => return Ok(()),
+            Err(last) if std::time::Instant::now() >= deadline => {
+                return Err(format!(
+                    "{last}. Install the manager APK manually: {}",
+                    manager_apk.display()
+                ));
+            }
+            Err(_) => std::thread::sleep(std::time::Duration::from_secs(1)),
+        }
+    }
+}
+
 fn neutral_pill_btn_style(t: &Theme, _s: button::Status) -> button::Style {
     let p = pal_of(t);
     button::Style {
@@ -4837,7 +4882,7 @@ impl App {
 
                             use ltbox_patch::root_pipeline::{
                                 RootFamily, RootPipelineConfig, RootProvider, RootVersion,
-                                build_patched_artifacts,
+                                build_patched_artifacts, stage_root_manager_apk,
                             };
 
                             let pipe_family = match family {
@@ -4859,6 +4904,8 @@ impl App {
                                 VerChoice::Stable => RootVersion::Stable,
                                 VerChoice::Nightly => RootVersion::Nightly,
                             };
+                            let file_path_buf: Option<std::path::PathBuf> =
+                                file_path.as_ref().map(std::path::PathBuf::from);
 
                             let fw_folder = fw_folder.ok_or_else(|| {
                                 "No firmware folder selected. Open the Flash wizard first, pick the folder \
@@ -4895,9 +4942,11 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                             // KernelSU stable picks `.ko` by kernel MAJOR.MINOR.PATCH.
                             let mut slot_suffix = String::new();
                             let mut kernel_version: Option<String> = gui_kernel_version.clone();
+                            let mut adb_ready_at_start = false;
                             if !skip_adb {
                                 let mut adb = ltbox_device::adb::AdbManager::new();
                                 if adb.check_device().unwrap_or(false) {
+                                    adb_ready_at_start = true;
                                     slot_suffix = adb
                                         .get_slot_suffix()
                                         .ok()
@@ -4939,6 +4988,40 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                 );
                             }
 
+                            let manager_cfg = RootPipelineConfig {
+                                family: pipe_family,
+                                provider: pipe_provider,
+                                version: pipe_version,
+                                work_dir: work_dir.clone(),
+                                output_dir: output_dir.clone(),
+                                loader: loader.clone(),
+                                slot_suffix: slot_suffix.clone(),
+                                preinit_device: preinit_device.clone(),
+                                kernel_version: kernel_version.clone(),
+                                gki_kernel_zip: if is_gki_route { file_path_buf.clone() } else { None },
+                                gki_mode: is_gki_route,
+                                kpm_paths: kpm_paths.clone(),
+                                superkey: superkey.clone(),
+                                magisk_forks_apk: if matches!(pipe_provider, RootProvider::MagiskFork) {
+                                    file_path_buf.clone()
+                                } else {
+                                    None
+                                },
+                                nightly_run_id,
+                            };
+                            let mut manager_apk = stage_root_manager_apk(&manager_cfg, &mut log)
+                                .map_err(|e| format!("Manager APK: {e}"))?;
+                            let manager_installed_pre_edl = if adb_ready_at_start {
+                                if let Some(path) = manager_apk.as_ref() {
+                                    install_root_manager_apk(path, &mut log)?;
+                                    true
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            };
+
                             live!(log, "[Root] {}", phase_marker(1, 6, &ll.op_root_phase[0]));
                             transition_to_edl(&ll, &mut log)?;
 
@@ -4959,7 +5042,7 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                             // Target: `init_boot<slot>` (LKM) or `boot<slot>`
                             // (GKI). Fall back across slot variants —
                             // some rawprograms describe only `_a`.
-                            let is_gki_mode = mode == Some(RootMode::Gki);
+                            let is_gki_mode = is_gki_route;
                             let base_name = ltbox_patch::root_pipeline::boot_partition_base(pipe_family, is_gki_mode);
                             let slot_for_dump = if slot_suffix.is_empty() { "_a" } else { &slot_suffix };
                             let boot_primary = format!("{base_name}{slot_for_dump}");
@@ -5044,10 +5127,6 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
 
                             live!(log, "[Root] {}", phase_marker(3, 6, &ll.op_root_phase[2]));
 
-                            // `file_path` feeds either the GKI kernel zip
-                            // or the MagiskFork APK (never both).
-                            let file_path_buf: Option<std::path::PathBuf> =
-                                file_path.as_ref().map(std::path::PathBuf::from);
                             let cfg = RootPipelineConfig {
                                 family: pipe_family,
                                 provider: pipe_provider,
@@ -5071,6 +5150,9 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                             };
                             let artifacts = build_patched_artifacts(&cfg, &mut log)
                                 .map_err(|e| format!("Root patch: {e}"))?;
+                            if manager_apk.is_none() {
+                                manager_apk = artifacts.manager_apk.clone();
+                            }
                             live!(log, "[Root] {}", phase_marker(4, 6, &ll.op_root_phase[3]));
 
                             live!(log, "[Root] {}", phase_marker(5, 6, &ll.op_root_phase[4]));
@@ -5099,6 +5181,16 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                 );
                             }
                             session.reset(&mut log).map_err(|e| format!("Reset: {e}"))?;
+                            if !manager_installed_pre_edl {
+                                if let Some(path) = manager_apk.as_ref() {
+                                    wait_and_install_root_manager_apk(
+                                        path,
+                                        std::time::Duration::from_secs(60),
+                                        &mut log,
+                                    )
+                                    .map_err(|e| format!("Manager APK install after reboot failed: {e}"))?;
+                                }
+                            }
                             live!(log, "[Root] {}", ll.root_completed);
                             Ok(log)
                             }).and_then(|r| r)

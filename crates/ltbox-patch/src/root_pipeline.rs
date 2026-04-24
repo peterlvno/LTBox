@@ -217,6 +217,52 @@ pub fn provider_repo(provider: RootProvider) -> Option<&'static str> {
     })
 }
 
+fn ksu_manager_asset_preferences(provider: RootProvider) -> &'static [&'static str] {
+    match provider {
+        RootProvider::KernelSU => &["manager.zip", "Manager.zip"],
+        RootProvider::KernelSUNext => &["manager-spoofed.zip", "manager.zip"],
+        RootProvider::SukiSU => &["Spoofed-Manager.zip", "Manager.zip", "manager.zip"],
+        RootProvider::ReSukiSU => &[
+            "Spoofed-Manager-release.zip",
+            "Manager-release.zip",
+            "manager.zip",
+        ],
+        _ => &[],
+    }
+}
+
+fn select_manager_asset(
+    assets: &[(String, String)],
+    preferred_names: &[&str],
+) -> Option<(String, String)> {
+    preferred_names
+        .iter()
+        .find_map(|preferred| {
+            assets
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(preferred))
+                .cloned()
+        })
+        .or_else(|| {
+            assets
+                .iter()
+                .find(|(name, _)| {
+                    let lower = name.to_lowercase();
+                    lower.ends_with(".apk") && lower.contains("manager") && !lower.contains("debug")
+                })
+                .cloned()
+        })
+        .or_else(|| {
+            assets
+                .iter()
+                .find(|(name, _)| {
+                    let lower = name.to_lowercase();
+                    lower.ends_with(".zip") && lower.contains("manager")
+                })
+                .cloned()
+        })
+}
+
 /// Download latest Magisk APK into `dst_path`; returns the tag name.
 pub fn download_latest_magisk_apk(
     provider: RootProvider,
@@ -455,6 +501,225 @@ pub fn download_apatch_payload_nightly(
     )?;
     extract_kpimg_from_apk(repo, &apk_path, work_dir, log)?;
     Ok(run_id)
+}
+
+fn copy_apk_to(src: &Path, dst: &Path) -> Result<()> {
+    if dst.exists() {
+        fs::remove_file(dst).ok();
+    }
+    fs::copy(src, dst)?;
+    Ok(())
+}
+
+fn extract_first_apk_from_zip(
+    archive_path: &Path,
+    output_path: &Path,
+    log_tag: &str,
+    log: &mut Vec<String>,
+) -> Result<bool> {
+    let f = fs::File::open(archive_path)?;
+    let mut archive = zip::ZipArchive::new(f).map_err(|e| {
+        LtboxError::Patch(format!(
+            "{}: APK container not a zip: {e}",
+            archive_path.display()
+        ))
+    })?;
+    let member_name = archive
+        .file_names()
+        .find(|n| n.to_lowercase().ends_with(".apk") && !n.ends_with('/'))
+        .map(|s| s.to_string());
+    let Some(member_name) = member_name else {
+        return Ok(false);
+    };
+    let mut entry = archive.by_name(&member_name).map_err(|e| {
+        LtboxError::Patch(format!(
+            "{}: read {member_name}: {e}",
+            archive_path.display()
+        ))
+    })?;
+    if output_path.exists() {
+        fs::remove_file(output_path).ok();
+    }
+    let mut out = fs::File::create(output_path)?;
+    std::io::copy(&mut entry, &mut out)?;
+    log.push(format!(
+        "[{log_tag}] extracted manager APK {member_name} -> {}",
+        output_path.display()
+    ));
+    Ok(true)
+}
+
+fn stage_manager_from_downloaded_asset(
+    asset_path: &Path,
+    manager_apk: &Path,
+    log_tag: &str,
+    log: &mut Vec<String>,
+) -> Result<()> {
+    if asset_path
+        .extension()
+        .and_then(|s| s.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("apk"))
+    {
+        copy_apk_to(asset_path, manager_apk)?;
+        log.push(format!(
+            "[{log_tag}] staged manager APK: {}",
+            manager_apk.display()
+        ));
+        return Ok(());
+    }
+    if extract_first_apk_from_zip(asset_path, manager_apk, log_tag, log)? {
+        return Ok(());
+    }
+    Err(LtboxError::Patch(format!(
+        "{log_tag}: manager artifact {} did not contain an APK",
+        asset_path.display()
+    )))
+}
+
+fn download_ksu_manager_apk_stable(
+    provider: RootProvider,
+    work_dir: &Path,
+    manager_apk: &Path,
+    log: &mut Vec<String>,
+) -> Result<String> {
+    let repo = provider_repo(provider).ok_or_else(|| {
+        LtboxError::Patch(format!(
+            "download_ksu_manager_apk: unsupported provider {provider:?}"
+        ))
+    })?;
+    let client = GitHubClient::new(repo)?;
+    let (tag, assets) = client.latest_release_assets()?;
+    let (name, url) = select_manager_asset(&assets, ksu_manager_asset_preferences(provider))
+        .ok_or_else(|| LtboxError::Download(format!("No manager APK artifact on latest {repo}")))?;
+    log.push(format!("[KSU] {repo} manager: {tag} -> {name}"));
+    let asset_path = work_dir.join(&name);
+    download_to_file(&url, &asset_path, log)?;
+    stage_manager_from_downloaded_asset(&asset_path, manager_apk, "KSU", log)?;
+    Ok(tag)
+}
+
+fn download_ksu_manager_apk_nightly(
+    provider: RootProvider,
+    manual_run_id: Option<u64>,
+    work_dir: &Path,
+    manager_apk: &Path,
+    log: &mut Vec<String>,
+) -> Result<u64> {
+    let (repo, run_id) = resolve_nightly_run(provider, manual_run_id, log)?;
+    let client = GitHubClient::new(repo)?;
+    let artifact_names = client.workflow_artifacts(run_id)?;
+    let pairs: Vec<(String, String)> = artifact_names
+        .iter()
+        .map(|name| (name.clone(), String::new()))
+        .collect();
+    let (artifact_name, _) = select_manager_asset(&pairs, ksu_manager_asset_preferences(provider))
+        .ok_or_else(|| {
+            LtboxError::Patch(format!(
+                "{repo} run {run_id}: no manager APK artifact (got {artifact_names:?})"
+            ))
+        })?;
+    log.push(format!(
+        "[KSU] {repo} nightly manager artifact: {artifact_name}"
+    ));
+    fetch_nightly_apk_outer_zip(
+        "KSU",
+        repo,
+        run_id,
+        &artifact_name,
+        "ksu_manager_nightly",
+        work_dir,
+        manager_apk,
+        log,
+    )?;
+    Ok(run_id)
+}
+
+/// Stage the manager APK used for post-root control into `work_dir/manager.apk`.
+pub fn stage_root_manager_apk(
+    cfg: &RootPipelineConfig,
+    log: &mut Vec<String>,
+) -> Result<Option<PathBuf>> {
+    fs::create_dir_all(&cfg.work_dir)?;
+    let manager_apk = cfg.work_dir.join("manager.apk");
+    if manager_apk.exists() {
+        fs::remove_file(&manager_apk).ok();
+    }
+
+    if cfg.gki_mode {
+        let Some(kernel_zip) = cfg.gki_kernel_zip.as_ref() else {
+            return Ok(None);
+        };
+        return if extract_first_apk_from_zip(kernel_zip, &manager_apk, "GKI", log)? {
+            Ok(Some(manager_apk))
+        } else {
+            log.push("[GKI] No manager APK found in kernel zip; skipping auto-install".into());
+            Ok(None)
+        };
+    }
+
+    match cfg.family {
+        RootFamily::Magisk => match (cfg.provider, cfg.version) {
+            (RootProvider::MagiskFork, _) => {
+                let src = cfg.magisk_forks_apk.as_ref().ok_or_else(|| {
+                    LtboxError::Patch("Magisk forks require a local APK — none supplied".into())
+                })?;
+                copy_apk_to(src, &manager_apk)?;
+                log.push(format!(
+                    "[Magisk] staged fork manager APK: {}",
+                    manager_apk.display()
+                ));
+            }
+            (_, RootVersion::Stable) => {
+                download_latest_magisk_apk(cfg.provider, &manager_apk, log)?;
+            }
+            (_, RootVersion::Nightly) => {
+                download_magisk_apk_nightly(
+                    cfg.provider,
+                    cfg.nightly_run_id,
+                    &cfg.work_dir,
+                    &manager_apk,
+                    log,
+                )?;
+            }
+        },
+        RootFamily::KernelSU => match cfg.version {
+            RootVersion::Stable => {
+                download_ksu_manager_apk_stable(cfg.provider, &cfg.work_dir, &manager_apk, log)?;
+            }
+            RootVersion::Nightly => {
+                download_ksu_manager_apk_nightly(
+                    cfg.provider,
+                    cfg.nightly_run_id,
+                    &cfg.work_dir,
+                    &manager_apk,
+                    log,
+                )?;
+            }
+        },
+        RootFamily::APatch => {
+            let apk_path = cfg.work_dir.join("apatch.apk");
+            match cfg.version {
+                RootVersion::Stable => {
+                    download_apatch_payload(cfg.provider, &cfg.work_dir, log)?;
+                }
+                RootVersion::Nightly => {
+                    download_apatch_payload_nightly(
+                        cfg.provider,
+                        cfg.nightly_run_id,
+                        &cfg.work_dir,
+                        log,
+                    )?;
+                }
+            }
+            copy_apk_to(&apk_path, &manager_apk)?;
+            log.push(format!(
+                "[APatch] staged manager APK: {}",
+                manager_apk.display()
+            ));
+        }
+    }
+
+    Ok(Some(manager_apk))
 }
 
 // KSU payload: `.ko` is a release asset (per-kernel), `ksuinit` is a
@@ -713,6 +978,7 @@ pub struct PatchedArtifacts {
     pub patched_boot: PathBuf,
     /// `None` when the original vbmeta can stay (no chain).
     pub patched_vbmeta: Option<PathBuf>,
+    pub manager_apk: Option<PathBuf>,
     /// Target partition name (`init_boot_a`, `boot_a`, …).
     pub boot_partition: String,
     pub vbmeta_partition: Option<String>,
@@ -749,6 +1015,10 @@ pub fn build_patched_artifacts(
         return Err(LtboxError::Patch(
             "work_dir is missing the stock vbmeta.img dump".into(),
         ));
+    }
+    let staged_manager_apk = cfg.work_dir.join("manager.apk");
+    if !cfg.gki_mode && !staged_manager_apk.exists() {
+        stage_root_manager_apk(cfg, log)?;
     }
 
     let patched_boot = if cfg.gki_mode {
@@ -954,6 +1224,7 @@ pub fn build_patched_artifacts(
     Ok(PatchedArtifacts {
         patched_boot: final_boot,
         patched_vbmeta: Some(final_vbmeta),
+        manager_apk: staged_manager_apk.exists().then_some(staged_manager_apk),
         boot_partition: format!("{base_part}{suffix}"),
         vbmeta_partition: Some(format!("vbmeta{suffix}")),
     })
@@ -963,7 +1234,7 @@ pub fn build_patched_artifacts(
 mod tests {
     use super::{
         ksu_ko_kver_matches, normalize_ksu_kernel_version, select_ksu_nightly_ko_artifact,
-        select_ksu_release_ko_asset,
+        select_ksu_release_ko_asset, select_manager_asset,
     };
 
     #[test]
@@ -1043,5 +1314,27 @@ mod tests {
             Some("android14-5.15_kernelsu.ko".to_string())
         );
         assert_eq!(select_ksu_nightly_ko_artifact(&artifacts, "6.1"), None);
+    }
+
+    #[test]
+    fn ksu_manager_asset_selection_prefers_provider_names() {
+        let assets = vec![
+            (
+                "random-debug.apk".to_string(),
+                "https://example.invalid/debug.apk".to_string(),
+            ),
+            (
+                "manager-spoofed.zip".to_string(),
+                "https://example.invalid/manager-spoofed.zip".to_string(),
+            ),
+            (
+                "manager.zip".to_string(),
+                "https://example.invalid/manager.zip".to_string(),
+            ),
+        ];
+
+        let picked = select_manager_asset(&assets, &["manager-spoofed.zip", "manager.zip"])
+            .expect("manager asset");
+        assert_eq!(picked.0, "manager-spoofed.zip");
     }
 }
