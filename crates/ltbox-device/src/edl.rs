@@ -150,6 +150,31 @@ pub struct EdlSession {
     dev: QdlDevice<dyn QdlReadWrite>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WipeErasePlanEntry {
+    label: String,
+    lun: u8,
+    start_sector: String,
+    num_sectors: usize,
+}
+
+impl WipeErasePlanEntry {
+    fn log_line(&self) -> String {
+        self.log_line_with_template(&tr("log_edl_pre_erase_cmd"))
+    }
+
+    fn log_line_with_template(&self, template: &str) -> String {
+        format!(
+            "[EDL] {}",
+            template
+                .replace("{label}", &self.label)
+                .replace("{lun}", &self.lun.to_string())
+                .replace("{start}", &self.start_sector)
+                .replace("{sectors}", &self.num_sectors.to_string())
+        )
+    }
+}
+
 impl EdlSession {
     /// Open: find port → Sahara upload → Firehose configure.
     ///
@@ -691,6 +716,21 @@ impl EdlSession {
         program_xmls: &[PathBuf],
         log: &mut Vec<String>,
     ) -> Result<()> {
+        for entry in Self::collect_wipe_erase_plan(program_xmls)? {
+            log.push(entry.log_line());
+            qdl::firehose_erase_storage(
+                &mut self.dev,
+                entry.num_sectors,
+                entry.lun,
+                &entry.start_sector,
+            )
+            .map_err(|e| EdlError::Session(format!("Erase {} failed: {e}", entry.label)))?;
+        }
+        Ok(())
+    }
+
+    fn collect_wipe_erase_plan(program_xmls: &[PathBuf]) -> Result<Vec<WipeErasePlanEntry>> {
+        let mut plan = Vec::new();
         for xml_path in program_xmls {
             let xml_content = std::fs::read_to_string(xml_path)?;
             let doc = roxmltree::Document::parse(&xml_content).map_err(|e| {
@@ -712,19 +752,15 @@ impl EdlSession {
                 }
                 let lun: u8 = parse_xml_attr(&node, "physical_partition_number", 0u8, &ctx)?;
                 let start_sector = node.attribute("start_sector").unwrap_or("0");
-                log.push(format!(
-                    "[EDL] {}",
-                    tr("log_edl_pre_erase_cmd")
-                        .replace("{label}", label)
-                        .replace("{lun}", &lun.to_string())
-                        .replace("{start}", start_sector)
-                        .replace("{sectors}", &num_sectors.to_string())
-                ));
-                qdl::firehose_erase_storage(&mut self.dev, num_sectors, lun, start_sector)
-                    .map_err(|e| EdlError::Session(format!("Erase {label} failed: {e}")))?;
+                plan.push(WipeErasePlanEntry {
+                    label: label.to_string(),
+                    lun,
+                    start_sector: start_sector.to_string(),
+                    num_sectors,
+                });
             }
         }
-        Ok(())
+        Ok(plan)
     }
 
     fn flash_one_rawprogram(
@@ -974,6 +1010,34 @@ pub fn collect_firmware_xmls(dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
 mod tests {
     use super::*;
     use std::collections::VecDeque;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TempXml(PathBuf);
+
+    impl TempXml {
+        fn new(contents: &str) -> Self {
+            let nonce = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos();
+            let path = std::env::temp_dir().join(format!(
+                "ltbox-edl-wipe-plan-{}-{nonce}.xml",
+                std::process::id()
+            ));
+            std::fs::write(&path, contents).expect("write temp rawprogram");
+            Self(path)
+        }
+
+        fn path(&self) -> PathBuf {
+            self.0.clone()
+        }
+    }
+
+    impl Drop for TempXml {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
 
     fn run_with_deadline_never(ports: Vec<Result<String>>) -> Result<String> {
         let mut queue: VecDeque<Result<String>> = ports.into();
@@ -1045,5 +1109,43 @@ mod tests {
         )
         .expect_err("should time out");
         assert!(matches!(err, EdlError::PortTimeout(_)));
+    }
+
+    #[test]
+    fn wipe_erase_plan_keeps_xml_order_and_log_geometry() {
+        let rawprogram = TempXml::new(
+            r#"
+            <data>
+              <program label="metadata" physical_partition_number="0" start_sector="8192" num_partition_sectors="2048" />
+              <program label="super" physical_partition_number="0" start_sector="16384" num_partition_sectors="4096" />
+              <program label="frp" physical_partition_number="1" start_sector="24576" num_partition_sectors="128" />
+              <program label="userdata_a" physical_partition_number="2" start_sector="32768" num_partition_sectors="0" />
+              <program label="userdata_b" physical_partition_number="3" start_sector="65536" num_partition_sectors="8192" />
+            </data>
+            "#,
+        );
+
+        let plan = EdlSession::collect_wipe_erase_plan(&[rawprogram.path()])
+            .expect("collect wipe erase plan");
+
+        assert_eq!(
+            plan.iter()
+                .map(|entry| entry.label.as_str())
+                .collect::<Vec<_>>(),
+            ["metadata", "frp", "userdata_b"]
+        );
+        let template = "erase {label} (LUN {lun}, start {start}, {sectors} sectors)";
+        assert_eq!(
+            plan[0].log_line_with_template(template),
+            "[EDL] erase metadata (LUN 0, start 8192, 2048 sectors)"
+        );
+        assert_eq!(
+            plan[1].log_line_with_template(template),
+            "[EDL] erase frp (LUN 1, start 24576, 128 sectors)"
+        );
+        assert_eq!(
+            plan[2].log_line_with_template(template),
+            "[EDL] erase userdata_b (LUN 3, start 65536, 8192 sectors)"
+        );
     }
 }
