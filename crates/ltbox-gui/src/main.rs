@@ -5302,15 +5302,15 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                 );
                             }
                             session.reset_tolerant(&mut log);
-                            if !manager_installed_pre_edl {
-                                if let Some(path) = manager_apk.as_ref() {
-                                    wait_and_install_root_manager_apk(
-                                        path,
-                                        std::time::Duration::from_secs(60),
-                                        &mut log,
-                                    )
-                                    .map_err(|e| format!("Manager APK install after reboot failed: {e}"))?;
-                                }
+                            if !manager_installed_pre_edl
+                                && let Some(path) = manager_apk.as_ref()
+                            {
+                                wait_and_install_root_manager_apk(
+                                    path,
+                                    std::time::Duration::from_secs(60),
+                                    &mut log,
+                                )
+                                .map_err(|e| format!("Manager APK install after reboot failed: {e}"))?;
                             }
                             live!(log, "[Root] {}", ll.root_completed);
                             Ok(log)
