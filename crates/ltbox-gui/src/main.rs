@@ -7340,6 +7340,9 @@ impl App {
         if self.root.kernel_version_popup_open {
             layers.push(self.root_kernel_version_popup());
         }
+        if self.root.superkey_popup_open {
+            layers.push(self.root_superkey_popup());
+        }
         if self.should_show_busy_progress_dialog() {
             layers.push(self.busy_progress_dialog());
         }
@@ -9188,13 +9191,11 @@ impl App {
     // -- Root Wizard ------------------------------------------------------
 
     fn view_root_wizard(&self) -> Element<'_, Message> {
-        // Superkey popup is viewport-wide; KPM body stays mounted
-        // underneath so Cancel returns to the curated list.
-        if self.root.superkey_popup_open {
-            return self.root_superkey_popup();
-        }
-        // Run-ID popup is a top-level overlay via `view()` stack —
-        // do NOT early-return for it here.
+        // Superkey / Run-ID / Kernel-version popups all render as
+        // top-level M3 dialog overlays via `view()`'s layer stack —
+        // do NOT early-return for any of them here, otherwise the
+        // KPM step underneath would unmount and Cancel couldn't
+        // restore the curated list.
         if self.log_popup_open && self.root.is_in_exec() {
             return self.log_popup_view();
         }
@@ -9324,6 +9325,10 @@ impl App {
     }
 
     fn root_superkey_popup(&self) -> Element<'_, Message> {
+        // M3 text-input dialog — same shape as root_run_id_popup /
+        // root_kernel_version_popup so the three APatch-flow popups
+        // feel consistent (380 wide, outlined Cancel + filled OK,
+        // shared `m3_dialog` scrim + 28-radius card).
         let input = iced::widget::text_input(
             self.t("apatch_superkey_placeholder"),
             &self.root.superkey_buffer,
@@ -9331,71 +9336,68 @@ impl App {
         .on_input(Message::RootSuperkeyInput)
         .on_submit(Message::RootSuperkeyConfirm)
         .secure(true)
-        .padding(10)
-        .width(Length::Fill);
+        .padding([10, 12])
+        .width(Length::Fill)
+        .style(|t: &Theme, status| {
+            let p = pal_of(t);
+            let focused = matches!(status, iced::widget::text_input::Status::Focused { .. });
+            iced::widget::text_input::Style {
+                background: p.surface.into(),
+                border: iced::Border {
+                    color: if focused {
+                        p.primary
+                    } else {
+                        p.outline_variant
+                    },
+                    width: if focused { 2.0 } else { 1.0 },
+                    radius: 8.0.into(),
+                },
+                placeholder: with_alpha(p.on_surface, 0.5),
+                icon: p.on_surface,
+                value: p.on_surface,
+                selection: with_alpha(p.primary, 0.3),
+            }
+        });
 
-        let err = match &self.error_msg {
-            Some(e) => text(e.clone()).size(11).style(|t: &Theme| {
-                let p = pal_of(t);
-                iced::widget::text::Style {
-                    color: Some(p.error),
-                }
-            }),
-            None => text(String::new()).size(11),
+        let err: Element<'_, Message> = match &self.error_msg {
+            Some(e) => text(e.clone())
+                .size(12)
+                .style(|t: &Theme| {
+                    let p = pal_of(t);
+                    iced::widget::text::Style {
+                        color: Some(p.error),
+                    }
+                })
+                .into(),
+            None => Space::new().height(0).into(),
         };
 
-        let body = column![
-            text(self.t("apatch_superkey_title").to_string()).size(theme::text_size::TITLE_LARGE),
+        let content = column![
+            text(self.t("apatch_superkey_title").to_string()).size(20),
             text(self.t("apatch_superkey_subtitle").to_string())
                 .size(13)
                 .style(muted_style),
-            widget::rule::horizontal(1),
             input,
             err,
-            widget::rule::horizontal(1),
             row![
-                button(text(self.t("btn_cancel").to_string()).size(13))
-                    .padding([8, 20])
-                    .on_press(Message::RootSuperkeyCancel)
-                    .style(|t: &Theme, _s| {
-                        let p = pal_of(t);
-                        button::Style {
-                            background: Some(with_alpha(p.on_surface, 0.1).into()),
-                            text_color: p.on_surface_variant,
-                            ..Default::default()
-                        }
-                    }),
                 Space::new().width(Length::Fill),
+                button(text(self.t("btn_cancel").to_string()).size(13))
+                    .on_press(Message::RootSuperkeyCancel)
+                    .padding([8, 18])
+                    .style(md_text_btn_style),
                 button(text(self.t("btn_ok").to_string()).size(13))
-                    .padding([8, 20])
                     .on_press(Message::RootSuperkeyConfirm)
-                    .style(|_t: &Theme, status| {
-                        let a = match status {
-                            button::Status::Hovered => 1.0,
-                            _ => 0.85,
-                        };
-                        button::Style {
-                            background: Some(iced::Color { a, ..ACCENT }.into()),
-                            text_color: iced::Color::WHITE,
-                            border: iced::Border {
-                                radius: 6.0.into(),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        }
-                    }),
+                    .padding([8, 18])
+                    .style(md_filled_btn_style),
             ]
-            .spacing(8),
+            .spacing(8)
+            .align_y(iced::Alignment::Center),
         ]
         .spacing(14)
-        .padding(28)
-        .width(Length::Fill);
-        container(body)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        .padding(24)
+        .width(380);
+
+        m3_dialog(content.into())
     }
 
     fn root_run_id_popup(&self) -> Element<'_, Message> {
