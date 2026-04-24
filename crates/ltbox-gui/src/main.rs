@@ -339,6 +339,7 @@ impl RebootTarget {
 #[derive(Debug, Clone, Copy)]
 enum AdvAction {
     RegionConvert,
+    ImageInfo,
     DumpDevinfo,
     PatchDevinfo,
     WriteDevinfo,
@@ -357,6 +358,7 @@ impl AdvAction {
     fn label_key(&self) -> &'static str {
         match self {
             Self::RegionConvert => "adv_region_convert",
+            Self::ImageInfo => "adv_image_info",
             Self::DumpDevinfo => "adv_dump_devinfo",
             Self::PatchDevinfo => "adv_patch_devinfo",
             Self::WriteDevinfo => "adv_write_devinfo",
@@ -375,6 +377,7 @@ impl AdvAction {
     fn desc_key(&self) -> &'static str {
         match self {
             Self::RegionConvert => "adv_region_convert_desc",
+            Self::ImageInfo => "adv_image_info_desc",
             Self::DumpDevinfo => "adv_dump_devinfo_desc",
             Self::PatchDevinfo => "adv_patch_devinfo_desc",
             Self::WriteDevinfo => "adv_write_devinfo_desc",
@@ -395,6 +398,7 @@ impl AdvAction {
     fn source_desc_key(&self) -> &'static str {
         match self {
             Self::RegionConvert => "adv_src_region_convert",
+            Self::ImageInfo => "adv_src_image_info",
             Self::DumpDevinfo => "adv_src_dump_devinfo",
             Self::PatchDevinfo => "adv_src_patch_devinfo",
             Self::WriteDevinfo => "adv_src_write_devinfo",
@@ -415,6 +419,7 @@ impl AdvAction {
     fn output_slug(&self) -> &'static str {
         match self {
             Self::RegionConvert => "region_convert",
+            Self::ImageInfo => "image_info",
             Self::DumpDevinfo => "dump_devinfo",
             Self::PatchDevinfo => "patch_devinfo",
             Self::WriteDevinfo => "write_devinfo",
@@ -498,6 +503,7 @@ const ADV_SECTIONS: &[AdvSection] = &[
     AdvSection {
         title_key: "adv_section_rollback",
         items: &[
+            AdvAction::ImageInfo,
             AdvAction::DetectArb,
             AdvAction::PatchArb,
             AdvAction::WriteArb,
@@ -2285,6 +2291,7 @@ struct AdvWizard {
     action: Option<AdvAction>,
     step: usize,
     file_path: Option<String>,
+    file_paths: Vec<String>,
     country: Option<String>,
     /// `{exe_dir}/output_<action>/` — populated on Confirm → Exec.
     /// Read by the Done card's "Open Folder" pill.
@@ -2302,7 +2309,13 @@ impl AdvWizard {
     fn needs_country(&self) -> bool {
         matches!(self.action, Some(AdvAction::PatchDevinfo))
     }
+    fn is_image_info(&self) -> bool {
+        matches!(self.action, Some(AdvAction::ImageInfo))
+    }
     fn steps(&self) -> &'static [&'static str] {
+        if self.is_image_info() {
+            return &["adv_step_source", "adv_step_info"];
+        }
         if self.needs_country() {
             &[
                 "adv_step_source",
@@ -2328,10 +2341,13 @@ impl AdvWizard {
         }
     }
     fn is_confirm_step(&self) -> bool {
-        self.step + 1 == self.exec_step()
+        !self.is_image_info() && self.step + 1 == self.exec_step()
     }
     fn can_next(&self) -> bool {
         if self.step == 0 {
+            if self.is_image_info() {
+                return !self.file_paths.is_empty();
+            }
             return self.file_path.is_some();
         }
         if self.needs_country() && self.step == 1 {
@@ -2359,6 +2375,7 @@ impl AdvWizard {
     fn accepted_exts(&self) -> (&'static str, &'static [&'static str]) {
         match self.action {
             Some(AdvAction::RegionConvert)
+            | Some(AdvAction::ImageInfo)
             | Some(AdvAction::DetectArb)
             | Some(AdvAction::PatchArb)
             | Some(AdvAction::RebuildVbmeta)
@@ -2387,6 +2404,7 @@ impl AdvWizard {
             Some(AdvAction::DumpDevinfo) => PickerKind::OutputFolder,
             // File-picking actions — all share the unified File bucket.
             Some(AdvAction::RegionConvert)
+            | Some(AdvAction::ImageInfo)
             | Some(AdvAction::DetectArb)
             | Some(AdvAction::PatchArb)
             | Some(AdvAction::RebuildVbmeta)
@@ -2411,6 +2429,7 @@ impl AdvWizard {
             Some(AdvAction::WriteArb) => "picker_target_arb_folder",
             Some(AdvAction::PatchDevinfo) => "picker_target_devinfo_persist_folder",
             Some(AdvAction::RegionConvert) => "picker_target_vendor_boot_img",
+            Some(AdvAction::ImageInfo) => "picker_target_avb_images",
             Some(AdvAction::DetectArb) | Some(AdvAction::PatchArb) => "picker_target_arb_img",
             Some(AdvAction::RebuildVbmeta) => "picker_target_vbmeta_img",
             Some(AdvAction::SignRecovery) => "picker_target_recovery_img",
@@ -2744,6 +2763,9 @@ enum Message {
     AdvWizNext,
     AdvWizBrowse,
     AdvWizBrowseDone(Option<String>),
+    AdvWizBrowseManyDone(Option<Vec<String>>),
+    AdvImageInfoExecStart,
+    AdvImageInfoExecDone(Result<String, String>),
     AdvWizOpenCountry,
     AdvWizOpenOutputFolder,
     // System Update execution
@@ -2827,6 +2849,7 @@ enum Message {
     RebootDone(Vec<String>),
     DrainStdoutTap,
     LogEditorAction(iced::widget::text_editor::Action),
+    ImageInfoLogEditorAction(iced::widget::text_editor::Action),
     SaveLog,
     SaveLogPath(Option<std::path::PathBuf>),
 }
@@ -2928,6 +2951,9 @@ struct App {
     /// from per-push so a long pbr flash doesn't crash wgpu).
     log_editor: iced::widget::text_editor::Content,
     log_dirty: bool,
+    image_info_log: String,
+    image_info_log_editor: iced::widget::text_editor::Content,
+    pending_log_save_source: LogSaveSource,
     error_msg: Option<String>,
     picker_target: PickerTarget,
     driver_status: Option<ltbox_device::windows_driver::DriverStatus>,
@@ -2956,6 +2982,13 @@ enum PickerTarget {
     RootFolder,
     UnrootFolder,
     FlashFolder,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum LogSaveSource {
+    #[default]
+    Main,
+    ImageInfo,
 }
 
 impl PickerTarget {
@@ -3030,6 +3063,9 @@ impl Default for App {
             log_lines: vec!["Ready.".to_string()],
             log_editor: iced::widget::text_editor::Content::with_text("Ready."),
             log_dirty: false,
+            image_info_log: String::new(),
+            image_info_log_editor: iced::widget::text_editor::Content::with_text(""),
+            pending_log_save_source: LogSaveSource::Main,
             error_msg: None,
             picker_target: PickerTarget::None,
             driver_status: None,
@@ -3231,6 +3267,63 @@ impl App {
         }
         self.busy = false;
         self.busy_view = None;
+    }
+
+    fn begin_silent_op(&mut self, v: View) {
+        self.busy = true;
+        self.busy_view = Some(v);
+        self.error_msg = None;
+        self.op_steps.clear();
+        self.current_op_step = 0;
+    }
+
+    fn end_silent_op(&mut self) {
+        self.busy = false;
+        self.busy_view = None;
+    }
+
+    fn set_image_info_log(&mut self, text: String) {
+        self.image_info_log = text;
+        self.image_info_log_editor =
+            iced::widget::text_editor::Content::with_text(&self.image_info_log);
+        use iced::widget::text_editor::{Action, Motion};
+        self.image_info_log_editor
+            .perform(Action::Move(Motion::DocumentEnd));
+    }
+
+    fn image_info_exec_active(&self) -> bool {
+        self.current_view == View::Advanced
+            && self.adv_wizard.is_image_info()
+            && self.adv_wizard.step == self.adv_wizard.exec_step()
+    }
+
+    fn active_log_save_source(&self) -> LogSaveSource {
+        if self.image_info_exec_active() {
+            LogSaveSource::ImageInfo
+        } else {
+            LogSaveSource::Main
+        }
+    }
+
+    fn log_text_for_save(&self, source: LogSaveSource) -> String {
+        match source {
+            LogSaveSource::Main => self.log_lines.join("\n"),
+            LogSaveSource::ImageInfo => self.image_info_log.clone(),
+        }
+    }
+
+    fn note_log_save_result(&mut self, source: LogSaveSource, line: String) {
+        match source {
+            LogSaveSource::Main => self.log_push(line),
+            LogSaveSource::ImageInfo => {
+                let mut text = self.image_info_log.trim_end().to_string();
+                if !text.is_empty() {
+                    text.push('\n');
+                }
+                text.push_str(&line);
+                self.set_image_info_log(text);
+            }
+        }
     }
 
     /// 80-wide `=` separator with an optional centred label.
@@ -5553,6 +5646,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 }
             }
             Message::AdvWizNext => {
+                if self.adv_wizard.is_image_info() && self.adv_wizard.step == 0 {
+                    self.adv_wizard.next();
+                    return self.update(Message::AdvImageInfoExecStart);
+                }
                 if self.adv_wizard.is_confirm_step() {
                     let Some(action) = self.adv_wizard.action else {
                         return Task::none();
@@ -5576,6 +5673,16 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 self.adv_wizard.next();
             }
             Message::AdvWizBrowse => {
+                if self.adv_wizard.is_image_info() {
+                    let spec =
+                        pickers::FilePickSpec::multi(self.adv_wizard.picker_target_i18n_key())
+                            .with_filter("Android image (*.img)", &["img"]);
+                    return pickers::pick_files_for(
+                        spec,
+                        &self.recent_paths,
+                        Message::AdvWizBrowseManyDone,
+                    );
+                }
                 let kind = self.adv_wizard.picker_kind();
                 if kind.is_folder() {
                     return pick_folder_task(kind, &self.recent_paths, Message::AdvWizBrowseDone);
@@ -5599,6 +5706,27 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                         self.remember_recent(self.adv_wizard.picker_kind(), &p);
                     }
                     self.adv_wizard.file_path = Some(p);
+                }
+            }
+            Message::AdvWizBrowseManyDone(paths) => {
+                if let Some(paths) = paths {
+                    let paths: Vec<String> = paths
+                        .into_iter()
+                        .filter(|p| {
+                            std::path::Path::new(p)
+                                .extension()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.eq_ignore_ascii_case("img"))
+                                .unwrap_or(false)
+                        })
+                        .collect();
+                    for p in &paths {
+                        if std::path::Path::new(p).exists() {
+                            self.remember_recent(pickers::PickerKind::File, p);
+                        }
+                    }
+                    self.adv_wizard.file_paths = paths;
+                    self.adv_wizard.file_path = None;
                 }
             }
             Message::AdvWizOpenCountry => {
@@ -5652,6 +5780,12 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                     ));
                                 }
                                 match action {
+                                    AdvAction::ImageInfo => {
+                                        return Err(
+                                            "Image Info uses a dedicated multi-file flow"
+                                                .to_string(),
+                                        );
+                                    }
                                     AdvAction::ConvertXml => {
                                         // `input` is now the folder holding the encrypted
                                         // `*.x` pack (picker moved from file→folder so
@@ -6205,6 +6339,46 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 // screen stays visible with Done/Failed until StartOver.
                 self.end_op();
             }
+            Message::AdvImageInfoExecStart => {
+                let paths: Vec<std::path::PathBuf> = self
+                    .adv_wizard
+                    .file_paths
+                    .iter()
+                    .map(std::path::PathBuf::from)
+                    .collect();
+                let scanning = self
+                    .t("adv_image_info_scanning")
+                    .replace("{count}", &paths.len().to_string());
+                self.set_image_info_log(scanning);
+                self.begin_silent_op(View::Advanced);
+                return Task::perform(
+                    async move {
+                        tokio::task::spawn_blocking(move || {
+                            ltbox_core::runtime::run_heavy(move || {
+                                ltbox_patch::avb::image_info_report(&paths)
+                                    .map_err(|e| e.to_string())
+                            })
+                            .and_then(|r| r)
+                        })
+                        .await
+                        .unwrap_or_else(|e| Err(format!("Task failed: {e}")))
+                    },
+                    Message::AdvImageInfoExecDone,
+                );
+            }
+            Message::AdvImageInfoExecDone(result) => {
+                self.end_silent_op();
+                match result {
+                    Ok(report) => {
+                        self.error_msg = None;
+                        self.set_image_info_log(report);
+                    }
+                    Err(e) => {
+                        self.error_msg = Some(e.clone());
+                        self.set_image_info_log(format!("ERROR: {e}"));
+                    }
+                }
+            }
             // Async results
             Message::FileSelected(path) => {
                 if let Some(p) = path {
@@ -6276,6 +6450,7 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                         self.adv_wizard.reset();
                         self.adv_confirm = None;
                         self.adv_confirm_path = None;
+                        self.set_image_info_log(String::new());
                     }
                     _ => {}
                 }
@@ -6300,11 +6475,23 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                     self.log_editor.perform(action);
                 }
             }
+            Message::ImageInfoLogEditorAction(action) => {
+                use iced::widget::text_editor::Action;
+                if !matches!(action, Action::Edit(_)) {
+                    self.image_info_log_editor.perform(action);
+                }
+            }
             Message::SaveLog => {
+                let source = self.active_log_save_source();
+                self.pending_log_save_source = source;
+                let file_name = match source {
+                    LogSaveSource::Main => "ltbox.log",
+                    LogSaveSource::ImageInfo => "image_info.txt",
+                };
                 return Task::perform(
-                    async {
+                    async move {
                         rfd::AsyncFileDialog::new()
-                            .set_file_name("ltbox.log")
+                            .set_file_name(file_name)
                             .add_filter("Log", &["log", "txt"])
                             .save_file()
                             .await
@@ -6315,12 +6502,16 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             }
             Message::SaveLogPath(path) => {
                 if let Some(path) = path {
-                    let joined = self.log_lines.join("\n");
+                    let source = self.pending_log_save_source;
+                    let joined = self.log_text_for_save(source);
                     match std::fs::write(&path, joined) {
-                        Ok(()) => self.log_push(format!("[Log] Saved to {}", path.display())),
+                        Ok(()) => self.note_log_save_result(
+                            source,
+                            format!("[Log] Saved to {}", path.display()),
+                        ),
                         Err(e) => {
                             self.error_msg = Some(format!("Log save failed: {e}"));
-                            self.log_push(format!("[Log] Save failed: {e}"));
+                            self.note_log_save_result(source, format!("[Log] Save failed: {e}"));
                         }
                     }
                 }
@@ -10067,7 +10258,7 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     /// Others: source/confirm/exec.
     fn view_adv_wizard(&self) -> Element<'_, Message> {
         let is_exec = self.adv_wizard.step == self.adv_wizard.exec_step();
-        if self.log_popup_open && is_exec {
+        if self.log_popup_open && is_exec && !self.adv_wizard.is_image_info() {
             return self.log_popup_view();
         }
 
@@ -10077,7 +10268,9 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
         let needs_country = self.adv_wizard.needs_country();
         let is_confirm = self.adv_wizard.is_confirm_step();
 
-        let body: Element<'_, Message> = if is_exec {
+        let body: Element<'_, Message> = if is_exec && self.adv_wizard.is_image_info() {
+            self.adv_image_info_exec_step()
+        } else if is_exec {
             self.exec_step_view()
         } else if is_confirm {
             self.adv_wiz_confirm_step()
@@ -10118,13 +10311,23 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             Some(a) => a,
             None => return container(text("")).into(),
         };
-        let selected = self.adv_wizard.file_path.is_some();
-        let status = self
-            .adv_wizard
-            .file_path
-            .clone()
-            .unwrap_or_else(|| self.t("adv_source_placeholder").to_string());
-        let browse_key = if self.adv_wizard.is_folder_op() {
+        let selected = if self.adv_wizard.is_image_info() {
+            !self.adv_wizard.file_paths.is_empty()
+        } else {
+            self.adv_wizard.file_path.is_some()
+        };
+        let status = if self.adv_wizard.is_image_info() && selected {
+            self.t("adv_image_info_selected_count")
+                .replace("{count}", &self.adv_wizard.file_paths.len().to_string())
+        } else {
+            self.adv_wizard
+                .file_path
+                .clone()
+                .unwrap_or_else(|| self.t("adv_source_placeholder").to_string())
+        };
+        let browse_key = if self.adv_wizard.is_image_info() {
+            "btn_browse_files"
+        } else if self.adv_wizard.is_folder_op() {
             "btn_browse_folder"
         } else {
             "btn_browse_file"
@@ -10160,12 +10363,21 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             Space::new().width(Length::Fill),
         ];
         let status_color = if selected { GREEN } else { LABEL };
-        let chips = self.recent_chips(
-            self.recent_paths
-                .recent(self.adv_wizard.picker_kind().storage_key()),
-            |p| Message::AdvWizBrowseDone(Some(p)),
-            "picker_recents",
-        );
+        let chips: Element<'_, Message> = if self.adv_wizard.is_image_info() {
+            self.recent_chips(
+                self.recent_paths
+                    .recent(pickers::PickerKind::File.storage_key()),
+                |p| Message::AdvWizBrowseManyDone(Some(vec![p])),
+                "picker_recents",
+            )
+        } else {
+            self.recent_chips(
+                self.recent_paths
+                    .recent(self.adv_wizard.picker_kind().storage_key()),
+                |p| Message::AdvWizBrowseDone(Some(p)),
+                "picker_recents",
+            )
+        };
         let col = column![
             text(self.t(action.label_key()).to_string())
                 .size(theme::text_size::WIZARD_STEP_TITLE)
@@ -10286,6 +10498,103 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             .height(Length::Fill)
             .center_x(Length::Fill)
             .center_y(Length::Fill)
+            .into()
+    }
+
+    fn adv_image_info_exec_step(&self) -> Element<'_, Message> {
+        let action_label = self
+            .adv_wizard
+            .action
+            .map(|a| self.t(a.label_key()).to_string())
+            .unwrap_or_else(|| self.t("adv_image_info").to_string());
+        let status = if self.busy {
+            self.t("exec_executing_title").to_string()
+        } else if self.error_msg.is_some() {
+            self.t("exec_failed_title").to_string()
+        } else {
+            self.t("exec_done_title").to_string()
+        };
+        let is_error = self.error_msg.is_some();
+        let is_busy = self.busy;
+        let status_color = move |t: &Theme| {
+            let p = pal_of(t);
+            let color = if is_error {
+                p.error
+            } else if is_busy {
+                p.primary
+            } else {
+                p.success
+            };
+            iced::widget::text::Style { color: Some(color) }
+        };
+
+        let editor = iced::widget::text_editor(&self.image_info_log_editor)
+            .on_action(Message::ImageInfoLogEditorAction)
+            .size(11)
+            .height(Length::Fill);
+
+        let pill_style = neutral_pill_btn_style;
+        let mut buttons = row![
+            button(
+                text(self.t("btn_save_log").to_string())
+                    .size(11)
+                    .style(muted_style)
+                    .center(),
+            )
+            .on_press(Message::SaveLog)
+            .padding([4, 12])
+            .style(pill_style)
+        ]
+        .spacing(8);
+
+        if !self.busy {
+            buttons = buttons.push(
+                button(
+                    text(self.t("btn_start_over").to_string())
+                        .size(11)
+                        .style(muted_style)
+                        .center(),
+                )
+                .on_press(Message::StartOver)
+                .padding([4, 12])
+                .style(pill_style),
+            );
+        }
+
+        let header = row![
+            column![
+                text(action_label).size(theme::text_size::TITLE_LARGE),
+                text(status).size(12).style(status_color),
+            ]
+            .spacing(4),
+            Space::new().width(Length::Fill),
+            buttons,
+        ]
+        .spacing(12)
+        .align_y(iced::Alignment::Center);
+
+        let body = column![
+            header,
+            widget::rule::horizontal(1),
+            container(editor)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(10)
+                .style(|t: &Theme| theme::surface_card_style(
+                    t,
+                    theme::SurfaceLevel::Low,
+                    theme::shape::SM,
+                    0,
+                )),
+        ]
+        .spacing(12)
+        .padding(20)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        container(body)
+            .width(Length::Fill)
+            .height(Length::Fill)
             .into()
     }
 
@@ -12644,6 +12953,21 @@ mod tests {
         };
         w.next(); // 0 → 2 directly (Magisk has no modes)
         assert_eq!(w.step, 2);
+    }
+
+    #[test]
+    fn image_info_wizard_runs_after_multi_image_selection() {
+        let mut w = AdvWizard::default();
+        w.open(AdvAction::ImageInfo);
+
+        assert_eq!(w.steps(), &["adv_step_source", "adv_step_info"]);
+        assert!(!w.is_confirm_step());
+        assert!(!w.can_next());
+
+        w.file_paths = vec!["boot.img".into(), "vbmeta.img".into()];
+        assert!(w.can_next());
+        w.next();
+        assert_eq!(w.step, w.exec_step());
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! AVB patching — wraps avbtool-rs library for image signing operations.
 
 use fs_err as fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ltbox_core::{LtboxError, Result};
 use tracing::info;
@@ -17,6 +17,21 @@ pub struct AvbImageInfo {
     pub salt: Option<Vec<u8>>,
     pub public_key_sha1: Option<String>,
     pub props: Vec<(String, Vec<u8>)>,
+}
+
+/// Render `avbtool info_image`-style metadata for one or more images.
+pub fn image_info_report(image_paths: &[PathBuf]) -> Result<String> {
+    if image_paths.is_empty() {
+        return Err(LtboxError::Avb("No image files selected".to_string()));
+    }
+
+    let mut reports = Vec::with_capacity(image_paths.len());
+    for path in image_paths {
+        let report = avbtool_rs::info::generate_info_report(path)
+            .map_err(|e| LtboxError::Avb(format!("info_image {}: {e}", path.display())))?;
+        reports.push(report.trim_end().to_string());
+    }
+    Ok(reports.join("\n================================================================\n\n"))
 }
 
 /// Extract AVB metadata from an image.
@@ -177,4 +192,27 @@ pub fn add_hash_footer(
     avbtool_rs::footer::add_hash_footer(image_path, &args)
         .map_err(|e| LtboxError::Avb(format!("add_hash_footer failed: {e}")))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn image_info_report_accepts_non_avb_img() {
+        let tmp = tempfile::tempdir().unwrap();
+        let image = tmp.path().join("plain.img");
+        fs::write(&image, [0u8; 16]).unwrap();
+
+        let report = image_info_report(&[image]).unwrap();
+
+        assert!(report.contains("AVB image type:"));
+        assert!(report.contains("No AVB metadata found."));
+    }
+
+    #[test]
+    fn image_info_report_requires_selection() {
+        let err = image_info_report(&[]).unwrap_err().to_string();
+        assert!(err.contains("No image files selected"));
+    }
 }
