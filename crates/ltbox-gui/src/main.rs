@@ -2932,7 +2932,12 @@ enum PickerTarget {
     #[default]
     None,
     RootFile,
-    RootFolder,
+    /// Root pipeline EDL loader (.melf file). Stored in
+    /// `self.root.folder_path` despite the name — the field was repurposed
+    /// from "firmware folder" to "loader file" when the root flow stopped
+    /// needing `rawprogram*.xml` and just uses `qdl-rs dump-part` /
+    /// `qdl-rs write` against a GPT-resolved partition name on LUN 4.
+    RootLoader,
     UnrootFolder,
     FlashFolder,
 }
@@ -2954,13 +2959,14 @@ impl PickerTarget {
         use pickers::PickerKind;
         match self {
             // Root OTA file is a unified file pick (zip or apk).
-            Self::None | Self::RootFile => PickerKind::File,
-            // Firmware folders all share the "full QFIL" bucket — Root,
-            // Unroot, and Flash typically point the user at the same
-            // dump/archive they extracted from `ltbox dump full`.
-            Self::RootFolder | Self::UnrootFolder | Self::FlashFolder => {
-                PickerKind::QfilFirmwareFolder
-            }
+            // Root loader is also a file pick (.melf) — shares the File
+            // bucket so the user sees recent .melf picks in the recents
+            // strip regardless of which wizard they came from.
+            Self::None | Self::RootFile | Self::RootLoader => PickerKind::File,
+            // Firmware folders all share the "full QFIL" bucket — Unroot
+            // and Flash typically point the user at the same dump/archive
+            // they extracted from `ltbox dump full`.
+            Self::UnrootFolder | Self::FlashFolder => PickerKind::QfilFirmwareFolder,
         }
     }
 }
@@ -4803,12 +4809,15 @@ impl App {
                 return pickers::pick_file_for(spec, &self.recent_paths, Message::FileSelected);
             }
             Message::RootSelectFolder => {
-                self.picker_target = PickerTarget::RootFolder;
-                return pick_folder_task(
-                    pickers::PickerKind::QfilFirmwareFolder,
-                    &self.recent_paths,
-                    Message::FolderSelected,
-                );
+                // Name kept for backwards compat with existing view code;
+                // the picker is now a single-file dialog for the EDL
+                // loader (`.melf`) since root no longer needs a full
+                // firmware folder — partitions resolve via the device's
+                // GPT, not `rawprogram*.xml`.
+                self.picker_target = PickerTarget::RootLoader;
+                let spec = pickers::FilePickSpec::single("picker_target_root_loader")
+                    .with_filter("Qualcomm EDL Loader", &["melf"]);
+                return pickers::pick_file_for(spec, &self.recent_paths, Message::FileSelected);
             }
             Message::RootNext => {
                 if self.root.step == 6 {
@@ -5073,20 +5082,31 @@ impl App {
                             let file_path_buf: Option<std::path::PathBuf> =
                                 file_path.as_ref().map(std::path::PathBuf::from);
 
-                            let fw_folder = fw_folder.ok_or_else(|| {
-                                "No firmware folder selected. Open the Flash wizard first, pick the folder \
-that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
+                            let loader_path = fw_folder.ok_or_else(|| {
+                                "No EDL loader selected. Pick an xbl_s_devprg_ns.melf \
+(or equivalent `.melf`) file on the Loader step and retry."
                                     .to_string()
                             })?;
-                            let fw_dir = std::path::Path::new(&fw_folder);
-                            let loader = find_edl_loader(fw_dir)
-                                .or_else(|| fw_dir.parent().and_then(find_edl_loader))
-                                .ok_or_else(|| {
-                                    format!(
-                                        "xbl_s_devprg_ns.melf not found under {}",
-                                        fw_dir.display()
-                                    )
-                                })?;
+                            let loader = std::path::PathBuf::from(&loader_path);
+                            if !loader.is_file() {
+                                return Err(format!(
+                                    "Selected loader does not exist: {}",
+                                    loader.display()
+                                ));
+                            }
+                            // User spec: match on `.melf` extension only —
+                            // filename itself is free-form, so no
+                            // `xbl_s_devprg_ns`-equals check.
+                            let is_melf = loader
+                                .extension()
+                                .and_then(|e| e.to_str())
+                                .is_some_and(|e| e.eq_ignore_ascii_case("melf"));
+                            if !is_melf {
+                                return Err(format!(
+                                    "Selected loader must be a .melf file, got: {}",
+                                    loader.display()
+                                ));
+                            }
                             // Signing key: pipeline resolves via KEY_MAP
                             // + `public_key_sha1`; PEM is `include_str!`'d
                             // in avbtool-rs. No on-disk key consulted here.
@@ -5200,60 +5220,34 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                             live!(log, "[Root] {}", phase_marker(1, 6, &ll.op_root_phase[0]));
                             transition_to_edl(&ll, &mut log)?;
 
-                            // v2 parity: drive `EdlSession::dump_partition`
-                            // off rawprogram attrs — Lenovo places boot
-                            // on non-zero LUNs and GPT-by-name can't see
-                            // those.
-                            let (raw_xmls, _patch_xmls) = ltbox_device::edl::collect_firmware_xmls(fw_dir);
-                            if raw_xmls.is_empty() {
-                                return Err(format!(
-                                    "No flashable rawprogram*.xml found in {}",
-                                    fw_dir.display()
-                                ));
-                            }
-                            let xml_paths: Vec<&std::path::Path> = raw_xmls.iter().map(|p| p.as_path()).collect();
-                            let catalog = ltbox_core::xml_catalog::XmlCatalog::from_paths(&xml_paths)
-                                .map_err(|e| format!("rawprogram parse failed: {e}"))?;
-                            // Target: `init_boot<slot>` (LKM) or `boot<slot>`
-                            // (GKI). Fall back across slot variants —
-                            // some rawprograms describe only `_a`.
+                            // Partition naming: `boot{_a|_b}` for GKI + APatch
+                            // (kernel-blob patching) and `init_boot{_a|_b}` for
+                            // Magisk / KSU (ramdisk injection). Slot is derived
+                            // from ADB/Fastboot pre-EDL; on devices without an
+                            // active-slot getvar we default to `_a`.
+                            //
+                            // Root pipeline no longer consumes `rawprogram*.xml`
+                            // — `EdlSession::{dump,flash}_partition` resolves
+                            // geometry via the device's on-storage GPT using
+                            // these names, matching the equivalent one-shot
+                            // `qdl-rs dump-part <name>` / `write <name> <img>`
+                            // invocations a user would run by hand.
                             let is_gki_mode = is_gki_route;
                             let base_name = ltbox_patch::root_pipeline::boot_partition_base(pipe_family, is_gki_mode);
                             let slot_for_dump = if slot_suffix.is_empty() { "_a" } else { &slot_suffix };
                             let boot_primary = format!("{base_name}{slot_for_dump}");
                             let vbmeta_primary = format!("vbmeta{slot_for_dump}");
-                            let boot_record = catalog.require(
-                                &boot_primary,
-                                &[
-                                    &format!("{base_name}_a"),
-                                    &format!("{base_name}_b"),
-                                    base_name,
-                                ],
-                            )
-                            .map_err(|e| format!("Resolve {boot_primary}: {e}"))?;
-                            let vbmeta_record = catalog.require(
-                                &vbmeta_primary,
-                                &["vbmeta_a", "vbmeta_b", "vbmeta"],
-                            )
-                            .map_err(|e| format!("Resolve {vbmeta_primary}: {e}"))?;
-                            let parse_u32 = |s: &str, label: &str| -> std::result::Result<u32, String> {
-                                s.parse::<u32>().map_err(|e| format!("{label} sector '{s}' parse: {e}"))
-                            };
-                            let parse_usize = |s: &str, label: &str| -> std::result::Result<usize, String> {
-                                s.parse::<usize>().map_err(|e| format!("{label} sectors '{s}' parse: {e}"))
-                            };
-                            let boot_lun: u8 = boot_record.lun.as_deref().unwrap_or("0").parse().unwrap_or(0);
-                            let boot_start = parse_u32(boot_record.start_sector.as_deref().unwrap_or("0"), &boot_record.label)?;
-                            let boot_n = parse_usize(boot_record.num_sectors.as_deref().unwrap_or("0"), &boot_record.label)?;
-                            let vbm_lun: u8 = vbmeta_record.lun.as_deref().unwrap_or("0").parse().unwrap_or(0);
-                            let vbm_start = parse_u32(vbmeta_record.start_sector.as_deref().unwrap_or("0"), &vbmeta_record.label)?;
-                            let vbm_n = parse_usize(vbmeta_record.num_sectors.as_deref().unwrap_or("0"), &vbmeta_record.label)?;
-                            let boot_resolved_label = boot_record.label.clone();
-                            let vbmeta_resolved_label = vbmeta_record.label.clone();
-                            live!(log,
-                                "[Root] {} {} → {} (LUN {boot_lun}) / {} → {} (LUN {vbm_lun})",
+                            // Lenovo devices on Qualcomm UFS place
+                            // boot / init_boot / vbmeta on LUN 4 (userdata
+                            // LUN), same index used by the reference
+                            // `qdl-rs --phys-part-idx 4` recipe.
+                            const ROOT_PARTITIONS_LUN: u8 = 4;
+                            live!(
+                                log,
+                                "[Root] {} {} / {} (LUN {ROOT_PARTITIONS_LUN})",
                                 ll.root_resolved_prefix,
-                                boot_primary, boot_resolved_label, vbmeta_primary, vbmeta_resolved_label,
+                                boot_primary,
+                                vbmeta_primary,
                             );
 
                             live!(log, "[Root] {}", phase_marker(2, 6, &ll.op_root_phase[1]));
@@ -5271,10 +5265,13 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                 let boot_out = if base_name == "boot" { "boot.img" } else { "init_boot.img" };
                                 let dumped_boot = work_dir.join(boot_out);
                                 let dumped_vbmeta = work_dir.join("vbmeta.img");
-                                session.dump_partition_at(&boot_resolved_label, &dumped_boot, boot_lun, boot_start, boot_n, &mut log)
-                                    .map_err(|e| format!("Dump {boot_resolved_label}: {e}"))?;
-                                session.dump_partition_at(&vbmeta_resolved_label, &dumped_vbmeta, vbm_lun, vbm_start, vbm_n, &mut log)
-                                    .map_err(|e| format!("Dump {vbmeta_resolved_label}: {e}"))?;
+                                // `dump_partition` scans the LUN's GPT for the
+                                // named partition — matches the shell-level
+                                // `qdl-rs --phys-part-idx 4 dump-part <name>`.
+                                session.dump_partition(&boot_primary, &dumped_boot, 0, ROOT_PARTITIONS_LUN, &mut log)
+                                    .map_err(|e| format!("Dump {boot_primary}: {e}"))?;
+                                session.dump_partition(&vbmeta_primary, &dumped_vbmeta, 0, ROOT_PARTITIONS_LUN, &mut log)
+                                    .map_err(|e| format!("Dump {vbmeta_primary}: {e}"))?;
                                 // v2 parity: `BACKUP_BOOT_DIR`. Dropped next
                                 // to `ltbox.exe` for the v3 Unroot flow.
                                 let _ = std::fs::create_dir_all(&backup_dir);
@@ -5333,15 +5330,17 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                             live!(log, "[Root] {}", phase_marker(5, 6, &ll.op_root_phase[4]));
                             let mut session = ltbox_device::edl::EdlSession::open(&loader, true, &mut log)
                                 .map_err(|e| format!("EDL session (flash): {e}"))?;
-                            let boot_start_str = boot_record.start_sector.clone().unwrap_or_else(|| "0".to_string());
-                            let vbm_start_str = vbmeta_record.start_sector.clone().unwrap_or_else(|| "0".to_string());
+                            // Mirror of the equivalent one-shot `qdl-rs
+                            // --phys-part-idx 4 write <name> <img>` — GPT
+                            // resolves the start sector, so no rawprogram
+                            // sector attrs to thread through.
                             session
-                                .flash_partition_at(&boot_resolved_label, &artifacts.patched_boot, boot_lun, &boot_start_str, &mut log)
-                                .map_err(|e| format!("Flash {boot_resolved_label}: {e}"))?;
+                                .flash_partition(&boot_primary, &artifacts.patched_boot, 0, ROOT_PARTITIONS_LUN, &mut log)
+                                .map_err(|e| format!("Flash {boot_primary}: {e}"))?;
                             if let Some(vbpath) = &artifacts.patched_vbmeta {
                                 session
-                                    .flash_partition_at(&vbmeta_resolved_label, vbpath, vbm_lun, &vbm_start_str, &mut log)
-                                    .map_err(|e| format!("Flash {vbmeta_resolved_label}: {e}"))?;
+                                    .flash_partition(&vbmeta_primary, vbpath, 0, ROOT_PARTITIONS_LUN, &mut log)
+                                    .map_err(|e| format!("Flash {vbmeta_primary}: {e}"))?;
                             }
                             println!();
                             live!(log, "[Root] {}", phase_marker(6, 6, &ll.op_root_phase[5]));
@@ -6263,8 +6262,12 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             Message::FileSelected(path) => {
                 if let Some(p) = path {
                     self.remember_recent(self.picker_target.kind(), &p);
-                    if self.picker_target == PickerTarget::RootFile {
-                        self.root.file_path = Some(p)
+                    match self.picker_target {
+                        PickerTarget::RootFile => self.root.file_path = Some(p),
+                        // Root loader `.melf` file — stored in
+                        // `folder_path` for historical field-name reasons.
+                        PickerTarget::RootLoader => self.root.folder_path = Some(p),
+                        _ => {}
                     }
                 }
                 self.picker_target = PickerTarget::None;
@@ -6275,7 +6278,6 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                     match self.picker_target {
                         PickerTarget::UnrootFolder => self.unroot.folder_path = Some(p),
                         PickerTarget::FlashFolder => self.flash.firmware_folder = Some(p),
-                        PickerTarget::RootFolder => self.root.folder_path = Some(p),
                         _ => {}
                     }
                 }
@@ -6287,8 +6289,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                     return Task::none();
                 }
                 self.remember_recent(target.kind(), &path);
-                if target == PickerTarget::RootFile {
-                    self.root.file_path = Some(path)
+                match target {
+                    PickerTarget::RootFile => self.root.file_path = Some(path),
+                    PickerTarget::RootLoader => self.root.folder_path = Some(path),
+                    _ => {}
                 }
             }
             Message::RecentFolderPicked(target, path) => {
@@ -6299,7 +6303,6 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                 match target {
                     PickerTarget::UnrootFolder => self.unroot.folder_path = Some(path),
                     PickerTarget::FlashFolder => self.flash.firmware_folder = Some(path),
-                    PickerTarget::RootFolder => self.root.folder_path = Some(path),
                     _ => {}
                 }
             }
@@ -9770,8 +9773,10 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
     }
 
     fn root_folder_step(&self) -> Element<'_, Message> {
-        // Folder must contain the EDL loader; pipeline searches it +
-        // `./keys/` for a fallback PEM.
+        // Root pipeline now needs only the EDL loader (`.melf`) — the
+        // full firmware folder was dropped when dump/flash stopped
+        // depending on `rawprogram*.xml` and started resolving partition
+        // names against the device's on-storage GPT. File-pick only.
         let selected = self.root.folder_path.is_some();
         let status = if let Some(p) = &self.root.folder_path {
             p.clone()
@@ -9781,7 +9786,7 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
         let btn = button(
             container(
                 column![
-                    text(self.t("btn_browse_folder").to_string())
+                    text(self.t("btn_browse_loader").to_string())
                         .size(14)
                         .center(),
                     text(self.t("root_folder_desc").to_string())
@@ -9804,10 +9809,25 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
             text_color: pal_of(t).on_surface,
             ..Default::default()
         });
+        // Recent `.melf` picks only — the File bucket is shared with
+        // other file pickers (root OTA zip, magisk fork APK, …) so
+        // filter by extension to keep unrelated picks out of the
+        // loader recents strip.
+        let loader_recents: Vec<String> = self
+            .recent_paths
+            .recent(PickerTarget::RootLoader.kind().storage_key())
+            .iter()
+            .filter(|p| {
+                std::path::Path::new(p)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("melf"))
+            })
+            .cloned()
+            .collect();
         let chips = self.recent_chips(
-            self.recent_paths
-                .recent(PickerTarget::RootFolder.kind().storage_key()),
-            |p| Message::RecentFolderPicked(PickerTarget::RootFolder, p),
+            &loader_recents,
+            |p| Message::RecentFilePicked(PickerTarget::RootLoader, p),
             "picker_recents",
         );
         let col = column![
