@@ -336,61 +336,49 @@ impl RebootTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AdvAction {
     RegionConvert,
     ImageInfo,
-    DumpDevinfo,
     PatchDevinfo,
-    WriteDevinfo,
     DetectArb,
     PatchArb,
-    WriteArb,
     ConvertXml,
     DumpPartitions,
     DumpPhysical,
     FlashPartitions,
     FlashPhysical,
     RebuildVbmeta,
-    SignRecovery,
 }
 impl AdvAction {
     fn label_key(&self) -> &'static str {
         match self {
             Self::RegionConvert => "adv_region_convert",
             Self::ImageInfo => "adv_image_info",
-            Self::DumpDevinfo => "adv_dump_devinfo",
             Self::PatchDevinfo => "adv_patch_devinfo",
-            Self::WriteDevinfo => "adv_write_devinfo",
             Self::DetectArb => "adv_detect_arb",
             Self::PatchArb => "adv_patch_arb",
-            Self::WriteArb => "adv_write_arb",
             Self::ConvertXml => "adv_convert_xml",
             Self::DumpPartitions => "adv_dump_partitions",
             Self::DumpPhysical => "adv_dump_physical",
             Self::FlashPartitions => "adv_flash_partitions",
             Self::FlashPhysical => "adv_flash_physical",
             Self::RebuildVbmeta => "adv_rebuild_vbmeta",
-            Self::SignRecovery => "adv_sign_recovery",
         }
     }
     fn desc_key(&self) -> &'static str {
         match self {
             Self::RegionConvert => "adv_region_convert_desc",
             Self::ImageInfo => "adv_image_info_desc",
-            Self::DumpDevinfo => "adv_dump_devinfo_desc",
             Self::PatchDevinfo => "adv_patch_devinfo_desc",
-            Self::WriteDevinfo => "adv_write_devinfo_desc",
             Self::DetectArb => "adv_detect_arb_desc",
             Self::PatchArb => "adv_patch_arb_desc",
-            Self::WriteArb => "adv_write_arb_desc",
             Self::ConvertXml => "adv_convert_xml_desc",
             Self::DumpPartitions => "adv_dump_partitions_desc",
             Self::DumpPhysical => "adv_dump_physical_desc",
             Self::FlashPartitions => "adv_flash_partitions_desc",
             Self::FlashPhysical => "adv_flash_physical_desc",
             Self::RebuildVbmeta => "adv_rebuild_vbmeta_desc",
-            Self::SignRecovery => "adv_sign_recovery_desc",
         }
     }
     /// Browse-tile sub-description: *what* to pick, not the action's
@@ -399,19 +387,15 @@ impl AdvAction {
         match self {
             Self::RegionConvert => "adv_src_region_convert",
             Self::ImageInfo => "adv_src_image_info",
-            Self::DumpDevinfo => "adv_src_dump_devinfo",
             Self::PatchDevinfo => "adv_src_patch_devinfo",
-            Self::WriteDevinfo => "adv_src_write_devinfo",
             Self::DetectArb => "adv_src_detect_arb",
             Self::PatchArb => "adv_src_patch_arb",
-            Self::WriteArb => "adv_src_write_arb",
             Self::ConvertXml => "adv_src_convert_xml",
             Self::DumpPartitions => "adv_src_dump_partitions",
             Self::DumpPhysical => "adv_src_dump_physical",
             Self::FlashPartitions => "adv_src_flash_partitions",
             Self::FlashPhysical => "adv_src_flash_physical",
             Self::RebuildVbmeta => "adv_src_rebuild_vbmeta",
-            Self::SignRecovery => "adv_src_sign_recovery",
         }
     }
     /// snake_case slug for `{exe_dir}/output_{slug}/` — Advanced ops
@@ -420,19 +404,15 @@ impl AdvAction {
         match self {
             Self::RegionConvert => "region_convert",
             Self::ImageInfo => "image_info",
-            Self::DumpDevinfo => "dump_devinfo",
             Self::PatchDevinfo => "patch_devinfo",
-            Self::WriteDevinfo => "write_devinfo",
             Self::DetectArb => "detect_arb",
             Self::PatchArb => "patch_arb",
-            Self::WriteArb => "write_arb",
             Self::ConvertXml => "convert_xml",
             Self::DumpPartitions => "dump_partitions",
             Self::DumpPhysical => "dump_physical",
             Self::FlashPartitions => "flash_partitions",
             Self::FlashPhysical => "flash_physical",
             Self::RebuildVbmeta => "rebuild_vbmeta",
-            Self::SignRecovery => "sign_recovery",
         }
     }
     /// True iff the action writes into the output folder — gates the
@@ -441,12 +421,10 @@ impl AdvAction {
         matches!(
             self,
             Self::RegionConvert
-                | Self::DumpDevinfo
                 | Self::PatchDevinfo
                 | Self::PatchArb
                 | Self::ConvertXml
                 | Self::RebuildVbmeta
-                | Self::SignRecovery
         )
     }
 }
@@ -490,15 +468,7 @@ struct AdvSection {
 const ADV_SECTIONS: &[AdvSection] = &[
     AdvSection {
         title_key: "adv_section_region_patch",
-        items: &[AdvAction::RegionConvert],
-    },
-    AdvSection {
-        title_key: "adv_section_country_code",
-        items: &[
-            AdvAction::DumpDevinfo,
-            AdvAction::PatchDevinfo,
-            AdvAction::WriteDevinfo,
-        ],
+        items: &[AdvAction::RegionConvert, AdvAction::PatchDevinfo],
     },
     AdvSection {
         title_key: "adv_section_rollback",
@@ -506,7 +476,7 @@ const ADV_SECTIONS: &[AdvSection] = &[
             AdvAction::ImageInfo,
             AdvAction::DetectArb,
             AdvAction::PatchArb,
-            AdvAction::WriteArb,
+            AdvAction::RebuildVbmeta,
         ],
     },
     AdvSection {
@@ -517,8 +487,6 @@ const ADV_SECTIONS: &[AdvSection] = &[
             AdvAction::DumpPhysical,
             AdvAction::FlashPartitions,
             AdvAction::FlashPhysical,
-            AdvAction::RebuildVbmeta,
-            AdvAction::SignRecovery,
         ],
     },
 ];
@@ -2359,13 +2327,10 @@ impl AdvWizard {
     fn is_folder_op(&self) -> bool {
         matches!(
             self.action,
-            Some(AdvAction::DumpDevinfo)
-                | Some(AdvAction::WriteDevinfo)
-                | Some(AdvAction::WriteArb)
-                // v2 parity: PatchDevinfo folder carries both devinfo.img
-                // + persist.img — country code lives in both partitions.
-                | Some(AdvAction::PatchDevinfo)
-                // Encrypted rawprogram — user picks the folder holding
+            // v2 parity: PatchDevinfo folder carries both devinfo.img
+            // + persist.img - country code lives in both partitions.
+            Some(AdvAction::PatchDevinfo)
+                // Encrypted rawprogram - user picks the folder holding
                 // the `*.x` payload pack; exec iterates and decrypts each.
                 | Some(AdvAction::ConvertXml)
         )
@@ -2378,8 +2343,7 @@ impl AdvWizard {
             | Some(AdvAction::ImageInfo)
             | Some(AdvAction::DetectArb)
             | Some(AdvAction::PatchArb)
-            | Some(AdvAction::RebuildVbmeta)
-            | Some(AdvAction::SignRecovery) => ("Android partition image (*.img)", &["img"]),
+            | Some(AdvAction::RebuildVbmeta) => ("Android partition image (*.img)", &["img"]),
             _ => ("", &[]),
         }
     }
@@ -2389,7 +2353,7 @@ impl AdvWizard {
     /// dump destinations; file actions share the `File` bucket per the
     /// unified-file-picker design.
     ///
-    /// Kept close to [`Self::is_folder_op`] so they don't diverge —
+    /// Kept close to [`Self::is_folder_op`] so they don't diverge -
     /// mismatches would either orphan recents (folder op writing to
     /// `File`) or corrupt them (file path shoved into a folder bucket).
     fn picker_kind(&self) -> pickers::PickerKind {
@@ -2397,18 +2361,13 @@ impl AdvWizard {
         match self.action {
             // Source folders (existing payloads).
             Some(AdvAction::ConvertXml) => PickerKind::EncryptedRawprogramFolder,
-            Some(AdvAction::WriteDevinfo)
-            | Some(AdvAction::WriteArb)
-            | Some(AdvAction::PatchDevinfo) => PickerKind::QfilFirmwareFolder,
-            // Destination folders (we write the dumped img there).
-            Some(AdvAction::DumpDevinfo) => PickerKind::OutputFolder,
-            // File-picking actions — all share the unified File bucket.
+            Some(AdvAction::PatchDevinfo) => PickerKind::QfilFirmwareFolder,
+            // File-picking actions - all share the unified File bucket.
             Some(AdvAction::RegionConvert)
             | Some(AdvAction::ImageInfo)
             | Some(AdvAction::DetectArb)
             | Some(AdvAction::PatchArb)
-            | Some(AdvAction::RebuildVbmeta)
-            | Some(AdvAction::SignRecovery) => PickerKind::File,
+            | Some(AdvAction::RebuildVbmeta) => PickerKind::File,
             // Remaining actions don't open a Browse dialog on step 0
             // (DumpPartitions/DumpPhysical/Flash* have dedicated wizards);
             // return File defensively so storage_key() is always valid.
@@ -2424,15 +2383,11 @@ impl AdvWizard {
     fn picker_target_i18n_key(&self) -> &'static str {
         match self.action {
             Some(AdvAction::ConvertXml) => "picker_target_encrypted_rawprogram",
-            Some(AdvAction::DumpDevinfo) => "picker_target_output_folder",
-            Some(AdvAction::WriteDevinfo) => "picker_target_devinfo_folder",
-            Some(AdvAction::WriteArb) => "picker_target_arb_folder",
             Some(AdvAction::PatchDevinfo) => "picker_target_devinfo_persist_folder",
             Some(AdvAction::RegionConvert) => "picker_target_vendor_boot_img",
             Some(AdvAction::ImageInfo) => "picker_target_avb_images",
             Some(AdvAction::DetectArb) | Some(AdvAction::PatchArb) => "picker_target_arb_img",
             Some(AdvAction::RebuildVbmeta) => "picker_target_vbmeta_img",
-            Some(AdvAction::SignRecovery) => "picker_target_recovery_img",
             _ => "picker_target_file",
         }
     }
@@ -4072,8 +4027,8 @@ impl App {
                                     }
                                     // v2 parity: `backup_critical_<ts>/`,
                                     // dropped next to `ltbox.exe` so the
-                                    // user can restore the original region
-                                    // via Advanced → WriteDevinfo.
+                                    // original region images stay available
+                                    // for manual restore if needed.
                                     let ts = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .map(|d| d.as_secs())
@@ -5859,131 +5814,6 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                             Err(e) => return Err(format!("ARB analysis failed: {e}")),
                                         }
                                     }
-                                    AdvAction::DumpDevinfo => {
-                                        // Dump via EDL. `input` is the firmware folder.
-                                        // Rawprogram-driven LUN/sector — hardcoded
-                                        // LUN 0 would dump the wrong partition on
-                                        // recent Lenovo models.
-                                        let loader = find_edl_loader(input).or_else(|| input.parent().and_then(find_edl_loader));
-                                        let loader = match loader {
-                                            Some(l) => l,
-                                            None => { log.push("[EDL] xbl_s_devprg_ns.melf not found".to_string()); return Ok(log); }
-                                        };
-                                        if !ltbox_device::edl::check_device() {
-                                            return Err("Device not in EDL mode — reboot to EDL first".to_string());
-                                        }
-                                        let (raw_xmls, _) = ltbox_device::edl::collect_firmware_xmls(input);
-                                        if raw_xmls.is_empty() {
-                                            return Err(format!(
-                                                "No rawprogram*.xml under {} — cannot resolve LUN / sector",
-                                                input.display()
-                                            ));
-                                        }
-                                        let xml_paths: Vec<&std::path::Path> =
-                                            raw_xmls.iter().map(|p| p.as_path()).collect();
-                                        let catalog = ltbox_core::xml_catalog::XmlCatalog::from_paths(&xml_paths)
-                                            .map_err(|e| format!("rawprogram parse: {e}"))?;
-                                        let mut session = ltbox_device::edl::EdlSession::open(&loader, false, &mut log)
-                                            .map_err(|e| format!("EDL: {e}"))?;
-                                        for label in ["devinfo", "persist"] {
-                                            let Ok(rec) = catalog.require(label, &[]) else {
-                                                log.push(format!(
-                                                    "[EDL] {label}: not in rawprogram — skipping"
-                                                ));
-                                                continue;
-                                            };
-                                            let lun: u8 = rec.lun.as_deref().unwrap_or("0").parse().unwrap_or(0);
-                                            let start = rec.start_sector.as_deref().unwrap_or("0")
-                                                .parse::<u32>().unwrap_or(0);
-                                            let n: usize = rec.num_sectors.as_deref().unwrap_or("0")
-                                                .parse().unwrap_or(0);
-                                            if n == 0 {
-                                                log.push(format!("[EDL] {label}: num_sectors=0 — skipping"));
-                                                continue;
-                                            }
-                                            // Output into `output_dump_devinfo/`
-                                            // — don't pollute the user's firmware folder.
-                                            let out_path = output_dir.join(format!("{label}.img"));
-                                            if let Err(e) = session.dump_partition_at(
-                                                label, &out_path, lun, start, n, &mut log,
-                                            ) {
-                                                log.push(format!("[EDL] dump {label} failed: {e}"));
-                                            }
-                                        }
-                                    }
-                                    AdvAction::WriteDevinfo | AdvAction::WriteArb => {
-                                        // Flash each `<label>.img` with
-                                        // rawprogram-resolved coords. Images
-                                        // with no XML entry get skipped —
-                                        // v2 silently flashed them to whatever
-                                        // GPT said, producing hard-to-debug bricks.
-                                        let loader = find_edl_loader(input).or_else(|| input.parent().and_then(find_edl_loader));
-                                        let loader = match loader {
-                                            Some(l) => l,
-                                            None => { log.push("[EDL] xbl_s_devprg_ns.melf not found".to_string()); return Ok(log); }
-                                        };
-                                        if !ltbox_device::edl::check_device() {
-                                            return Err("Device not in EDL mode — reboot to EDL first".to_string());
-                                        }
-                                        let (raw_xmls, _) = ltbox_device::edl::collect_firmware_xmls(input);
-                                        if raw_xmls.is_empty() {
-                                            return Err(format!(
-                                                "No rawprogram*.xml under {} — cannot resolve LUN / sector",
-                                                input.display()
-                                            ));
-                                        }
-                                        let xml_paths: Vec<&std::path::Path> =
-                                            raw_xmls.iter().map(|p| p.as_path()).collect();
-                                        let catalog = ltbox_core::xml_catalog::XmlCatalog::from_paths(&xml_paths)
-                                            .map_err(|e| format!("rawprogram parse: {e}"))?;
-                                        // Detect slot so a bare `boot.img`
-                                        // resolves to the active `_a`/`_b`.
-                                        let slot_suffix: String = {
-                                            let mut adb = ltbox_device::adb::AdbManager::new();
-                                            if adb.check_device().unwrap_or(false) {
-                                                adb.get_slot_suffix().ok().flatten().unwrap_or_default()
-                                            } else {
-                                                String::new()
-                                            }
-                                        };
-                                        let slot = if slot_suffix.is_empty() { "_a" } else { slot_suffix.as_str() };
-                                        let mut session = ltbox_device::edl::EdlSession::open(&loader, true, &mut log)
-                                            .map_err(|e| format!("EDL: {e}"))?;
-                                        if let Ok(entries) = std::fs::read_dir(input) {
-                                            for entry in entries.flatten() {
-                                                let path = entry.path();
-                                                if !path.extension().map(|e| e == "img").unwrap_or(false) {
-                                                    continue;
-                                                }
-                                                let stem = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
-                                                // Fallback: user name → +slot → _a → _b.
-                                                let primary = stem.clone();
-                                                let with_slot = format!("{stem}{slot}");
-                                                let rec = catalog.require(
-                                                    &primary,
-                                                    &[
-                                                        &with_slot,
-                                                        &format!("{stem}_a"),
-                                                        &format!("{stem}_b"),
-                                                    ],
-                                                );
-                                                let Ok(rec) = rec else {
-                                                    log.push(format!(
-                                                        "[EDL] {stem}: no rawprogram entry — skipping"
-                                                    ));
-                                                    continue;
-                                                };
-                                                let lun: u8 = rec.lun.as_deref().unwrap_or("0").parse().unwrap_or(0);
-                                                let start = rec.start_sector.clone().unwrap_or_else(|| "0".to_string());
-                                                if let Err(e) = session.flash_partition_at(
-                                                    &rec.label, &path, lun, &start, &mut log,
-                                                ) {
-                                                    log.push(format!("[EDL] flash {}: {e}", rec.label));
-                                                }
-                                            }
-                                        }
-                                        session.reset_tolerant(&mut log);
-                                    }
                                     AdvAction::FlashPartitions
                                     | AdvAction::DumpPartitions
                                     | AdvAction::FlashPhysical
@@ -6283,40 +6113,6 @@ that contains `xbl_s_devprg_ns.melf` + testkey, then retry."
                                                 "[AVB] Rebuilt vbmeta written to {}",
                                                 output.display()
                                             ));
-                                        }
-                                    }
-                                    AdvAction::SignRecovery => {
-                                        // Preserves the original rollback index.
-                                        // `avb::resign_image` rewrites in place —
-                                        // copy to output first so the user's
-                                        // original stays untouched.
-                                        let key = find_testkey(input).ok_or_else(|| {
-                                            "Sign recovery: no testkey_rsa4096.pem / testkey_rsa2048.pem found next to the image (checked folder + ./keys/)".to_string()
-                                        })?;
-                                        let stem = input
-                                            .file_stem()
-                                            .map(|s| s.to_string_lossy().to_string())
-                                            .unwrap_or_default();
-                                        let output = output_dir.join(format!("{stem}.signed.img"));
-                                        std::fs::copy(input, &output).map_err(|e| {
-                                            format!("Copy {} → {}: {e}", input.display(), output.display())
-                                        })?;
-                                        log.push(format!(
-                                            "[AVB] $ resign_image {} with {} (writing to {})",
-                                            input.display(),
-                                            key.display(),
-                                            output.display()
-                                        ));
-                                        let info = ltbox_patch::avb::extract_image_avb_info(&output)
-                                            .map_err(|e| format!("Image inspect failed: {e}"))?;
-                                        let alg = if info.algorithm == "NONE" {
-                                            if key.to_string_lossy().contains("2048") { "SHA256_RSA2048" } else { "SHA256_RSA4096" }
-                                        } else {
-                                            info.algorithm.as_str()
-                                        };
-                                        let key_spec = key.display().to_string();
-                                        if let Err(e) = ltbox_patch::avb::resign_image(&output, &key_spec, alg, Some(info.rollback_index)) {
-                                            return Err(format!("Sign recovery failed: {e}"));
                                         }
                                     }
                                 }
@@ -12968,6 +12764,46 @@ mod tests {
         assert!(w.can_next());
         w.next();
         assert_eq!(w.step, w.exec_step());
+    }
+
+    #[test]
+    fn advanced_menu_taxonomy_matches_avb_image_reclass() {
+        let section = |key: &str| {
+            ADV_SECTIONS
+                .iter()
+                .find(|section| section.title_key == key)
+                .expect("section exists")
+                .items
+        };
+
+        assert_eq!(
+            section("adv_section_region_patch"),
+            &[AdvAction::RegionConvert, AdvAction::PatchDevinfo]
+        );
+        assert!(
+            ADV_SECTIONS
+                .iter()
+                .all(|section| section.title_key != "adv_section_country_code")
+        );
+        assert_eq!(
+            section("adv_section_rollback"),
+            &[
+                AdvAction::ImageInfo,
+                AdvAction::DetectArb,
+                AdvAction::PatchArb,
+                AdvAction::RebuildVbmeta,
+            ]
+        );
+        assert_eq!(
+            section("adv_section_firmware_flashing"),
+            &[
+                AdvAction::ConvertXml,
+                AdvAction::DumpPartitions,
+                AdvAction::DumpPhysical,
+                AdvAction::FlashPartitions,
+                AdvAction::FlashPhysical,
+            ]
+        );
     }
 
     #[test]
