@@ -30,6 +30,7 @@ macro_rules! live {
     ($log:expr, $($arg:tt)*) => {{
         let _line = format!($($arg)*);
         println!("{}", _line);
+        ltbox_core::live_sink::push(_line.clone());
         $log.push(_line);
     }};
 }
@@ -6484,9 +6485,36 @@ impl App {
                 self.error_msg = None;
             }
             Message::DrainStdoutTap => {
-                let lines = stdout_tap::drain();
-                if !lines.is_empty() {
-                    self.log_extend(lines);
+                // Pull from BOTH the Windows stdout pipe (`stdout_tap`,
+                // which captures third-party `println!` from qdl /
+                // magiskboot / pbr) AND our in-process live sink (every
+                // `live!` line we emit). The pipe path can stall on GUI
+                // subsystem builds — handle init order, full pipe
+                // buffer back-pressure, etc. — so the in-process sink
+                // is the safety net that guarantees our own log lines
+                // show up regardless of OS plumbing state.
+                //
+                // Dedup the combined batch with a `HashSet` instead of
+                // relying on `log_extend`'s adjacent-only dedup: each
+                // of our `live!` lines lands in BOTH sources, so naive
+                // chaining produces interleaved doubles
+                // (`[A, B, C, A, B, C]`) that the adjacent walker
+                // can't collapse. First-occurrence wins, so the tap
+                // ordering (which interleaves third-party output with
+                // ours in real chronological order) is preserved.
+                let tap_lines = stdout_tap::drain();
+                let sink_lines = ltbox_core::live_sink::drain();
+                let total = tap_lines.len() + sink_lines.len();
+                if total > 0 {
+                    let mut seen: std::collections::HashSet<String> =
+                        std::collections::HashSet::with_capacity(total);
+                    let mut combined: Vec<String> = Vec::with_capacity(total);
+                    for line in tap_lines.into_iter().chain(sink_lines.into_iter()) {
+                        if seen.insert(line.clone()) {
+                            combined.push(line);
+                        }
+                    }
+                    self.log_extend(combined);
                 }
                 // Batched rebuild — at most one cosmic-text reshape per tick.
                 if self.log_dirty {

@@ -10,6 +10,7 @@ pub mod downloader;
 pub mod error;
 pub mod github;
 pub mod i18n;
+pub mod live_sink;
 pub mod runtime;
 pub mod xml_catalog;
 
@@ -38,6 +39,7 @@ macro_rules! live {
     ($log:expr, $($arg:tt)*) => {{
         let _line = format!($($arg)*);
         println!("{}", _line);
+        $crate::live_sink::push(_line.clone());
         $log.push(_line);
     }};
 }
