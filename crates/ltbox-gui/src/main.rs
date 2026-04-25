@@ -3135,11 +3135,13 @@ impl App {
         self.error_msg = None;
         self.op_steps.clear();
         self.current_op_step = 0;
-        let label = format!(
-            "{} {}",
-            self.t("log_separator_start"),
-            self.t(v.label_key())
-        );
+        // START-only banner per user request — no op-name suffix and
+        // no matching END separator. Per-op `[Tag] Starting: …` line
+        // (emitted by *ExecStart) carries the operation identity, and
+        // the final `[Tag] Completed` / done line already marks the
+        // tail; a closing rule was just visual noise.
+        let _ = v;
+        let label = self.t("log_separator_start").to_string();
         self.log_separator(Some(&label));
     }
 
@@ -3227,13 +3229,11 @@ impl App {
         .collect()
     }
 
-    /// Pairs with `begin_op`. Emits a separator even on partial failure.
+    /// Pairs with `begin_op`. END separator dropped per user request —
+    /// `begin_op` already prints a START banner and the per-op tail
+    /// (`Completed` / error popup) is sufficient to mark closure, so
+    /// the trailing rule was just visual noise.
     fn end_op(&mut self) {
-        let label = match self.busy_view {
-            Some(v) => format!("{} {}", self.t("log_separator_end"), self.t(v.label_key())),
-            None => self.t("log_separator_end").to_string(),
-        };
-        self.log_separator(Some(&label));
         if !self.op_steps.is_empty() {
             self.current_op_step = self.op_steps.len() - 1;
         }
