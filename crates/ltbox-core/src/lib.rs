@@ -15,15 +15,19 @@ pub mod xml_catalog;
 
 pub use error::{LtboxError, Result};
 
-/// Echo a line to `println!` so the GUI's stdout tap can stream it to
-/// the live log panel immediately instead of buffering it in the
-/// returned `Vec<String>` log until the whole op ends.
+/// Echo a line to BOTH `println!` (so the GUI's stdout tap can stream
+/// it live) AND the caller's `&mut Vec<String>` log (so the
+/// `*ExecDone` flush still has the full audit trail even when the tap
+/// drops lines or the OS rate-limits the pipe).
 ///
-/// `$log` is accepted for call-site ergonomics (callers already thread a
-/// `&mut Vec<String>` through every step) but intentionally ignored —
-/// pushing here would double-render in the GUI, which re-drains the
-/// returned Vec on top of what the tap already captured. When the tap
-/// is off (CLI / tests), `println!` alone is still the right sink.
+/// Earlier revisions only printed and intentionally avoided the push
+/// to dodge "tap-already-rendered" duplicates in the live panel. That
+/// turned out to mask real outages — on Windows GUI subsystem the tap
+/// occasionally lost long stretches of output for unroot / LKM root
+/// flows and the live log went silent end-to-end, leaving the user
+/// staring at a frozen wizard. The dup risk is handled by
+/// `App::log_extend` adjacent-dedup; the resilience win is worth the
+/// trivial double-bookkeeping.
 ///
 /// Lives in `ltbox-core` so every downstream crate (`ltbox-device`,
 /// `ltbox-patch`, `ltbox-gui`) can emit through the same path without
@@ -32,7 +36,8 @@ pub use error::{LtboxError, Result};
 #[macro_export]
 macro_rules! live {
     ($log:expr, $($arg:tt)*) => {{
-        let _ = &$log;
-        println!($($arg)*);
+        let _line = format!($($arg)*);
+        println!("{}", _line);
+        $log.push(_line);
     }};
 }

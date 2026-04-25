@@ -21,13 +21,16 @@ mod stdout_tap;
 mod theme;
 mod theme_detect;
 
-/// `println!` the line so the stdout tap forwards to the live log.
-/// The `$log` arg is kept for call-site compatibility but ignored —
-/// pushing here would double up with the tap's emit.
+/// Mirror of `ltbox_core::live!` for callers that haven't switched
+/// over yet — pushes to `$log` AND prints. Adjacent dedup in
+/// `App::log_extend` collapses the live tap copy + final Vec copy on
+/// happy-path flows; on Windows-tap outages (unroot / LKM root) the
+/// Vec path is the only thing that surfaces the lines at all.
 macro_rules! live {
     ($log:expr, $($arg:tt)*) => {{
-        let _ = &$log;
-        println!($($arg)*);
+        let _line = format!($($arg)*);
+        println!("{}", _line);
+        $log.push(_line);
     }};
 }
 
@@ -3102,13 +3105,28 @@ impl App {
 
     /// Bulk append; one truncation pass.
     fn log_extend<I: IntoIterator<Item = String>>(&mut self, lines: I) {
-        let vec: Vec<String> = lines.into_iter().collect();
-        for line in &vec {
-            self.maybe_advance_op_step(line);
+        // Adjacent dedup against the existing tail. The `live!` macro
+        // now both prints (for the stdout tap) and pushes to the
+        // closure's local Vec (for *ExecDone resilience), so the same
+        // line can arrive twice — once via tap drain in real time, then
+        // again when the closure returns and the Vec is `log_extend`ed.
+        // Skipping over a matching prefix collapses the dup back to one
+        // entry without losing lines that the tap actually missed.
+        let mut prev_tail = self.log_lines.last().cloned();
+        let mut accepted: Vec<String> = Vec::new();
+        for line in lines {
+            if prev_tail.as_deref() == Some(line.as_str()) {
+                continue;
+            }
+            self.maybe_advance_op_step(&line);
+            prev_tail = Some(line.clone());
+            accepted.push(line);
         }
-        self.log_lines.extend(vec);
-        self.trim_log();
-        self.log_dirty = true;
+        if !accepted.is_empty() {
+            self.log_lines.extend(accepted);
+            self.trim_log();
+            self.log_dirty = true;
+        }
     }
 
     /// Advance `current_op_step` on a `Phase N/M` match. Silent no-op
