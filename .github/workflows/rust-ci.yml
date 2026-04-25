@@ -47,10 +47,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust (stable + fmt + clippy)
+      - name: Install Rust (toolchain pinned by rust-toolchain.toml)
+        # `toolchain` input intentionally omitted so the action reads
+        # `rust-toolchain.toml` at the repo root and installs the
+        # pinned channel (currently 1.95.0). Hard-coding `stable` here
+        # would silently install a different toolchain than the one
+        # the rest of the pipeline (and contributors' local pre-push
+        # hook) actually compiles against.
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           components: rustfmt, clippy
 
       - name: Rust cache
@@ -105,9 +110,13 @@ jobs:
           "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       - name: Install Rust toolchain (${{ matrix.target }})
+        # `toolchain` omitted so `rust-toolchain.toml` drives the
+        # channel — `targets` then adds the cross-compile target to
+        # THAT toolchain (not to a separately-installed `stable`),
+        # otherwise cargo can't find `core` for `aarch64-pc-windows-msvc`
+        # because the target sits on the wrong toolchain.
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Rust cache
