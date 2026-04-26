@@ -24,6 +24,11 @@ const INTERIM_EMIT_INTERVAL: Duration = Duration::from_millis(800);
 /// Cap on queued lines between drain ticks. A runaway native crate can
 /// outpace the drain and a 50k-line `log_extend` stalls the main
 /// thread into "Not Responding". Keep only the newest lines.
+///
+/// Only consumed by the `#[cfg(windows)]` reader thread; on every
+/// other OS the tap is a no-op so the constant is dead code under
+/// `-D warnings`.
+#[cfg(windows)]
 const TAP_QUEUE_MAX: usize = 512;
 
 static TAP_QUEUE: OnceLock<Queue> = OnceLock::new();
