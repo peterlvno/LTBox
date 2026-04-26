@@ -4,6 +4,7 @@
 //! rawprogram XML parser. Every fallible API returns [`Result<T>`] /
 //! [`LtboxError`]. Port of the non-UI parts of Python LTBox v2.x.
 
+pub mod app_paths;
 pub mod config;
 pub mod crypto;
 pub mod downloader;
