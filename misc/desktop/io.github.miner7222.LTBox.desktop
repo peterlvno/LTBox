@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LTBox
+GenericName=Lenovo Tablet Flashing Tool
+Comment=Region conversion, root, and EDL flashing for Lenovo tablets
+Exec=__LTBOX_EXEC__
+Icon=io.github.miner7222.LTBox
+Terminal=false
+Categories=Utility;System;
+StartupWMClass=io.github.miner7222.LTBox
+Keywords=android;lenovo;flash;edl;root;

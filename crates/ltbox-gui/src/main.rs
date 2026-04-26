@@ -110,6 +110,14 @@ fn warning_style(t: &Theme) -> iced::widget::text::Style {
     }
 }
 
+/// Reverse-DNS application identifier. Pushed into iced
+/// `Settings::id` so winit can hand it to the windowing system as
+/// the Wayland `app_id` / X11 `WM_CLASS`. The shipped `.desktop`
+/// file's `StartupWMClass=` line uses the same string so the
+/// running window binds to the launcher entry instead of falling
+/// back to the bare binary name.
+const APP_ID: &str = "io.github.miner7222.LTBox";
+
 /// Embedded udev rules — same file shipped under `misc/udev/` so a
 /// distro-installed `ltbox` (or AppImage) can install the rules
 /// without needing the source tree on disk.
@@ -118,6 +126,18 @@ const UDEV_RULES_CONTENT: &str = include_str!("../../../misc/udev/51-ltbox-qcom.
 
 #[cfg(target_os = "linux")]
 const UDEV_RULES_PATH: &str = "/etc/udev/rules.d/51-ltbox-qcom.rules";
+
+/// Embedded `.desktop` file template + scalable SVG icon shipped
+/// under `misc/desktop/` and `assets/icon_source.svg`. Same
+/// install-from-binary contract as the udev rules: the user runs
+/// `ltbox --install-desktop` and the GNOME / KDE app menu picks
+/// up LTBox without an external package step.
+#[cfg(target_os = "linux")]
+const DESKTOP_FILE_TEMPLATE: &str =
+    include_str!("../../../misc/desktop/io.github.miner7222.LTBox.desktop");
+
+#[cfg(target_os = "linux")]
+const APP_ICON_SVG: &str = include_str!("../assets/icon_source.svg");
 
 /// `ltbox --install-udev` entry point: write the bundled rules to
 /// `/etc/udev/rules.d/`, reload udev, trigger it, exit. Designed to
@@ -176,13 +196,104 @@ fn install_udev_rules() -> ! {
     std::process::exit(1);
 }
 
+/// `ltbox --install-desktop` entry point. Linux only.
+///
+/// Drops the bundled `.desktop` file + scalable SVG icon under the
+/// user's `$XDG_DATA_HOME` (defaults to `~/.local/share`), then
+/// best-efforts the desktop / icon caches so the LTBox entry shows
+/// in the GNOME / KDE app menu without a logout. No root required —
+/// per-user install only. Mirrors `--install-udev`'s shape: write
+/// → refresh → exit.
+///
+/// Exec line in the bundled template uses a placeholder
+/// (`__LTBOX_EXEC__`) that we substitute at install time with the
+/// absolute path of `current_exe()`. Avoids relying on `ltbox`
+/// being on PATH — a tarball-extracted binary still works because
+/// the launcher will spawn the exact file the user installed from.
+#[cfg(target_os = "linux")]
+fn install_desktop_file() -> ! {
+    use std::fs;
+    let data_home = std::env::var_os("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".local/share"))
+        });
+    let Some(data_home) = data_home else {
+        eprintln!("[ltbox] $HOME and $XDG_DATA_HOME both unset; cannot resolve install dir.");
+        std::process::exit(1);
+    };
+
+    let apps_dir = data_home.join("applications");
+    let icons_dir = data_home.join("icons/hicolor/scalable/apps");
+    let desktop_path = apps_dir.join(format!("{APP_ID}.desktop"));
+    let icon_path = icons_dir.join(format!("{APP_ID}.svg"));
+
+    if let Err(e) = fs::create_dir_all(&apps_dir) {
+        eprintln!("[ltbox] mkdir {}: {e}", apps_dir.display());
+        std::process::exit(1);
+    }
+    if let Err(e) = fs::create_dir_all(&icons_dir) {
+        eprintln!("[ltbox] mkdir {}: {e}", icons_dir.display());
+        std::process::exit(1);
+    }
+
+    let exe = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "ltbox".into());
+    let desktop = DESKTOP_FILE_TEMPLATE.replace("__LTBOX_EXEC__", &exe);
+
+    eprintln!("[ltbox] Writing desktop entry → {}", desktop_path.display());
+    if let Err(e) = fs::write(&desktop_path, desktop) {
+        eprintln!("[ltbox] write {}: {e}", desktop_path.display());
+        std::process::exit(1);
+    }
+
+    eprintln!("[ltbox] Writing icon            → {}", icon_path.display());
+    if let Err(e) = fs::write(&icon_path, APP_ICON_SVG) {
+        eprintln!("[ltbox] write {}: {e}", icon_path.display());
+        std::process::exit(1);
+    }
+
+    // Best-effort cache refresh. Both commands are no-ops on
+    // sessions that don't have the corresponding cache file (e.g.
+    // KDE without `gtk-update-icon-cache`). Failure is logged but
+    // does not abort — the menu entry usually still shows up after
+    // the next desktop session restart.
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg(&apps_dir)
+        .status();
+    let _ = std::process::Command::new("gtk-update-icon-cache")
+        .arg("-q")
+        .arg(data_home.join("icons/hicolor"))
+        .status();
+
+    eprintln!();
+    eprintln!(
+        "[ltbox] Done. The entry should appear in your app menu within a few seconds. \
+         Re-run with `--install-desktop` after moving the binary."
+    );
+    std::process::exit(0);
+}
+
+#[cfg(not(target_os = "linux"))]
+fn install_desktop_file() -> ! {
+    eprintln!(
+        "[ltbox] --install-desktop is Linux-only — desktop entries follow the freedesktop.org spec."
+    );
+    std::process::exit(1);
+}
+
 fn main() -> iced::Result {
     // Pre-iced CLI subcommands. Each handler exits the process so
     // the iced setup path runs only when no subcommand fires. Kept
     // tiny + dep-free (no `clap`) — there's exactly one flag and it
     // doesn't need argument parsing beyond presence detection.
-    if std::env::args().any(|a| a == "--install-udev") {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--install-udev") {
         install_udev_rules();
+    }
+    if args.iter().any(|a| a == "--install-desktop") {
+        install_desktop_file();
     }
 
     // Single-instance lock via fs2 advisory lock in the system temp
@@ -242,10 +353,23 @@ fn main() -> iced::Result {
     // cover English and Russian UI through the same family.
     let mut app = iced::application(App::new, App::update, App::view)
         .title("LTBox")
+        // Application id propagates to winit:
+        //   * Wayland → `app_id` on the xdg-shell toplevel
+        //   * X11     → `WM_CLASS` (instance + class)
+        // Matches `StartupWMClass=` in the shipped `.desktop` file
+        // so GNOME / KDE / etc bind the running window to the
+        // launcher entry. Without this they fall back to the binary
+        // name (`ltbox`) which would only match if the desktop file
+        // also said `StartupWMClass=ltbox` — using a reverse-DNS id
+        // keeps it future-proof against a renamed binary.
+        .settings(iced::Settings {
+            id: Some(APP_ID.to_string()),
+            default_font: iced::Font::with_name("Noto Sans CJK KR"),
+            ..iced::Settings::default()
+        })
         .theme(App::theme)
         .subscription(App::subscription)
-        .window(window_settings)
-        .default_font(iced::Font::with_name("Noto Sans CJK KR"));
+        .window(window_settings);
     for (_, bytes) in noto_fonts_dl::load_fonts() {
         app = app.font(bytes.clone());
     }

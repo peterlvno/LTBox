@@ -61,7 +61,12 @@ Windows `x86_64` and `arm64` builds are published.
    sudo ./ltbox --install-udev
    ```
 4. **Replug** any connected device.
-5. Run `./ltbox`.
+5. (Optional) Add an app-menu entry + icon (per-user, no root):
+   ```bash
+   ./ltbox --install-desktop
+   ```
+   Drops a `.desktop` file under `~/.local/share/applications/` and the SVG icon under `~/.local/share/icons/hicolor/scalable/apps/`. GNOME / KDE pick it up within a few seconds. Re-run after moving the binary.
+6. Run `./ltbox`.
 
 Linux `x86_64` and `aarch64` builds are published.
 
