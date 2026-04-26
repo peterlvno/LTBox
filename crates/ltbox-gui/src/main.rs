@@ -2800,7 +2800,7 @@ enum Message {
     PollDevice,
     DevicePolled(DevicePollResult),
     // Windows driver detection / auto-install
-    DriverCheckDone(ltbox_device::windows_driver::DriverStatus),
+    DriverCheckDone(ltbox_device::driver::DriverStatus),
     InstallDrivers,
     InstallDriversDone(Result<Vec<String>, String>),
     // Advanced → Flash Partitions wizard (loader-only: scan GPT, pick
@@ -2984,7 +2984,7 @@ struct App {
     pending_log_save_source: LogSaveSource,
     error_msg: Option<String>,
     picker_target: PickerTarget,
-    driver_status: Option<ltbox_device::windows_driver::DriverStatus>,
+    driver_status: Option<ltbox_device::driver::DriverStatus>,
     installing_drivers: bool,
     flash_parts: FlashPartsWizard,
     flash_parts_open: bool,
@@ -3125,9 +3125,9 @@ impl App {
         let win = iced::window::latest().map(Message::WindowIdReceived);
         let driver_check = Task::perform(
             async {
-                tokio::task::spawn_blocking(ltbox_device::windows_driver::check_required_drivers)
+                tokio::task::spawn_blocking(ltbox_device::driver::check_required_drivers)
                     .await
-                    .unwrap_or(ltbox_device::windows_driver::DriverStatus::NotWindows)
+                    .unwrap_or(ltbox_device::driver::DriverStatus::NotWindows)
             },
             Message::DriverCheckDone,
         );
@@ -6898,7 +6898,7 @@ impl App {
                     async {
                         tokio::task::spawn_blocking(|| {
                             let mut log = Vec::new();
-                            match ltbox_device::windows_driver::download_and_install(&mut log) {
+                            match ltbox_device::driver::download_and_install(&mut log) {
                                 Ok(()) => Ok(log),
                                 Err(e) => {
                                     ltbox_core::live!(log, "[Driver] Failed: {e}");
@@ -7525,10 +7525,10 @@ impl App {
                         return Task::perform(
                             async {
                                 tokio::task::spawn_blocking(
-                                    ltbox_device::windows_driver::check_required_drivers,
+                                    ltbox_device::driver::check_required_drivers,
                                 )
                                 .await
-                                .unwrap_or(ltbox_device::windows_driver::DriverStatus::NotWindows)
+                                .unwrap_or(ltbox_device::driver::DriverStatus::NotWindows)
                             },
                             Message::DriverCheckDone,
                         );
@@ -8151,7 +8151,7 @@ impl App {
             );
         }
 
-        if let Some(ltbox_device::windows_driver::DriverStatus::Missing(_)) = self.driver_status {
+        if let Some(ltbox_device::driver::DriverStatus::Missing(_)) = self.driver_status {
             content = content.push(self.driver_warning_banner());
         }
 

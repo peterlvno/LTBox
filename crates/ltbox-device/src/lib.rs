@@ -6,8 +6,8 @@
 
 pub mod adb;
 pub mod controller;
+pub mod driver;
 pub mod edl;
 pub mod fastboot;
-pub mod windows_driver;
 
 pub use qdl;

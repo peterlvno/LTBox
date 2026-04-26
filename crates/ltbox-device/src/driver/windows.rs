@@ -4,25 +4,24 @@
 //! `qualcomm/qcom-usb-kernel-drivers` releases. Presence probed via
 //! `pnputil /enum-drivers`, then the DriverStore FileRepository as fallback.
 //! Install: download → extract → `pnputil /add-driver` per `.inf`.
+//!
+//! Cross-platform `DriverStatus` / `DriverError` / `Result` types
+//! live in `driver/mod.rs`; this file is only compiled on Windows
+//! (gated by `#[cfg(windows)]` in `driver/mod.rs`) so every
+//! `cfg!(windows)` runtime check from the pre-rename module folds
+//! into compile-time guarantees here.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use super::{DriverError, DriverStatus, Result};
+
 /// `Command::new` + `CREATE_NO_WINDOW` so `pnputil` does not flash a console.
 fn silent_command(program: &str) -> Command {
-    // `mut` is only consumed inside the windows cfg branch — the
-    // Linux/macOS build sees an immutable binding and would otherwise
-    // trip the `unused_mut` lint under `-D warnings`.
-    #[cfg(windows)]
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut cmd = Command::new(program);
-    #[cfg(not(windows))]
-    let cmd = Command::new(program);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    cmd.creation_flags(CREATE_NO_WINDOW);
     cmd
 }
 
@@ -46,47 +45,8 @@ const ASSET_PREFIX: &str = "qud-win-";
 const ASSET_SUFFIX: &str = "_arm64_amd64.zip";
 const USER_AGENT: &str = concat!("ltbox/", env!("CARGO_PKG_VERSION"));
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DriverStatus {
-    NotWindows,
-    Present,
-    /// Missing `.inf` names.
-    Missing(Vec<&'static str>),
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum DriverError {
-    #[error("Not running on Windows — driver install is only supported on Windows")]
-    NotWindows,
-    // ureq has no thiserror-friendly root error, so collapse transport + status.
-    #[error("Network error: {0}")]
-    Http(String),
-    #[error("GitHub release parse error: {0}")]
-    Parse(String),
-    #[error("No matching driver asset found in the latest release")]
-    NoAsset,
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
-    #[error("Zip extraction error: {0}")]
-    Zip(#[from] zip::result::ZipError),
-    #[error("No .inf files found under a Windows10 subdirectory in the archive")]
-    NoInf,
-}
-
-impl From<ureq::Error> for DriverError {
-    fn from(e: ureq::Error) -> Self {
-        DriverError::Http(e.to_string())
-    }
-}
-
-pub type Result<T> = std::result::Result<T, DriverError>;
-
 /// Probe whether the Qualcomm USB drivers are installed.
 pub fn check_required_drivers() -> DriverStatus {
-    if !cfg!(windows) {
-        return DriverStatus::NotWindows;
-    }
-
     let missing: Vec<&'static str> = REQUIRED_INFS
         .iter()
         .copied()
@@ -145,10 +105,6 @@ fn driver_present_via_driver_store(inf_name: &str) -> bool {
 /// Download the latest `qcom-usb-kernel-drivers` release and `pnputil`-install
 /// each `.inf` under a `Windows10/` folder. `log` is pushed per milestone.
 pub fn download_and_install(log: &mut Vec<String>) -> Result<()> {
-    if !cfg!(windows) {
-        return Err(DriverError::NotWindows);
-    }
-
     log.push("[Driver] Fetching latest release metadata...".to_string());
     // Shorter timeout than core::build_agent — zip is <10 MB; bail fast.
     let agent = ureq::Agent::config_builder()
@@ -274,16 +230,11 @@ fn cleanup(dir: &Path) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn status_on_non_windows_short_circuits() {
-        if !cfg!(windows) {
-            assert_eq!(check_required_drivers(), DriverStatus::NotWindows);
-        }
-    }
-
+    /// `Missing(...)` must never carry an empty vec — empty list
+    /// would make the GUI banner say "missing nothing" which is
+    /// confusing.
     #[test]
     fn missing_list_is_empty_when_all_present() {
-        // Missing(...) must never carry an empty vec.
         if let DriverStatus::Missing(list) = check_required_drivers() {
             assert!(!list.is_empty());
         }
