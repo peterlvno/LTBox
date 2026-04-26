@@ -55,7 +55,7 @@ Windows `x86_64` and `arm64` builds are published.
      libfontconfig1 \
      xdg-utils
    ```
-2. Download the [latest release](../../releases/latest) Linux zip, extract, `chmod +x ltbox`.
+2. Download the [latest release](../../releases/latest) Linux tarball (`tar -xzf LTBox-linux_*.tar.gz`). The executable bit on `ltbox` is preserved.
 3. Install the udev rules so the desktop session can open the Qualcomm 9008 / Lenovo USB devices without root:
    ```bash
    sudo ./ltbox --install-udev
@@ -63,7 +63,7 @@ Windows `x86_64` and `arm64` builds are published.
 4. **Replug** any connected device.
 5. Run `./ltbox`.
 
-Linux `x86_64` build is published.
+Linux `x86_64` and `aarch64` builds are published.
 
 ---
 

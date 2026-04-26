@@ -314,26 +314,38 @@ jobs:
 
       - name: Stage artifact
         id: stage
+        # tar.gz with `gzip -9` for the Linux artifact: tar
+        # preserves the executable bit on `ltbox` (zip on Linux
+        # erases it, leaving users to `chmod +x` after extract),
+        # and `gzip -9` shaves an extra few percent off the wire
+        # size vs the default zip flate-compressed level. xz would
+        # win another 20-30 % on top of gzip but adds an apt
+        # install on user machines that don't ship `xz-utils` by
+        # default — gzip is universally available.
         run: |
           set -euo pipefail
           tag="${{ steps.meta.outputs.tag }}"
-          stage_dir="stage/LTBox-linux_${{ matrix.arch }}-${tag}"
+          stage_basename="LTBox-linux_${{ matrix.arch }}-${tag}"
+          stage_dir="stage/${stage_basename}"
           mkdir -p "${stage_dir}"
           cp "target/${{ matrix.target }}/release/ltbox" "${stage_dir}/"
           [[ -f README.md ]] && cp README.md "${stage_dir}/"
           [[ -f LICENSE ]]   && cp LICENSE   "${stage_dir}/"
-          zip_name="LTBox-linux_${{ matrix.arch }}-${tag}.zip"
-          (cd "$(dirname "${stage_dir}")" && zip -r "${OLDPWD}/${zip_name}" "$(basename "${stage_dir}")")
-          sha256sum "${zip_name}" | awk '{print $1"  "$2}' > "${zip_name}.sha256"
-          echo "zip=${zip_name}" >> "${GITHUB_OUTPUT}"
+          tar_name="${stage_basename}.tar.gz"
+          (
+            cd "$(dirname "${stage_dir}")"
+            tar -cf - "${stage_basename}" | gzip -9 > "${OLDPWD}/${tar_name}"
+          )
+          sha256sum "${tar_name}" | awk '{print $1"  "$2}' > "${tar_name}.sha256"
+          echo "tarball=${tar_name}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: linux_${{ matrix.arch }}-${{ steps.meta.outputs.tag }}
           path: |
-            ${{ steps.stage.outputs.zip }}
-            ${{ steps.stage.outputs.zip }}.sha256
+            ${{ steps.stage.outputs.tarball }}
+            ${{ steps.stage.outputs.tarball }}.sha256
           if-no-files-found: error
 
   test:
@@ -434,7 +446,7 @@ jobs:
             artifacts/**/LTBox-win_x86_64-*.zip.sha256
             artifacts/**/LTBox-win_arm64-*.zip
             artifacts/**/LTBox-win_arm64-*.zip.sha256
-            artifacts/**/LTBox-linux_x86_64-*.zip
-            artifacts/**/LTBox-linux_x86_64-*.zip.sha256
-            artifacts/**/LTBox-linux_arm64-*.zip
-            artifacts/**/LTBox-linux_arm64-*.zip.sha256
+            artifacts/**/LTBox-linux_x86_64-*.tar.gz
+            artifacts/**/LTBox-linux_x86_64-*.tar.gz.sha256
+            artifacts/**/LTBox-linux_arm64-*.tar.gz
+            artifacts/**/LTBox-linux_arm64-*.tar.gz.sha256
