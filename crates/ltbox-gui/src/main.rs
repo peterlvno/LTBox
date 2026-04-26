@@ -2573,9 +2573,6 @@ struct LiveLabels {
     root_completed: String,
     unroot_completed: String,
     adb_no_kver: String,
-    adb_no_device_slot: String,
-    adb_active_slot: String, // "{slot}" placeholder
-    adb_default_slot_a: String,
     backup_saved_prefix: String,
     root_resolved_prefix: String,
     root_backup_copy_prefix: String,
@@ -3407,9 +3404,6 @@ impl App {
             root_completed: t("live_root_completed"),
             unroot_completed: t("live_unroot_completed"),
             adb_no_kver: t("live_adb_no_kver"),
-            adb_no_device_slot: t("live_adb_no_device_slot"),
-            adb_active_slot: t("live_adb_active_slot"),
-            adb_default_slot_a: t("live_adb_default_slot_a"),
             backup_saved_prefix: t("live_backup_saved_prefix"),
             root_resolved_prefix: t("live_root_resolved_prefix"),
             root_backup_copy_prefix: t("live_root_backup_copy_prefix"),
@@ -5453,25 +5447,31 @@ impl App {
                             // Front-loaded so the user sees something happen
                             // before the long manager-APK / payload download.
                             live!(log, "[Root] {}", phase_marker(1, 7, &ll.op_root_phase[0]));
-                            // Must run before EDL — ADB vanishes past 9008.
-                            // KernelSU stable picks `.ko` by kernel MAJOR.MINOR.PATCH.
-                            let mut slot_suffix = String::new();
+                            // Slot detection MUST succeed — root flashes
+                            // boot_<slot> + vbmeta_<slot> + init_boot_<slot>,
+                            // and silently defaulting to `_a` previously
+                            // landed flashes on the wrong slot when the
+                            // device was actually running on `_b`. Poll
+                            // both ADB + Fastboot up to 30 s; on failure,
+                            // the helper returns a diagnostic that names
+                            // which transport last failed and what to do
+                            // (re-plug into normal/recovery, reboot to
+                            // bootloader, fix unauthorized ADB, …).
+                            let slot_suffix = ltbox_device::controller::poll_active_slot(
+                                std::time::Duration::from_secs(30),
+                                &mut log,
+                            )?;
+                            // Kernel version probe (KSU LKM) needs ADB
+                            // shell; runs only when ADB is currently
+                            // usable so the slot-resolved-via-Fastboot
+                            // path doesn't waste 30 s waiting for a
+                            // shell that won't come.
                             let mut kernel_version: Option<String> = gui_kernel_version.clone();
                             let mut adb_ready_at_start = false;
                             if !skip_adb {
                                 let mut adb = ltbox_device::adb::AdbManager::new();
                                 if adb.check_device().unwrap_or(false) {
                                     adb_ready_at_start = true;
-                                    slot_suffix = adb
-                                        .get_slot_suffix()
-                                        .ok()
-                                        .flatten()
-                                        .unwrap_or_default();
-                                    live!(log, "[ADB] {}",
-                                        ll.adb_active_slot.replace(
-                                            "{slot}",
-                                            if slot_suffix.is_empty() { "(none)" } else { &slot_suffix },
-                                        ));
                                     if mode == Some(RootMode::Lkm) {
                                         if let Ok(Some(kv)) = adb.get_kernel_version() {
                                             let normalized =
@@ -5492,8 +5492,6 @@ impl App {
                                             live!(log, "[ADB] {}", ll.adb_no_kver);
                                         }
                                     }
-                                } else {
-                                    live!(log, "[ADB] {}", ll.adb_no_device_slot);
                                 }
                             }
                             if mode == Some(RootMode::Lkm) && kernel_version.is_none() {
@@ -5587,9 +5585,11 @@ impl App {
                             // invocations a user would run by hand.
                             let is_gki_mode = is_gki_route;
                             let base_name = ltbox_patch::root_pipeline::boot_partition_base(pipe_family, is_gki_mode);
-                            let slot_for_dump = if slot_suffix.is_empty() { "_a" } else { &slot_suffix };
-                            let boot_primary = format!("{base_name}{slot_for_dump}");
-                            let vbmeta_primary = format!("vbmeta{slot_for_dump}");
+                            // `slot_suffix` was poll-resolved at Phase 1
+                            // and propagated through `RootPipelineConfig`;
+                            // it is guaranteed to be `_a` or `_b` here.
+                            let boot_primary = format!("{base_name}{slot_suffix}");
+                            let vbmeta_primary = format!("vbmeta{slot_suffix}");
                             // Lenovo devices on Qualcomm UFS place
                             // boot / init_boot / vbmeta on LUN 4 (userdata
                             // LUN), same index used by the reference
@@ -5853,26 +5853,20 @@ impl App {
                                             .replace("{boot}", boot_name)
                                     );
 
-                                    let mut adb = ltbox_device::adb::AdbManager::new();
-                                    let slot = if adb.check_device().unwrap_or(false) {
-                                        let s = adb
-                                            .get_slot_suffix()
-                                            .ok()
-                                            .flatten()
-                                            .unwrap_or_default();
-                                        live!(
-                                            log,
-                                            "[ADB] {}",
-                                            ll.adb_active_slot.replace(
-                                                "{slot}",
-                                                if s.is_empty() { "(none)" } else { &s },
-                                            )
-                                        );
-                                        s
-                                    } else {
-                                        live!(log, "[ADB] {}", ll.adb_default_slot_a);
-                                        String::new()
-                                    };
+                                    // Slot resolution must succeed —
+                                    // unroot writes init_boot_<slot> +
+                                    // vbmeta_<slot> from the user's
+                                    // backup folder. Defaulting to `_a`
+                                    // when the device was on `_b`
+                                    // restored stale stock blobs to the
+                                    // wrong slot and left the active
+                                    // slot still rooted, with no clear
+                                    // signal to the user.
+                                    let slot = ltbox_device::controller::poll_active_slot(
+                                        std::time::Duration::from_secs(30),
+                                        &mut log,
+                                    )
+                                    .map_err(|e| format!("Unroot slot resolve: {e}"))?;
 
                                     let loader = find_edl_loader(dir)
                                         .or_else(|| dir.parent().and_then(find_edl_loader))
@@ -5905,9 +5899,10 @@ impl App {
                                     let catalog =
                                         ltbox_core::xml_catalog::XmlCatalog::from_paths(&xml_paths)
                                             .map_err(|e| format!("rawprogram parse failed: {e}"))?;
-                                    let slot_for_flash = if slot.is_empty() { "_a" } else { &slot };
-                                    let boot_primary = format!("{base_part}{slot_for_flash}");
-                                    let vbmeta_primary = format!("vbmeta{slot_for_flash}");
+                                    // `slot` was poll-resolved above and is
+                                    // guaranteed `_a` or `_b`.
+                                    let boot_primary = format!("{base_part}{slot}");
+                                    let vbmeta_primary = format!("vbmeta{slot}");
                                     let boot_record = catalog
                                         .require(
                                             &boot_primary,

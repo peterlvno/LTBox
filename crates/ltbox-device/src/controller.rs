@@ -153,6 +153,126 @@ impl DeviceController {
     }
 }
 
+/// Poll ADB then Fastboot for the active slot suffix until one
+/// returns `_a` or `_b`, or the deadline expires.
+///
+/// Slot is required for every flash / dump / root path: writing to
+/// the wrong slot's `boot_*` / `vbmeta_*` / `init_boot_*` partition
+/// either fails AVB on the next boot (if the device flips slots
+/// post-flash) or quietly leaves the device on the unmodified slot
+/// (if it doesn't). Defaulting to `_a` when probing fails was a
+/// silent footgun — flashes landed on `_a` while the device was
+/// running on `_b`, so the user saw "flash succeeded" but nothing
+/// changed. Force a hard error instead so the caller has to fix the
+/// transport state before any destructive op runs.
+///
+/// Polls both transports because the device's state mid-flow
+/// determines which one answers: ADB works in normal / recovery,
+/// Fastboot works in bootloader. EDL has no slot getvar — caller
+/// must probe BEFORE entering EDL.
+///
+/// `log` receives one human-readable line per poll attempt
+/// (suppressed via the standard `live!` macro contract — drop the
+/// `Vec` in headless callers).
+pub fn poll_active_slot(
+    timeout: std::time::Duration,
+    log: &mut Vec<String>,
+) -> std::result::Result<String, String> {
+    let deadline = std::time::Instant::now() + timeout;
+    let mut adb_attempted = false;
+    let mut fastboot_attempted = false;
+    let mut last_adb_err = String::new();
+    let mut last_fastboot_err = String::new();
+
+    while std::time::Instant::now() < deadline {
+        // ADB attempt — only if device is currently in a state that
+        // accepts shell (Device or Recovery).
+        let mut adb = AdbManager::new();
+        match adb.check_device_state() {
+            Ok(Some(state @ ("device" | "recovery"))) => {
+                adb_attempted = true;
+                match adb.get_slot_suffix() {
+                    Ok(Some(s)) if s == "_a" || s == "_b" => {
+                        ltbox_core::live!(log, "[Slot] resolved via ADB ({state}): {s}");
+                        return Ok(s);
+                    }
+                    Ok(Some(other)) => {
+                        last_adb_err = format!("ADB returned unexpected slot value `{other}`");
+                    }
+                    Ok(None) => {
+                        last_adb_err =
+                            "ADB returned empty `ro.boot.slot_suffix` (device may not be A/B)"
+                                .to_string();
+                    }
+                    Err(e) => {
+                        last_adb_err = format!("ADB shell failed: {e}");
+                    }
+                }
+            }
+            Ok(Some(state)) => {
+                last_adb_err = format!("ADB state `{state}` does not accept shell");
+            }
+            Ok(None) => {
+                last_adb_err = "no ADB device visible".to_string();
+            }
+            Err(e) => {
+                last_adb_err = format!("ADB probe failed: {e}");
+            }
+        }
+
+        // Fastboot attempt — open() fails fast if the device isn't
+        // in bootloader, so no separate state probe.
+        match FastbootDevice::open() {
+            Ok(mut fb) => {
+                fastboot_attempted = true;
+                match fb.get_slot_suffix() {
+                    Ok(Some(s)) if s == "_a" || s == "_b" => {
+                        ltbox_core::live!(log, "[Slot] resolved via Fastboot: {s}");
+                        return Ok(s);
+                    }
+                    Ok(Some(other)) => {
+                        last_fastboot_err =
+                            format!("Fastboot returned unexpected `current-slot` value `{other}`");
+                    }
+                    Ok(None) => {
+                        last_fastboot_err =
+                            "Fastboot `current-slot` getvar returned empty (device may not be A/B)"
+                                .to_string();
+                    }
+                    Err(e) => {
+                        last_fastboot_err = format!("Fastboot getvar failed: {e}");
+                    }
+                }
+            }
+            Err(e) => {
+                last_fastboot_err = format!("Fastboot open failed: {e}");
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
+
+    // Build a diagnostic that surfaces what was tried + the last
+    // failure mode per transport so the user knows whether to plug
+    // ADB cable, reboot to bootloader, or fix permissions.
+    let mut detail = String::new();
+    if adb_attempted {
+        detail.push_str(&format!("ADB: {last_adb_err}. "));
+    } else {
+        detail.push_str("ADB: never reached a shell-capable state. ");
+    }
+    if fastboot_attempted {
+        detail.push_str(&format!("Fastboot: {last_fastboot_err}."));
+    } else {
+        detail.push_str("Fastboot: device never enumerated as a Fastboot endpoint.");
+    }
+    Err(format!(
+        "Could not detect active slot via ADB or Fastboot within {timeout:?}. {detail} \
+         Connect the device in normal / recovery mode (ADB) or bootloader mode (Fastboot) and retry. \
+         Defaulting to slot `_a` was previously silent and led to flashes landing on the wrong slot."
+    ))
+}
+
 impl Default for DeviceController {
     fn default() -> Self {
         Self::new()
