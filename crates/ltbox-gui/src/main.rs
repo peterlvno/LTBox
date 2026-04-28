@@ -9465,11 +9465,14 @@ impl App {
                 .center(),
         );
 
-        container(col)
+        // Wrap in scrollable so the summary can grow past the viewport
+        // (e.g. ARB ON + country patch + region modify all push extra
+        // info_kv rows). Nav row stays outside this fn — `view_flash_wizard`
+        // composes `[step_bar, body, nav]`, so Back / Start stay sticky at
+        // the bottom even when content scrolls.
+        container(scrollable(col).height(Length::Fill).width(Length::Fill))
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
             .into()
     }
 
@@ -9670,11 +9673,9 @@ impl App {
             col = col.push(info_kv_center(self.t("rescue_folder_label"), &folder));
             col = col.push(info_kv_center(self.t("rescue_region_label"), &region));
         }
-        container(col)
+        container(scrollable(col).height(Length::Fill).width(Length::Fill))
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
             .into()
     }
 
@@ -10322,11 +10323,9 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        container(col)
+        container(scrollable(col).height(Length::Fill).width(Length::Fill))
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
             .into()
     }
 
@@ -11350,11 +11349,9 @@ impl App {
             .unwrap_or_else(|| dash.clone());
         col = col.push(info_kv_center(self.t("root_step_folder"), &folder));
 
-        container(col)
+        container(scrollable(col).height(Length::Fill).width(Length::Fill))
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
             .into()
     }
 
@@ -11738,11 +11735,9 @@ impl App {
                 .unwrap_or(dash);
             col = col.push(info_kv_center(self.t("adv_confirm_region_target"), &label));
         }
-        container(col)
+        container(scrollable(col).height(Length::Fill).width(Length::Fill))
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
             .into()
     }
 
