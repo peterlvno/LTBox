@@ -9314,39 +9314,26 @@ impl App {
         // code to write into devinfo/persist.
         if !self.adv_needs_country {
             let skipped = self.wf_config.country_action.is_skipped();
-            let skip_bg = if skipped {
-                ACCENT
-            } else {
-                iced::Color::TRANSPARENT
-            };
-            let skip_txt = if skipped {
-                iced::Color::WHITE
-            } else {
-                iced::Color::BLACK
-            };
             list = list.push(
-                button(
-                    text(self.t("popup_country_do_not_change").to_string())
-                        .size(13)
-                        .color(skip_txt),
-                )
-                .on_press(Message::SkipCountryPatch)
-                .padding([6, 14])
-                .width(Length::Fill)
-                .style(move |_t: &Theme, status| {
-                    let hover = matches!(status, button::Status::Hovered);
-                    button::Style {
-                        background: Some(if skipped {
-                            skip_bg.into()
-                        } else if hover {
-                            iced::Color::from_rgba(0.357, 0.388, 0.878, 0.08).into()
-                        } else {
-                            iced::Color::TRANSPARENT.into()
-                        }),
-                        text_color: skip_txt,
-                        ..Default::default()
-                    }
-                }),
+                button(text(self.t("popup_country_do_not_change").to_string()).size(13))
+                    .on_press(Message::SkipCountryPatch)
+                    .padding([6, 14])
+                    .width(Length::Fill)
+                    .style(move |t: &Theme, status| {
+                        let p = pal_of(t);
+                        let hover = matches!(status, button::Status::Hovered);
+                        button::Style {
+                            background: Some(if skipped {
+                                p.primary.into()
+                            } else if hover {
+                                p.surface_container_high.into()
+                            } else {
+                                iced::Color::TRANSPARENT.into()
+                            }),
+                            text_color: if skipped { p.on_primary } else { p.on_surface },
+                            ..Default::default()
+                        }
+                    }),
             );
             list = list.push(widget::rule::horizontal(1));
         }
@@ -9354,32 +9341,23 @@ impl App {
             let code = entry.code.to_string();
             let selected = selected_code == Some(entry.code);
             let label = format!("{} — {}", entry.code, entry.name);
-            let bg_color = if selected {
-                ACCENT
-            } else {
-                iced::Color::TRANSPARENT
-            };
-            let txt_color = if selected {
-                iced::Color::WHITE
-            } else {
-                iced::Color::BLACK
-            };
             list = list.push(
-                button(text(label).size(13).color(txt_color))
+                button(text(label).size(13))
                     .on_press(Message::SelectCountry(code))
                     .padding([6, 14])
                     .width(Length::Fill)
-                    .style(move |_t: &Theme, status| {
+                    .style(move |t: &Theme, status| {
+                        let p = pal_of(t);
                         let hover = matches!(status, button::Status::Hovered);
                         button::Style {
                             background: Some(if selected {
-                                bg_color.into()
+                                p.primary.into()
                             } else if hover {
-                                iced::Color::from_rgba(0.357, 0.388, 0.878, 0.08).into()
+                                p.surface_container_high.into()
                             } else {
                                 iced::Color::TRANSPARENT.into()
                             }),
-                            text_color: txt_color,
+                            text_color: if selected { p.on_primary } else { p.on_surface },
                             ..Default::default()
                         }
                     }),
