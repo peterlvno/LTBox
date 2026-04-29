@@ -18,6 +18,7 @@ roxmltree = { workspace = true }
 moka = { workspace = true }
 camino = { workspace = true }
 dirs = { workspace = true }
+semver = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

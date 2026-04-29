@@ -118,6 +118,35 @@ fn warning_style(t: &Theme) -> iced::widget::text::Style {
 /// back to the bare binary name.
 const APP_ID: &str = "io.github.miner7222.LTBox";
 
+/// Repo coordinates for the in-app update banner. Hard-coded because
+/// the upstream is the project itself — there is no scenario where we
+/// want LTBox to "check the user's fork" by default. The Releases tab
+/// URL the green sidebar pill links to is derived from this.
+const UPDATE_REPO: &str = "miner7222/LTBox";
+
+/// Background probe wired into `App::new`. Reads the running build's
+/// version (`CARGO_PKG_VERSION`), walks GitHub's `/releases?per_page=100`,
+/// and returns the newest non-draft / non-prerelease release whose semver
+/// is **strictly greater** than the running build. Returns `None` when:
+///   * the running build is already at-or-ahead of the latest stable,
+///   * the repo has no stable releases yet (only prereleases),
+///   * the network call or JSON parse failed (no banner spam on offline
+///     boots — the dashboard renders identically).
+///
+/// Runs synchronously on a `spawn_blocking` worker so the async runtime
+/// stays free; the result lands as `Message::UpdateCheckDone`.
+fn check_for_update() -> Option<ltbox_core::github::StableRelease> {
+    let current = semver::Version::parse(env!("CARGO_PKG_VERSION")).ok()?;
+    let client = ltbox_core::github::GitHubClient::new(UPDATE_REPO).ok()?;
+    let stable = client.latest_stable_release().ok().flatten()?;
+    let stable_ver = semver::Version::parse(stable.tag.trim_start_matches('v')).ok()?;
+    if stable_ver > current {
+        Some(stable)
+    } else {
+        None
+    }
+}
+
 /// Embedded udev rules — same file shipped under `misc/udev/` so a
 /// distro-installed `ltbox` (or AppImage) can install the rules
 /// without needing the source tree on disk.
@@ -3033,6 +3062,12 @@ enum Message {
     DriverCheckDone(ltbox_device::driver::DriverStatus),
     InstallDrivers,
     InstallDriversDone(Result<Vec<String>, String>),
+    // GitHub release update probe — fires once at startup, fills the
+    // sidebar "Update available" pill on the dashboard.
+    UpdateCheckDone(Option<ltbox_core::github::StableRelease>),
+    /// Open the cached release page in the user's default browser.
+    /// Triggered by clicking the "Update available" sidebar pill.
+    OpenUpdateUrl,
     // Advanced → Flash Partitions wizard (loader-only: scan GPT, pick
     // per-row images via double-click, tri-state flash/erase).
     FlashPartsSelectLoader,
@@ -3221,6 +3256,12 @@ struct App {
     picker_target: PickerTarget,
     driver_status: Option<ltbox_device::driver::DriverStatus>,
     installing_drivers: bool,
+    /// Newest stable (`prerelease == false && draft == false`) release on
+    /// `miner7222/LTBox` whose semver is strictly greater than the
+    /// running build's. `None` either before the background probe lands
+    /// or when the running build is already at-or-ahead of the latest
+    /// stable. Populates the green sidebar "Update available" pill.
+    update_available: Option<ltbox_core::github::StableRelease>,
     flash_parts: FlashPartsWizard,
     flash_parts_open: bool,
     dump_parts: DumpPartsWizard,
@@ -3340,6 +3381,7 @@ impl Default for App {
             picker_target: PickerTarget::None,
             driver_status: None,
             installing_drivers: false,
+            update_available: None,
             flash_parts: FlashPartsWizard::default(),
             flash_parts_open: false,
             dump_parts: DumpPartsWizard::default(),
@@ -3357,7 +3399,7 @@ impl Default for App {
 
 impl App {
     fn new() -> (Self, Task<Message>) {
-        // Window-id + driver check fire in parallel.
+        // Window-id + driver check + update check all fire in parallel.
         let win = iced::window::latest().map(Message::WindowIdReceived);
         let driver_check = Task::perform(
             async {
@@ -3367,7 +3409,22 @@ impl App {
             },
             Message::DriverCheckDone,
         );
-        (Self::default(), Task::batch([win, driver_check]))
+        // GitHub releases probe — runs once at startup. `latest_stable_release`
+        // walks `/releases?per_page=100` (not `/releases/latest`) so the
+        // result is well-defined even when the repo has only prereleases
+        // published. Network failure / parse failure → `None`, no banner.
+        let update_check = Task::perform(
+            async {
+                tokio::task::spawn_blocking(check_for_update)
+                    .await
+                    .unwrap_or(None)
+            },
+            Message::UpdateCheckDone,
+        );
+        (
+            Self::default(),
+            Task::batch([win, driver_check, update_check]),
+        )
     }
     fn theme(&self) -> Theme {
         if self.dark_mode {
@@ -7515,6 +7572,25 @@ impl App {
             Message::DriverCheckDone(status) => {
                 self.driver_status = Some(status);
             }
+            Message::UpdateCheckDone(result) => {
+                // `None` means "no banner" — either we're already on the
+                // latest stable, the repo has only prereleases, or the
+                // probe failed (offline / 5xx / parse). All three should
+                // render identically: nothing in the sidebar.
+                self.update_available = result;
+            }
+            Message::OpenUpdateUrl => {
+                if let Some(release) = self.update_available.as_ref() {
+                    // `open` crate dispatches via `xdg-open` (Linux) /
+                    // `start` (Windows) / `open` (macOS). Failure here is
+                    // logged but not surfaced — the user can copy the URL
+                    // out of the release notes if their default browser
+                    // is misconfigured.
+                    if let Err(e) = open::that_detached(&release.html_url) {
+                        tracing::warn!("failed to open update URL: {e}");
+                    }
+                }
+            }
             Message::InstallDrivers => {
                 if self.installing_drivers {
                     return Task::none();
@@ -8621,11 +8697,107 @@ impl App {
                 self.is_nav_enabled(v),
             ));
         }
-        container(scrollable(col))
+
+        // Bottom-anchored sidebar layout: `[scrollable(nav) | update pill]`.
+        // The scrollable claims `Length::Fill` so the nav rows pin to the
+        // top, and the update-available pill (rendered only when the
+        // background probe surfaces a newer stable release) lives below
+        // the scroll region. When `update_available` is `None` the slot is
+        // an empty `Space` of zero height, so the sidebar reads identically
+        // to the pre-update-banner version.
+        let body: Element<'_, Message> = if let Some(release) = self.update_available.as_ref() {
+            column![
+                container(scrollable(col))
+                    .width(Length::Fill)
+                    .height(Length::Fill),
+                self.update_available_pill(release),
+            ]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+        } else {
+            container(scrollable(col))
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        };
+
+        container(body)
             .width(210)
             .height(Length::Fill)
-            .style(|t: &Theme| sidebar_bg(t))
+            .style(sidebar_bg)
             .into()
+    }
+
+    /// Material 3 "tonal/filled" success-leaning pill that lives at the
+    /// bottom of the sidebar and links to the GitHub release page when
+    /// a newer stable build is available. Hidden entirely (caller drops
+    /// it from the layout) when `update_available` is `None`.
+    ///
+    /// Style notes:
+    ///   * Background = `tertiary` (M3 success / "go-update" color slot;
+    ///     palette-aware so dark mode reads correctly without us hand-rolling
+    ///     two greens).
+    ///   * Foreground = `on_tertiary` for the same reason.
+    ///   * Pill radius (`shape::FULL`) matches M3 button-pill geometry.
+    ///   * Hover = subtle alpha lift via `theme::state::HOVER`, parity
+    ///     with the rest of the app's tonal buttons.
+    fn update_available_pill(
+        &self,
+        _release: &ltbox_core::github::StableRelease,
+    ) -> Element<'_, Message> {
+        let label = self.t("sidebar_update_available").to_string();
+        container(
+            button(
+                row![
+                    icon::tile_update_on()
+                        .size(16)
+                        .style(|t: &Theme| iced::widget::text::Style {
+                            color: Some(pal_of(t).on_tertiary)
+                        }),
+                    text(label).size(13).line_height(1.2),
+                ]
+                .spacing(8)
+                .align_y(iced::Alignment::Center),
+            )
+            .on_press(Message::OpenUpdateUrl)
+            .padding([10, 16])
+            .style(|t: &Theme, status| {
+                let p = pal_of(t);
+                let hover = matches!(status, button::Status::Hovered);
+                let bg = if hover {
+                    with_alpha(p.tertiary, 1.0 - theme::state::HOVER * 0.5)
+                } else {
+                    p.tertiary
+                };
+                button::Style {
+                    background: Some(bg.into()),
+                    text_color: p.on_tertiary,
+                    border: iced::Border {
+                        radius: theme::shape::FULL.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+            }),
+        )
+        // The button widget itself sizes to its content (label + icon),
+        // so its width is locale-dependent — Korean "업데이트 가능"
+        // renders narrower than Russian "Доступно обновление".
+        // `center_x(Length::Fill)` centers the pill in the sidebar
+        // column regardless of which language is active. Bottom padding
+        // is intentionally larger than the top so the pill clears the
+        // sidebar's bottom edge with breathing room rather than hugging
+        // the connection-status bar that sits below the sidebar frame.
+        .padding(iced::Padding {
+            top: 12.0,
+            right: 16.0,
+            bottom: 24.0,
+            left: 16.0,
+        })
+        .width(Length::Fill)
+        .center_x(Length::Fill)
+        .into()
     }
 
     // -- Content ----------------------------------------------------------

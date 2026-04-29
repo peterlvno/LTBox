@@ -30,6 +30,20 @@ pub struct GitHubClient {
 struct Release {
     tag_name: String,
     assets: Vec<Asset>,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    html_url: String,
+}
+
+/// Slim public payload for the in-app update banner — see
+/// [`GitHubClient::latest_stable_release`].
+#[derive(Debug, Clone)]
+pub struct StableRelease {
+    pub tag: String,
+    pub html_url: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,6 +154,43 @@ impl GitHubClient {
     pub fn latest_release_tag(&self) -> Result<String> {
         let release: Release = self.get_json("/releases/latest")?;
         Ok(release.tag_name)
+    }
+
+    /// Newest non-draft, non-prerelease release on the repo, or `Ok(None)`
+    /// when the repo has nothing stable published yet.
+    ///
+    /// `/releases/latest` would already filter out prereleases on GitHub's
+    /// side, but it 404s when **every** published release on the repo is a
+    /// prerelease — a real state for this project during alpha/beta. Walk
+    /// `/releases?per_page=100` instead and pick the highest semver among
+    /// the `prerelease == false && draft == false` rows so the caller
+    /// always gets a defined answer (`None` = no stable yet, `Some(...)`
+    /// = the candidate to compare against the running build).
+    pub fn latest_stable_release(&self) -> Result<Option<StableRelease>> {
+        let releases: Vec<Release> = self.get_json("/releases?per_page=100")?;
+        let mut best: Option<(semver::Version, StableRelease)> = None;
+        for r in releases {
+            if r.draft || r.prerelease {
+                continue;
+            }
+            // Tags are conventionally `vX.Y.Z`; semver wants the bare
+            // `X.Y.Z` form. Skip tags we can't parse — better to ignore a
+            // weird tag than to call it "the latest" and ship a bad
+            // banner pointing at it.
+            let stripped = r.tag_name.trim_start_matches('v');
+            let Ok(ver) = semver::Version::parse(stripped) else {
+                continue;
+            };
+            let candidate = StableRelease {
+                tag: r.tag_name.clone(),
+                html_url: r.html_url.clone(),
+            };
+            match best.as_ref() {
+                Some((cur, _)) if &ver <= cur => {}
+                _ => best = Some((ver, candidate)),
+            }
+        }
+        Ok(best.map(|(_, r)| r))
     }
 
     /// Latest release: `(tag, [(asset_name, browser_download_url)])`.
