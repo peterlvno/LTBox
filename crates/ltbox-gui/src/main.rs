@@ -3193,6 +3193,15 @@ enum Message {
     DeviceInfoClose,
     /// Retry fetch for the currently open popup serial.
     DeviceInfoRetry,
+    /// Copy `payload` to the OS clipboard. Pairs with `ToastShow` so
+    /// the user gets a visual confirmation; clipboard writes return a
+    /// `Task<Message>` from iced so the second message is chained.
+    CopyToClipboard(String),
+    /// Show a transient bottom-of-screen toast message. Auto-clears
+    /// via `ToastClear` after a short delay.
+    ToastShow(String),
+    /// Clear the active toast (timer expiry).
+    ToastClear,
     DriverCheckDone(ltbox_device::driver::DriverStatus),
     InstallDrivers,
     InstallDriversDone(Result<Vec<String>, String>),
@@ -3572,6 +3581,9 @@ struct App {
     /// modal is on screen between picking the firmware folder and the
     /// Confirm step.
     arb_index_popup_open: bool,
+    /// Transient toast message shown as a bottom-of-screen pill.
+    /// Cleared by a delayed `ToastClear` task; never persisted.
+    toast_msg: Option<String>,
     // Device portrait derived at view time via `device_portrait()`.
     platform_supported: Option<bool>,
     busy: bool,
@@ -3717,6 +3729,7 @@ impl Default for App {
             device_info_cache: std::collections::HashMap::new(),
             device_info_popup: None,
             arb_index_popup_open: false,
+            toast_msg: None,
             platform_supported: None,
             busy: false,
             busy_view: None,
@@ -4232,6 +4245,33 @@ impl App {
         )
     }
 
+    /// Map the Lenovo PTSTPD `SaleArea` field of the *currently
+    /// connected* device (keyed by `device_serial`) to a `DeviceRegion`
+    /// for Flash-wizard preselect:
+    ///
+    /// * `"CN"` → PRC.
+    /// * JSON `null` → ROW.
+    /// * Other strings, missing key, or no cached entry for the current
+    ///   serial → `None` (caller leaves the field untouched).
+    ///
+    /// Reads only from the in-memory `device_info_cache`; never issues
+    /// a network call. Used by both the post-fetch handler and the
+    /// `Navigate(View::Flash)` reset path so navigating into Flash does
+    /// not undo a region the user already had inferred.
+    fn inferred_flash_region(&self) -> Option<DeviceRegion> {
+        if self.device_serial.is_empty() {
+            return None;
+        }
+        let info = self.device_info_cache.get(&self.device_serial)?;
+        match info.field("SaleArea") {
+            ltbox_core::lenovo_info::FieldValue::Value(s) if s.eq_ignore_ascii_case("CN") => {
+                Some(DeviceRegion::Prc)
+            }
+            ltbox_core::lenovo_info::FieldValue::Null => Some(DeviceRegion::Row),
+            _ => None,
+        }
+    }
+
     /// Returns the Settings-level default EDL loader path when it is set
     /// **and** the file currently exists on disk. Used by every wizard
     /// open / reset path to decide whether to pre-fill its loader slot
@@ -4405,6 +4445,16 @@ impl App {
                 }
                 if v == View::Flash && !busy && !self.flash.is_in_exec() {
                     self.flash.reset();
+                    // Re-apply SaleArea-driven preselect: `flash.reset()`
+                    // wipes `device_region` back to `None`, but the user's
+                    // earlier device-info fetch already picked a region;
+                    // mirror it onto the freshly-reset wizard so navigating
+                    // into Flash does not undo the inference.
+                    if self.flash.device_region.is_none()
+                        && let Some(r) = self.inferred_flash_region()
+                    {
+                        self.flash.device_region = Some(r);
+                    }
                 }
                 if v == View::SystemUpdate && !busy && !self.sysupdate.is_in_exec() {
                     self.sysupdate.reset();
@@ -8091,7 +8141,17 @@ impl App {
                 }
                 match result {
                     Ok(info) => {
+                        // SaleArea-driven Flash region preselect. CN ⇒ PRC,
+                        // explicit JSON null ⇒ ROW. Other strings / missing
+                        // key leave the field untouched. Only set when the
+                        // user has not already picked one to avoid clobbering
+                        // a manual choice.
                         self.device_info_cache.insert(serial.clone(), info);
+                        if self.flash.device_region.is_none()
+                            && let Some(r) = self.inferred_flash_region()
+                        {
+                            self.flash.device_region = Some(r);
+                        }
                         if matches!(&self.device_info_popup, Some((s, _)) if s == &serial) {
                             self.device_info_popup = Some((serial, DeviceInfoState::Ready));
                         }
@@ -8121,6 +8181,23 @@ impl App {
             }
             Message::DeviceInfoClose => {
                 self.device_info_popup = None;
+            }
+            Message::CopyToClipboard(payload) => {
+                let toast = self.t("toast_copied").to_string();
+                return iced::clipboard::write::<Message>(payload)
+                    .chain(Task::done(Message::ToastShow(toast)));
+            }
+            Message::ToastShow(msg) => {
+                self.toast_msg = Some(msg);
+                return Task::perform(
+                    async {
+                        tokio::time::sleep(std::time::Duration::from_millis(1800)).await;
+                    },
+                    |_| Message::ToastClear,
+                );
+            }
+            Message::ToastClear => {
+                self.toast_msg = None;
             }
             Message::DriverCheckDone(status) => {
                 self.driver_status = Some(status);
@@ -8901,6 +8978,9 @@ impl App {
         if self.arb_index_popup_open {
             layers.push(self.arb_index_popup_view());
         }
+        if self.toast_msg.is_some() {
+            layers.push(self.toast_view());
+        }
 
         if layers.len() == 1 {
             layers.into_iter().next().unwrap()
@@ -8955,6 +9035,49 @@ impl App {
         m3_dialog(content.into())
     }
 
+    /// Bottom-of-screen transient toast. Renders a low-attention pill
+    /// over a transparent passthrough container so the rest of the
+    /// view keeps responding to clicks while the toast is on screen.
+    fn toast_view(&self) -> Element<'_, Message> {
+        let Some(msg) = self.toast_msg.clone() else {
+            return container(text("")).into();
+        };
+        // Background = `on_surface` (near-black in light, near-white
+        // in dark); text needs the inverse to stay readable in both
+        // modes — `surface` is exactly that role pair.
+        let pill = container(
+            text(msg)
+                .size(12)
+                .style(|t: &Theme| iced::widget::text::Style {
+                    color: Some(pal_of(t).surface),
+                }),
+        )
+        .padding([8, 16])
+        .style(|t: &Theme| -> container::Style {
+            let p = pal_of(t);
+            container::Style {
+                background: Some(p.on_surface.into()),
+                border: iced::Border {
+                    radius: 18.0.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        });
+        container(pill)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: 0.0,
+                bottom: 32.0,
+                left: 0.0,
+            })
+            .center_x(Length::Fill)
+            .align_y(iced::Alignment::End)
+            .into()
+    }
+
     /// Device-info popup: render the Lenovo PTSTPD `data` block as a
     /// 2-column key/value table. Branches on `DeviceInfoState` so the
     /// modal stays open through Loading / Error / Ready transitions
@@ -8965,6 +9088,59 @@ impl App {
         };
         let title = text(self.t("device_info_popup_title").to_string())
             .size(theme::text_size::WIZARD_STEP_TITLE);
+        // Copy-icon button — only enabled once the upstream payload is
+        // cached; clicking copies the unmodified `data` JSON to the
+        // clipboard and surfaces a toast.
+        let copy_payload: Option<String> = self
+            .device_info_cache
+            .get(&serial)
+            .map(|i| i.data_pretty.clone());
+        let copy_glyph = text("⧉").size(16);
+        let copy_btn = if let Some(payload) = copy_payload {
+            button(container(copy_glyph).padding([2, 6]))
+                .on_press(Message::CopyToClipboard(payload))
+                .padding(0)
+                .style(|t: &Theme, status| {
+                    let p = pal_of(t);
+                    let hovered = matches!(status, button::Status::Hovered);
+                    button::Style {
+                        background: Some(
+                            if hovered {
+                                p.surface_container_high
+                            } else {
+                                p.surface_container
+                            }
+                            .into(),
+                        ),
+                        text_color: p.on_surface,
+                        border: iced::Border {
+                            radius: 6.0.into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }
+                })
+        } else {
+            // Same shape, no on_press — keeps the header layout stable
+            // during the loading / error states without leaving an
+            // active click target.
+            button(container(copy_glyph).padding([2, 6]))
+                .padding(0)
+                .style(|t: &Theme, _s| {
+                    let p = pal_of(t);
+                    button::Style {
+                        background: Some(p.surface_container.into()),
+                        text_color: p.on_surface_variant,
+                        border: iced::Border {
+                            radius: 6.0.into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }
+                })
+        };
+        let header = iced::widget::row![title, Space::new().width(Length::Fill), copy_btn]
+            .align_y(iced::Alignment::Center);
         let serial_line = text(format!("{}: {serial}", self.t("device_info_popup_serial")))
             .size(12)
             .style(muted_style);
@@ -9042,7 +9218,7 @@ impl App {
         .style(md_filled_btn_style);
 
         let content = column![
-            title,
+            header,
             serial_line,
             widget::rule::horizontal(1),
             body,

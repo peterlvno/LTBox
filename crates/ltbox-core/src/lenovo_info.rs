@@ -59,6 +59,42 @@ pub const FIELD_ORDER: &[&str] = &[
 #[derive(Debug, Clone, Default)]
 pub struct MachineInfo {
     pub fields: Vec<(String, Option<String>)>,
+    /// Raw `data` block from the response, pretty-printed JSON. Used by
+    /// the popup's "copy" button so the user gets the unmodified
+    /// upstream representation rather than the GUI's table rendering.
+    pub data_pretty: String,
+}
+
+/// Tri-state lookup for a single field by JSON shape. Distinguishes
+/// "key missing" from "key present, value `null`" so callers can
+/// branch on each case (e.g. SaleArea = `null` ⇒ ROW preselect).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldValue {
+    /// Key not in `data` at all.
+    Missing,
+    /// Key present, value was JSON `null`.
+    Null,
+    /// Key present, value was a (possibly empty) string / number /
+    /// other non-null primitive.
+    Value(String),
+}
+
+impl MachineInfo {
+    /// Look up a field by key. Returns the tri-state shape
+    /// (missing / null / value). The internal `fields` list only
+    /// includes keys that were present in the response, so absence
+    /// from the list maps to `Missing`.
+    pub fn field(&self, key: &str) -> FieldValue {
+        for (k, v) in &self.fields {
+            if k == key {
+                return match v {
+                    Some(s) => FieldValue::Value(s.clone()),
+                    None => FieldValue::Null,
+                };
+            }
+        }
+        FieldValue::Missing
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,11 +131,13 @@ pub fn fetch_machine_info(serial: &str) -> Result<MachineInfo> {
             env.status_code
         )));
     }
-    let data = env
+    let data_value = env
         .data
         .as_ref()
-        .and_then(|v| v.as_object())
         .ok_or_else(|| LtboxError::Download("Lenovo PTSTPD: missing data block".into()))?;
+    let data = data_value
+        .as_object()
+        .ok_or_else(|| LtboxError::Download("Lenovo PTSTPD: data block is not an object".into()))?;
     let mut fields = Vec::with_capacity(FIELD_ORDER.len());
     for &key in FIELD_ORDER {
         let Some(val) = data.get(key) else { continue };
@@ -110,7 +148,11 @@ pub fn fetch_machine_info(serial: &str) -> Result<MachineInfo> {
         };
         fields.push((key.to_string(), display));
     }
-    Ok(MachineInfo { fields })
+    let data_pretty = serde_json::to_string_pretty(data_value).unwrap_or_default();
+    Ok(MachineInfo {
+        fields,
+        data_pretty,
+    })
 }
 
 #[cfg(test)]

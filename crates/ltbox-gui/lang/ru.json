@@ -639,6 +639,7 @@
   "theme_dark": "Тёмная",
   "theme_light": "Светлая",
   "theme_system": "Как в системе",
+  "toast_copied": "Скопировано в буфер обмена",
   "unroot_confirm_subtitle": "Проверьте перед восстановлением стоковых образов.",
   "unroot_confirm_title": "Подтверждение",
   "unroot_folder_placeholder": "Выбор папки с бэкапом",

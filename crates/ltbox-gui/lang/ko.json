@@ -639,6 +639,7 @@
   "theme_dark": "다크",
   "theme_light": "라이트",
   "theme_system": "시스템 설정에 따름",
+  "toast_copied": "클립보드에 복사됨",
   "unroot_confirm_subtitle": "순정 이미지 복원 전 검토하세요.",
   "unroot_confirm_title": "확인",
   "unroot_folder_placeholder": "백업 폴더 선택",

@@ -639,6 +639,7 @@
   "theme_dark": "Dark",
   "theme_light": "Light",
   "theme_system": "Follow system",
+  "toast_copied": "Copied to clipboard",
   "unroot_confirm_subtitle": "Review before restoring stock images.",
   "unroot_confirm_title": "Confirm",
   "unroot_folder_placeholder": "Select backup folder",

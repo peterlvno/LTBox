@@ -639,6 +639,7 @@
   "theme_dark": "深色",
   "theme_light": "浅色",
   "theme_system": "跟随系统设置",
+  "toast_copied": "已复制到剪贴板",
   "unroot_confirm_subtitle": "恢复原厂镜像前请确认。",
   "unroot_confirm_title": "确认",
   "unroot_folder_placeholder": "选择备份文件夹",
