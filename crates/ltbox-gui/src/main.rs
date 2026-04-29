@@ -2842,7 +2842,26 @@ struct DevicePollResult {
     ram: String,
     storage: String,
     market_name: String,
+    /// Device serial captured from ADB or fastboot. Empty when no
+    /// connected device produced a serial (EDL/Sahara never reports
+    /// one). Used by the device-info popup to query the Lenovo PTSTPD
+    /// API. Reset to empty whenever the device disconnects so a stale
+    /// serial does not bleed across hardware swaps mid-session.
+    serial: String,
     platform_supported: Option<bool>, // None = unknown, Some(true) = qcom, Some(false) = unsupported
+}
+
+/// Loading state for the device-info popup. The popup view branches on
+/// this to render a spinner / table / error banner while keeping the
+/// modal open so the user has a clear target to dismiss.
+#[derive(Debug, Clone)]
+enum DeviceInfoState {
+    /// Fetch is in flight; render a spinner and disable retry.
+    Loading,
+    /// `device_info_cache[serial]` is populated; render the table.
+    Ready,
+    /// Fetch failed; render the message + a retry pill.
+    Error(String),
 }
 
 /// Parse hwboardid: `"SM8750P_16+512_13"` → `("16 GB", "512 GB")`.
@@ -3105,6 +3124,17 @@ enum Message {
     StartOver,
     PollDevice,
     DevicePolled(DevicePollResult),
+    /// Click on the dashboard device portrait. Opens the popup; fires
+    /// the Lenovo PTSTPD fetch unless the serial is already cached.
+    DeviceInfoOpen,
+    /// Result of the PTSTPD fetch keyed by the serial it was started for.
+    /// Stale results (different serial than the currently open popup)
+    /// are still cached for next time but do not flip the popup state.
+    DeviceInfoFetched(String, Result<ltbox_core::lenovo_info::MachineInfo, String>),
+    /// User dismissed the device-info popup.
+    DeviceInfoClose,
+    /// Retry fetch for the currently open popup serial.
+    DeviceInfoRetry,
     DriverCheckDone(ltbox_device::driver::DriverStatus),
     InstallDrivers,
     InstallDriversDone(Result<Vec<String>, String>),
@@ -3456,6 +3486,22 @@ struct App {
     device_ram: String,
     device_storage: String,
     device_market_name: String,
+    /// Last-seen device serial captured by `DevicePolled` (ADB or
+    /// fastboot). Empty when nothing reachable produces a serial. Drives
+    /// the device-info popup query — reset to empty on disconnect so a
+    /// stale serial cannot trigger an unrelated upstream lookup after a
+    /// hardware swap mid-session.
+    device_serial: String,
+    /// Session-scoped cache for the Lenovo PTSTPD device-info popup,
+    /// keyed by serial. Lives only as long as the App — process exit
+    /// drops the map, no persistence — so the user is not asked to
+    /// "remember" anything across runs and the same serial is queried
+    /// at most once per session.
+    device_info_cache: std::collections::HashMap<String, ltbox_core::lenovo_info::MachineInfo>,
+    /// Device-info popup state. `None` → popup closed. `Some((serial,
+    /// state))` → popup open for `serial`; state tracks the in-flight
+    /// fetch result so the popup can render a spinner / error / table.
+    device_info_popup: Option<(String, DeviceInfoState)>,
     // Device portrait derived at view time via `device_portrait()`.
     platform_supported: Option<bool>,
     busy: bool,
@@ -3597,6 +3643,9 @@ impl Default for App {
             device_ram: String::new(),
             device_storage: String::new(),
             device_market_name: String::new(),
+            device_serial: String::new(),
+            device_info_cache: std::collections::HashMap::new(),
+            device_info_popup: None,
             platform_supported: None,
             busy: false,
             busy_view: None,
@@ -7786,6 +7835,9 @@ impl App {
                                     let hw =
                                         adb.shell("getprop ro.boot.hardware").unwrap_or_default();
                                     r.platform_supported = Some(hw.to_lowercase() == "qcom");
+                                    if let Some(sn) = adb.serial() {
+                                        r.serial = sn.to_string();
+                                    }
                                     return r;
                                 }
                                 _ => {
@@ -7805,6 +7857,7 @@ impl App {
                                     r.ram = vars.ram_gb.unwrap_or_default();
                                     r.storage = vars.storage_gb.unwrap_or_default();
                                     r.market_name = vars.product.unwrap_or_default();
+                                    r.serial = vars.serialno.unwrap_or_default();
                                     // Numeric → raw string (dashboard falls through
                                     // when i18n lookup misses).
                                     let arb_val = vars
@@ -7861,6 +7914,9 @@ impl App {
                 if !r.market_name.is_empty() {
                     self.device_market_name = r.market_name;
                 }
+                if !r.serial.is_empty() {
+                    self.device_serial = r.serial;
+                }
                 self.platform_supported = r.platform_supported;
                 if self.connection == ConnectionStatus::None {
                     self.device_model.clear();
@@ -7870,8 +7926,76 @@ impl App {
                     self.device_ram.clear();
                     self.device_storage.clear();
                     self.device_market_name.clear();
+                    self.device_serial.clear();
                     self.platform_supported = None;
                 }
+            }
+            Message::DeviceInfoOpen => {
+                let serial = self.device_serial.trim().to_string();
+                if serial.is_empty() {
+                    return Task::none();
+                }
+                if self.device_info_cache.contains_key(&serial) {
+                    self.device_info_popup = Some((serial, DeviceInfoState::Ready));
+                    return Task::none();
+                }
+                self.device_info_popup = Some((serial.clone(), DeviceInfoState::Loading));
+                let serial_for_task = serial.clone();
+                return task_heavy(
+                    move || {
+                        let result = ltbox_core::lenovo_info::fetch_machine_info(&serial_for_task)
+                            .map_err(|e| e.to_string());
+                        (serial_for_task, result)
+                    },
+                    |(s, r)| Message::DeviceInfoFetched(s, r),
+                    |e| (String::new(), Err(e)),
+                );
+            }
+            Message::DeviceInfoFetched(serial, result) => {
+                if serial.is_empty() {
+                    // Worker panic fallback (`task_heavy` fallback case);
+                    // surface as error on whichever popup is open.
+                    if let Some((s, _)) = self.device_info_popup.clone() {
+                        let msg = match result {
+                            Err(e) => e,
+                            Ok(_) => "task panicked".to_string(),
+                        };
+                        self.device_info_popup = Some((s, DeviceInfoState::Error(msg)));
+                    }
+                    return Task::none();
+                }
+                match result {
+                    Ok(info) => {
+                        self.device_info_cache.insert(serial.clone(), info);
+                        if matches!(&self.device_info_popup, Some((s, _)) if s == &serial) {
+                            self.device_info_popup = Some((serial, DeviceInfoState::Ready));
+                        }
+                    }
+                    Err(e) => {
+                        if matches!(&self.device_info_popup, Some((s, _)) if s == &serial) {
+                            self.device_info_popup = Some((serial, DeviceInfoState::Error(e)));
+                        }
+                    }
+                }
+            }
+            Message::DeviceInfoRetry => {
+                let Some((serial, _)) = self.device_info_popup.clone() else {
+                    return Task::none();
+                };
+                self.device_info_popup = Some((serial.clone(), DeviceInfoState::Loading));
+                let serial_for_task = serial;
+                return task_heavy(
+                    move || {
+                        let result = ltbox_core::lenovo_info::fetch_machine_info(&serial_for_task)
+                            .map_err(|e| e.to_string());
+                        (serial_for_task, result)
+                    },
+                    |(s, r)| Message::DeviceInfoFetched(s, r),
+                    |e| (String::new(), Err(e)),
+                );
+            }
+            Message::DeviceInfoClose => {
+                self.device_info_popup = None;
             }
             Message::DriverCheckDone(status) => {
                 self.driver_status = Some(status);
@@ -8646,6 +8770,9 @@ impl App {
         if self.should_show_busy_progress_dialog() {
             layers.push(self.busy_progress_dialog());
         }
+        if self.device_info_popup.is_some() {
+            layers.push(self.device_info_popup_view());
+        }
 
         if layers.len() == 1 {
             layers.into_iter().next().unwrap()
@@ -8696,6 +8823,107 @@ impl App {
         .spacing(16)
         .padding(24)
         .width(420);
+
+        m3_dialog(content.into())
+    }
+
+    /// Device-info popup: render the Lenovo PTSTPD `data` block as a
+    /// 2-column key/value table. Branches on `DeviceInfoState` so the
+    /// modal stays open through Loading / Error / Ready transitions
+    /// without flashing in/out of existence.
+    fn device_info_popup_view(&self) -> Element<'_, Message> {
+        let Some((serial, state)) = self.device_info_popup.clone() else {
+            return container(text("")).into();
+        };
+        let title = text(self.t("device_info_popup_title").to_string())
+            .size(theme::text_size::WIZARD_STEP_TITLE);
+        let serial_line = text(format!("{}: {serial}", self.t("device_info_popup_serial")))
+            .size(12)
+            .style(muted_style);
+
+        let body: Element<'_, Message> = match &state {
+            DeviceInfoState::Loading => container(Spinner::new())
+                .width(Length::Fill)
+                .height(120)
+                .center_x(Length::Fill)
+                .center_y(Length::Fill)
+                .into(),
+            DeviceInfoState::Error(e) => column![
+                text(self.t("device_info_popup_error").to_string())
+                    .size(13)
+                    .color(iced::Color::from_rgb(0.9, 0.2, 0.2)),
+                text(e.clone()).size(11).style(muted_style),
+                Space::new().height(8),
+                button(
+                    text(self.t("btn_retry").to_string())
+                        .size(12)
+                        .color(iced::Color::WHITE),
+                )
+                .on_press(Message::DeviceInfoRetry)
+                .padding([6, 18])
+                .style(md_filled_btn_style),
+            ]
+            .spacing(8)
+            .into(),
+            DeviceInfoState::Ready => {
+                let info = match self.device_info_cache.get(&serial) {
+                    Some(i) => i,
+                    None => {
+                        return container(text("")).into();
+                    }
+                };
+                let mut table = column![].spacing(0);
+                for (i, (k, v)) in info.fields.iter().enumerate() {
+                    let display_v = v.clone().unwrap_or_default();
+                    let key_cell = text(k.clone()).size(12).style(muted_style).width(180);
+                    let val_cell = text(display_v).size(12).width(Length::Fill);
+                    let row_inner = iced::widget::row![key_cell, val_cell]
+                        .spacing(12)
+                        .padding([4, 10])
+                        .align_y(iced::Alignment::Center);
+                    let zebra = i % 2 == 1;
+                    let tinted = container(row_inner).width(Length::Fill).style(
+                        move |t: &Theme| -> container::Style {
+                            let p = pal_of(t);
+                            container::Style {
+                                background: if zebra {
+                                    Some(iced::Background::Color(p.surface_container_low))
+                                } else {
+                                    None
+                                },
+                                ..Default::default()
+                            }
+                        },
+                    );
+                    table = table.push(tinted);
+                }
+                scrollable(table)
+                    .height(Length::Fixed(420.0))
+                    .width(Length::Fill)
+                    .into()
+            }
+        };
+
+        let close_btn = button(
+            text(self.t("btn_close").to_string())
+                .size(12)
+                .color(iced::Color::WHITE),
+        )
+        .on_press(Message::DeviceInfoClose)
+        .padding([6, 18])
+        .style(md_filled_btn_style);
+
+        let content = column![
+            title,
+            serial_line,
+            widget::rule::horizontal(1),
+            body,
+            iced::widget::row![Space::new().width(Length::Fill), close_btn]
+                .align_y(iced::Alignment::Center),
+        ]
+        .spacing(12)
+        .padding(20)
+        .width(640);
 
         m3_dialog(content.into())
     }
@@ -9425,18 +9653,28 @@ impl App {
                     .content_fit(iced::ContentFit::ScaleDown)
                     .into(),
             };
-            row![
-                device_col,
-                container(portrait)
-                    .width(220)
-                    .height(Length::Fill)
-                    .center_x(220)
-                    .center_y(Length::Fill),
-            ]
-            .spacing(16)
-            .align_y(iced::Alignment::Center)
-            .height(160)
-            .into()
+            // Click on the portrait fires the Lenovo PTSTPD lookup popup.
+            // Skip when no serial was captured (e.g. EDL connection) so
+            // the click is a clear no-op rather than triggering an empty
+            // upstream query.
+            let portrait_box = container(portrait)
+                .width(220)
+                .height(Length::Fill)
+                .center_x(220)
+                .center_y(Length::Fill);
+            let portrait_clickable: Element<'_, Message> = if self.device_serial.is_empty() {
+                portrait_box.into()
+            } else {
+                iced::widget::mouse_area(portrait_box)
+                    .on_press(Message::DeviceInfoOpen)
+                    .interaction(iced::mouse::Interaction::Pointer)
+                    .into()
+            };
+            row![device_col, portrait_clickable,]
+                .spacing(16)
+                .align_y(iced::Alignment::Center)
+                .height(160)
+                .into()
         };
         content = content.push(
             container(

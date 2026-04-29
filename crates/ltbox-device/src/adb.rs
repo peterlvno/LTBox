@@ -47,6 +47,13 @@ impl AdbManager {
         ADBServer::new(self.server_addr)
     }
 
+    /// Last-known serial captured by `check_device` /
+    /// `check_device_state` / `wait_for_device`. `None` until the first
+    /// successful probe; never cleared by `AdbManager`.
+    pub fn serial(&self) -> Option<&str> {
+        self.serial.as_deref()
+    }
+
     fn device(&self) -> Result<ADBServerDevice> {
         let serial = self.serial.clone().ok_or(AdbError::DeviceNotFound)?;
         Ok(ADBServerDevice::new(serial, Some(self.server_addr)))
