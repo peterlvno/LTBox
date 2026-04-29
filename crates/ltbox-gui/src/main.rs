@@ -9070,7 +9070,10 @@ impl App {
             .padding(iced::Padding {
                 top: 0.0,
                 right: 0.0,
-                bottom: 32.0,
+                // Sits ~100 px above the viewport floor — clears the
+                // device-info popup's close-button row without
+                // crowding the table content.
+                bottom: 100.0,
                 left: 0.0,
             })
             .center_x(Length::Fill)
