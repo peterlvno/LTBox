@@ -2679,6 +2679,151 @@ fn civil_from_days(z: i64) -> (i64, u32, u32) {
     (y, m, d)
 }
 
+/// Worker for the Advanced → Detect Anti-Rollback flow. Mirrors the
+/// flash wizard's ARB probe but in a manual, report-only shape:
+///
+/// 1. Reach fastboot (reboot from ADB if needed).
+/// 2. Read `stored_rollback_index:N` vars. Any entry whose value is
+///    not 0 / 1 makes the device anti-rollback; the report lists each
+///    surviving entry as `stored_rollback_index:N = TS (UTC)`.
+/// 3. If no `stored_rollback_index` was reported AND the model is
+///    `TB320FC`, fall back to dumping `boot_a` + `vbmeta_system_a`
+///    over EDL using the user-picked Firehose loader and report
+///    their AVB rollback indices the same way.
+/// 4. Otherwise (no stored_rollback_index, not TB320FC) the device
+///    is not anti-rollback.
+/// 5. Always reboot to system at the end so the user can keep using
+///    the device.
+#[allow(clippy::too_many_arguments)]
+fn detect_arb_run(
+    conn: ConnectionStatus,
+    device_model: String,
+    loader_path: Option<String>,
+    i_anti: &str,
+    i_not: &str,
+    i_reboot_fastboot: &str,
+    i_reboot_system: &str,
+    i_tb320fc_edl: &str,
+    log: &mut Vec<String>,
+) -> std::result::Result<(), String> {
+    use ltbox_device::adb::AdbManager;
+    use ltbox_device::fastboot::FastbootDevice;
+
+    // Step 1: ensure we are in fastboot.
+    if !matches!(conn, ConnectionStatus::Fastboot) {
+        match conn {
+            ConnectionStatus::Adb | ConnectionStatus::AdbRecovery => {
+                ltbox_core::live!(log, "[ARB] {i_reboot_fastboot}");
+                let mut adb = AdbManager::new();
+                if !adb.check_device().unwrap_or(false) {
+                    return Err("ADB device not reachable".into());
+                }
+                let _ = adb.shell("reboot bootloader");
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                if FastbootDevice::wait_for_device().is_err() {
+                    return Err("Failed to enter fastboot".into());
+                }
+            }
+            _ => {
+                return Err(
+                    "Device must be in ADB or fastboot to run anti-rollback detection".into(),
+                );
+            }
+        }
+    }
+
+    // Step 2: read fastboot vars (rollback_indices map is the source
+    // of truth — its emptiness drives the model-specific fallback).
+    let vars = FastbootDevice::open()
+        .and_then(|mut d| d.get_all_vars())
+        .map_err(|e| format!("fastboot vars: {e}"))?;
+
+    let stored_present = !vars.rollback_indices.is_empty();
+    if stored_present {
+        let mut filtered: Vec<(u32, u64)> = vars
+            .rollback_indices
+            .iter()
+            .filter(|&(_, &v)| v != 0 && v != 1)
+            .map(|(k, v)| (*k, *v))
+            .collect();
+        filtered.sort_by_key(|(k, _)| *k);
+        ltbox_core::live!(log, "");
+        ltbox_core::live!(log, "{i_anti}");
+        ltbox_core::live!(log, "");
+        for (idx, ts) in &filtered {
+            let utc = format_unix_timestamp_utc(*ts);
+            ltbox_core::live!(log, "stored_rollback_index:{idx} = {ts} ({utc})");
+        }
+        ltbox_core::live!(log, "");
+        ltbox_core::live!(log, "[ARB] {i_reboot_system}");
+        if let Ok(mut dev) = FastbootDevice::open() {
+            let _ = dev.reboot();
+        }
+        return Ok(());
+    }
+
+    // Step 3: TB320FC fallback over EDL (boot_a + vbmeta_system_a).
+    if device_model.eq_ignore_ascii_case("TB320FC") {
+        let Some(loader) = loader_path else {
+            return Err("TB320FC requires an EDL loader for the deeper rollback inspection".into());
+        };
+        ltbox_core::live!(log, "[ARB] {i_tb320fc_edl}");
+        if ensure_edl(ConnectionStatus::Fastboot, "ARB", log).is_err() {
+            return Err("Failed to enter EDL".into());
+        }
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let loader_pb = std::path::PathBuf::from(&loader);
+        let mut session = ltbox_device::edl::EdlSession::open(&loader_pb, true, log)
+            .map_err(|e| format!("EDL open: {e}"))?;
+        let tmp = std::env::temp_dir();
+        let boot_out = tmp.join("ltbox_arb_boot_a.img");
+        let vbm_out = tmp.join("ltbox_arb_vbmeta_system_a.img");
+        // boot_a → LUN 4, vbmeta_system_a → LUN 0 per the
+        // hardcoded LUN map.
+        session
+            .dump_partition("boot_a", &boot_out, 0, 4, log)
+            .map_err(|e| format!("dump boot_a: {e}"))?;
+        session
+            .dump_partition("vbmeta_system_a", &vbm_out, 0, 0, log)
+            .map_err(|e| format!("dump vbmeta_system_a: {e}"))?;
+        let boot_idx = ltbox_patch::avb::extract_image_avb_info(&boot_out)
+            .map_err(|e| format!("boot AVB: {e}"))?
+            .rollback_index;
+        let vbm_idx = ltbox_patch::avb::extract_image_avb_info(&vbm_out)
+            .map_err(|e| format!("vbmeta_system AVB: {e}"))?
+            .rollback_index;
+        let _ = std::fs::remove_file(&boot_out);
+        let _ = std::fs::remove_file(&vbm_out);
+        ltbox_core::live!(log, "");
+        ltbox_core::live!(log, "{i_anti}");
+        ltbox_core::live!(log, "");
+        ltbox_core::live!(
+            log,
+            "boot_a = {boot_idx} ({})",
+            format_unix_timestamp_utc(boot_idx)
+        );
+        ltbox_core::live!(
+            log,
+            "vbmeta_system_a = {vbm_idx} ({})",
+            format_unix_timestamp_utc(vbm_idx)
+        );
+        ltbox_core::live!(log, "");
+        ltbox_core::live!(log, "[ARB] {i_reboot_system}");
+        session.reset_tolerant(log);
+        return Ok(());
+    }
+
+    // Step 4: no stored_rollback_index, no TB320FC override.
+    ltbox_core::live!(log, "");
+    ltbox_core::live!(log, "{i_not}");
+    ltbox_core::live!(log, "");
+    ltbox_core::live!(log, "[ARB] {i_reboot_system}");
+    if let Ok(mut dev) = FastbootDevice::open() {
+        let _ = dev.reboot();
+    }
+    Ok(())
+}
+
 /// Human-readable auto-unit byte formatter (B/KB/MB/GB).
 fn format_bytes_auto(bytes: u64) -> String {
     const KB: f64 = 1024.0;
@@ -2772,6 +2917,11 @@ impl AdvWizard {
                 "flash_step_confirm",
                 "flash_step_flash",
             ]
+        } else if matches!(self.action, Some(AdvAction::DetectArb)) {
+            // DetectArb: source step is either a loader picker (TB320FC
+            // path) or a "Start" prompt; no separate confirm — Next on
+            // the source step jumps straight to exec.
+            &["adv_step_source", "flash_step_flash"]
         } else {
             &["adv_step_source", "flash_step_confirm", "flash_step_flash"]
         }
@@ -2833,8 +2983,8 @@ impl AdvWizard {
         match self.action {
             Some(AdvAction::RegionConvert)
             | Some(AdvAction::ImageInfo)
-            | Some(AdvAction::DetectArb)
             | Some(AdvAction::RebuildVbmeta) => ("Android partition image (*.img)", &["img"]),
+            Some(AdvAction::DetectArb) => ("EDL loader (.melf)", &["melf"]),
             _ => ("", &[]),
         }
     }
@@ -2878,7 +3028,7 @@ impl AdvWizard {
             Some(AdvAction::PatchDevinfo) => "picker_target_devinfo_persist_folder",
             Some(AdvAction::RegionConvert) => "picker_target_vendor_boot_img",
             Some(AdvAction::ImageInfo) => "picker_target_avb_images",
-            Some(AdvAction::DetectArb) => "picker_target_arb_img",
+            Some(AdvAction::DetectArb) => "picker_target_edl_loader",
             Some(AdvAction::PatchArb) => "picker_target_arb_folder",
             Some(AdvAction::RebuildVbmeta) => "picker_target_vbmeta_img",
             _ => "picker_target_file",
@@ -3324,6 +3474,12 @@ enum AdvMsg {
     AdvWizBrowseManyDone(Option<Vec<String>>),
     AdvImageInfoExecStart,
     AdvImageInfoExecDone(Result<String, String>),
+    /// DetectArb: kicks off the fastboot+EDL anti-rollback probe on
+    /// the heavy pool. Triggered by Next on the source step.
+    AdvDetectArbExecStart,
+    /// DetectArb worker result. `Vec<String>` is the live-log lines
+    /// to flush; `Err(_)` carries a banner message.
+    AdvDetectArbExecDone(Result<Vec<String>, String>),
     AdvWizOpenCountry,
     AdvWizOpenRegionTarget,
     AdvWizOpenOutputFolder,
@@ -7013,6 +7169,17 @@ impl App {
                     self.adv_wizard.next();
                     return self.update(Message::Adv(AdvMsg::AdvImageInfoExecStart));
                 }
+                // DetectArb: source step Next jumps straight to exec.
+                // The source step renders either a loader picker (only
+                // when ADB/fastboot already identified the device as
+                // TB320FC, since that is the model that needs the EDL
+                // fallback) or a plain Start prompt.
+                if matches!(self.adv_wizard.action, Some(AdvAction::DetectArb))
+                    && self.adv_wizard.step == 0
+                {
+                    self.adv_wizard.next();
+                    return self.update(Message::Adv(AdvMsg::AdvDetectArbExecStart));
+                }
                 // PatchArb: source step Next reads the AVB rollback
                 // indices from the picked folder + advances to the
                 // inspect step. Inspect step Next opens the timestamp
@@ -7281,53 +7448,16 @@ impl App {
                                         }
                                     }
                                     AdvAction::DetectArb => {
-                                        // Hardcoded 0 would misreport already-flashed
-                                        // ARB devices as "needs patch".
-                                        let device_index: Option<u64> =
-                                            match ltbox_device::fastboot::FastbootDevice::open() {
-                                                Ok(mut dev) => dev
-                                                    .get_all_vars()
-                                                    .ok()
-                                                    .map(|v| {
-                                                        ltbox_patch::rollback::compute_device_rollback_index(
-                                                            &v.rollback_indices,
-                                                        )
-                                                    })
-                                                    .unwrap_or(None),
-                                                Err(_) => None,
-                                            };
-                                        ltbox_core::live!(
-                                            log,
-                                            "[AVB] {}",
-                                            ltbox_core::i18n::tr("live_avb_device_rollback_index")
-                                                .replace(
-                                                    "{value}",
-                                                    &device_index.map(|v| v.to_string()).unwrap_or_else(|| {
-                                                        ltbox_core::i18n::tr("live_avb_device_index_unavailable")
-                                                    }),
-                                                )
+                                        // DetectArb routes through its dedicated
+                                        // `AdvDetectArbExecStart` worker, not the
+                                        // generic file-selected pipeline. Reaching
+                                        // this arm means a stale code path triggered
+                                        // it; surface a clear error instead of a
+                                        // silent no-op.
+                                        return Err(
+                                            "DetectArb uses a dedicated worker — file pipeline should not run"
+                                                .to_string(),
                                         );
-                                        match ltbox_patch::rollback::analyze_rollback_with_mode(
-                                            input,
-                                            device_index,
-                                            ltbox_patch::rollback::RollbackMode::Auto,
-                                        ) {
-                                            Ok(info) => {
-                                                ltbox_core::live!(
-                                                    log,
-                                                    "[AVB] {}",
-                                                    ltbox_core::i18n::tr("live_avb_image_rollback_index")
-                                                        .replace("{index}", &info.image_index.to_string())
-                                                );
-                                                ltbox_core::live!(
-                                                    log,
-                                                    "[AVB] {}",
-                                                    ltbox_core::i18n::tr("live_avb_needs_patch")
-                                                        .replace("{needs}", &info.needs_patch.to_string())
-                                                );
-                                            }
-                                            Err(e) => return Err(format!("ARB analysis failed: {e}")),
-                                        }
                                     }
                                     AdvAction::FlashPartitions
                                     | AdvAction::DumpPartitions
@@ -7786,6 +7916,51 @@ impl App {
                         self.set_image_info_log(format!("ERROR: {e}"));
                     }
                 }
+            }
+            Message::Adv(AdvMsg::AdvDetectArbExecStart) => {
+                self.begin_op(View::Advanced);
+                self.error_msg = None;
+                let conn = self.connection;
+                let device_model = self.device_model.clone();
+                let loader_path = self.adv_wizard.file_path.clone();
+                let i_anti = self.t("arb_detect_is_anti_rollback").to_string();
+                let i_not = self.t("arb_detect_no_anti_rollback").to_string();
+                let i_reboot_fastboot = self.t("live_arb_reboot_to_fastboot").to_string();
+                let i_reboot_system = self.t("live_arb_reboot_to_system").to_string();
+                let i_tb320fc_edl = self.t("live_arb_tb320fc_edl_dump").to_string();
+                return task_heavy(
+                    move || {
+                        let mut log = Vec::new();
+                        match detect_arb_run(
+                            conn,
+                            device_model,
+                            loader_path,
+                            &i_anti,
+                            &i_not,
+                            &i_reboot_fastboot,
+                            &i_reboot_system,
+                            &i_tb320fc_edl,
+                            &mut log,
+                        ) {
+                            Ok(()) => Ok(log),
+                            Err(e) => Err(e),
+                        }
+                    },
+                    |__v| Message::Adv(AdvMsg::AdvDetectArbExecDone(__v)),
+                    Err,
+                );
+            }
+            Message::Adv(AdvMsg::AdvDetectArbExecDone(result)) => {
+                match result {
+                    Ok(lines) => {
+                        self.flush_exec_done_log(lines);
+                    }
+                    Err(e) => {
+                        self.error_msg = Some(e.clone());
+                        self.log_push(format!("ERROR: {e}"));
+                    }
+                }
+                self.end_op();
             }
             // Async results
             Message::FileSelected(path) => {
@@ -12560,10 +12735,14 @@ impl App {
         let needs_region_target = self.adv_wizard.needs_region_target();
         let is_confirm = self.adv_wizard.is_confirm_step();
 
+        let detect_arb_step0 = matches!(self.adv_wizard.action, Some(AdvAction::DetectArb))
+            && self.adv_wizard.step == 0;
         let body: Element<'_, Message> = if is_exec && self.adv_wizard.is_image_info() {
             self.adv_image_info_exec_step()
         } else if is_exec {
             self.exec_step_view()
+        } else if detect_arb_step0 {
+            self.adv_wiz_detect_arb_step()
         } else if is_confirm {
             self.adv_wiz_confirm_step()
         } else if needs_country && self.adv_wizard.step == 1 {
@@ -12581,12 +12760,24 @@ impl App {
         let nav: Element<'_, Message> = if is_exec {
             container(text("")).into()
         } else {
-            let label = if is_confirm {
+            let label = if is_confirm || detect_arb_step0 {
                 self.t("btn_start").to_string()
             } else {
                 self.t("btn_next").to_string()
             };
-            let can = self.adv_wizard.can_next() && !(self.busy && is_confirm);
+            // DetectArb gates Start on either a picked loader (TB320FC
+            // path) or no requirement at all (other models — Start is
+            // always enabled). Other wizards keep the standard
+            // `can_next` check.
+            let can = if detect_arb_step0 {
+                if self.device_model.eq_ignore_ascii_case("TB320FC") {
+                    self.adv_wizard.file_path.is_some()
+                } else {
+                    true
+                }
+            } else {
+                self.adv_wizard.can_next()
+            } && !self.busy;
             wizard_nav_generic(
                 true,
                 &label,
@@ -12861,6 +13052,79 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
+    /// DetectArb step 0. TB320FC needs an EDL loader (the deeper
+    /// path falls back to dumping `boot_a` + `vbmeta_system_a` when
+    /// stored_rollback_index is missing, so a Firehose loader is
+    /// required); other models just see a Start prompt because the
+    /// detection runs entirely over fastboot vars.
+    fn adv_wiz_detect_arb_step(&self) -> Element<'_, Message> {
+        let needs_loader = self.device_model.eq_ignore_ascii_case("TB320FC");
+        let title = text(self.t("adv_detect_arb").to_string())
+            .size(theme::text_size::WIZARD_STEP_TITLE)
+            .center();
+        let subtitle_key = if needs_loader {
+            "adv_src_detect_arb_loader"
+        } else {
+            "adv_src_detect_arb_start"
+        };
+        let subtitle = text(self.t(subtitle_key).to_string())
+            .size(13)
+            .style(muted_style)
+            .center();
+        let mut col = column![title, subtitle]
+            .spacing(14)
+            .padding(28)
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
+        if needs_loader {
+            let selected = self.adv_wizard.file_path.is_some();
+            let status = self
+                .adv_wizard
+                .file_path
+                .clone()
+                .unwrap_or_else(|| self.t("adv_source_placeholder").to_string());
+            let btn = button(
+                container(
+                    column![
+                        text(self.t("btn_browse_loader").to_string())
+                            .size(14)
+                            .center(),
+                        text(self.t("dump_parts_loader_desc").to_string())
+                            .size(11)
+                            .style(muted_style)
+                            .center(),
+                    ]
+                    .spacing(6)
+                    .width(Length::Fixed(280.0))
+                    .align_x(iced::Alignment::Center),
+                )
+                .padding([20, 24])
+                .width(Length::Fixed(280.0))
+                .style(move |t: &Theme| sel_card_style(t, selected)),
+            )
+            .width(Length::Shrink)
+            .on_press(Message::Adv(AdvMsg::AdvWizBrowse))
+            .padding(0)
+            .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
+            col = col.push(
+                row![
+                    Space::new().width(Length::Fill),
+                    btn,
+                    Space::new().width(Length::Fill),
+                ]
+                .align_y(iced::Alignment::Center),
+            );
+            let status_color = if selected { GREEN } else { LABEL };
+            col = col.push(text(status).size(12).color(status_color).center());
+        }
         container(col)
             .width(Length::Fill)
             .height(Length::Fill)
