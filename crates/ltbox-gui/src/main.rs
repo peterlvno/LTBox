@@ -3167,6 +3167,38 @@ enum EdlEntryAction {
     ManualWait,
 }
 
+/// Which Advanced sub-wizard (if any) currently owns the screen. Sum
+/// type so the four sub-wizards stay mutually exclusive at the type
+/// level — adding a fifth wizard turns existing read sites into
+/// non-exhaustive `match` errors instead of silent precedence bugs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum AdvancedWizardOpen {
+    #[default]
+    None,
+    FlashParts,
+    DumpParts,
+    DumpPhys,
+    FlashPhys,
+}
+
+impl AdvancedWizardOpen {
+    fn is_open(self) -> bool {
+        !matches!(self, Self::None)
+    }
+    fn is_flash_parts(self) -> bool {
+        matches!(self, Self::FlashParts)
+    }
+    fn is_dump_parts(self) -> bool {
+        matches!(self, Self::DumpParts)
+    }
+    fn is_dump_phys(self) -> bool {
+        matches!(self, Self::DumpPhys)
+    }
+    fn is_flash_phys(self) -> bool {
+        matches!(self, Self::FlashPhys)
+    }
+}
+
 fn edl_entry_action(conn: ConnectionStatus) -> EdlEntryAction {
     match conn {
         ConnectionStatus::Edl => EdlEntryAction::AlreadyEdl,
@@ -3253,13 +3285,14 @@ struct App {
     /// stable. Populates the green sidebar "Update available" pill.
     update_available: Option<ltbox_core::github::StableRelease>,
     flash_parts: FlashPartsWizard,
-    flash_parts_open: bool,
     dump_parts: DumpPartsWizard,
-    dump_parts_open: bool,
     dump_phys: DumpPhysWizard,
-    dump_phys_open: bool,
     flash_phys: FlashPhysWizard,
-    flash_phys_open: bool,
+    /// Single sum-typed flag for the four mutually-exclusive Advanced
+    /// sub-wizards. Replaces 4 parallel booleans whose `if/else if`
+    /// read sites would silently pick a precedence if two ever got
+    /// set. `match`-driven dispatch makes that bug class unreachable.
+    advanced_wizard_open: AdvancedWizardOpen,
     /// Phases of the running op. Populated at exec start, cleared on
     /// `end_op`.
     op_steps: Vec<OpStep>,
@@ -3374,13 +3407,10 @@ impl Default for App {
             installing_drivers: false,
             update_available: None,
             flash_parts: FlashPartsWizard::default(),
-            flash_parts_open: false,
             dump_parts: DumpPartsWizard::default(),
-            dump_parts_open: false,
             dump_phys: DumpPhysWizard::default(),
-            dump_phys_open: false,
             flash_phys: FlashPhysWizard::default(),
-            flash_phys_open: false,
+            advanced_wizard_open: AdvancedWizardOpen::default(),
             op_steps: Vec::new(),
             current_op_step: 0,
             log_popup_open: false,
@@ -3748,16 +3778,16 @@ impl App {
     }
 
     fn advanced_inline_exec_surface_active(&self) -> bool {
-        if self.flash_parts_open {
+        if self.advanced_wizard_open.is_flash_parts() {
             return self.flash_parts.step >= 3;
         }
-        if self.dump_parts_open {
+        if self.advanced_wizard_open.is_dump_parts() {
             return self.dump_parts.step >= 2;
         }
-        if self.dump_phys_open {
+        if self.advanced_wizard_open.is_dump_phys() {
             return self.dump_phys.step >= 2;
         }
-        if self.flash_phys_open {
+        if self.advanced_wizard_open.is_flash_phys() {
             return self.flash_phys.step >= 3;
         }
         self.adv_wizard.action.is_some() && self.adv_wizard.step == self.adv_wizard.exec_step()
@@ -3791,16 +3821,16 @@ impl App {
     }
 
     fn advanced_operation_label(&self) -> Option<String> {
-        if self.flash_parts_open {
+        if self.advanced_wizard_open.is_flash_parts() {
             return Some(self.t(AdvAction::FlashPartitions.label_key()).to_string());
         }
-        if self.dump_parts_open {
+        if self.advanced_wizard_open.is_dump_parts() {
             return Some(self.t(AdvAction::DumpPartitions.label_key()).to_string());
         }
-        if self.dump_phys_open {
+        if self.advanced_wizard_open.is_dump_phys() {
             return Some(self.t(AdvAction::DumpPhysical.label_key()).to_string());
         }
-        if self.flash_phys_open {
+        if self.advanced_wizard_open.is_flash_phys() {
             return Some(self.t(AdvAction::FlashPhysical.label_key()).to_string());
         }
         self.adv_wizard
@@ -3829,8 +3859,8 @@ impl App {
     /// kicked off. Returns `None` so the caller falls back to the
     /// templated body for everything else.
     ///
-    /// Gated on `busy_view == Advanced` so a stale `dump_parts_open` /
-    /// `flash_parts_open` flag (the wizards stay mounted under the
+    /// Gated on `busy_view == Advanced` so a stale `advanced_wizard_open`
+    /// (the wizards stay mounted under the
     /// scrim while the op runs and only clear on `start_over`) doesn't
     /// hijack an unrelated busy dialog — e.g. the EDL → System reboot
     /// from the Reboot menu was rendering "Reading partition…" because
@@ -3839,11 +3869,7 @@ impl App {
         if self.busy_view != Some(View::Advanced) {
             return None;
         }
-        if self.dump_parts_open
-            || self.flash_parts_open
-            || self.dump_phys_open
-            || self.flash_phys_open
-        {
+        if self.advanced_wizard_open.is_open() {
             return Some(self.t("busy_partition_scan").to_string());
         }
         None
@@ -3890,17 +3916,17 @@ impl App {
         let Some(path) = self.resolved_default_loader() else {
             return;
         };
-        if self.flash_parts_open {
+        if self.advanced_wizard_open.is_flash_parts() {
             self.flash_parts.loader_path = Some(path);
             // FlashPartsWizard step layout: 0 = Loader, 1 = Select.
             self.flash_parts.step = 1;
-        } else if self.dump_parts_open {
+        } else if self.advanced_wizard_open.is_dump_parts() {
             self.dump_parts.loader_path = Some(path);
             self.dump_parts.step = 1;
-        } else if self.dump_phys_open {
+        } else if self.advanced_wizard_open.is_dump_phys() {
             self.dump_phys.loader_path = Some(path);
             self.dump_phys.step = 1;
-        } else if self.flash_phys_open {
+        } else if self.advanced_wizard_open.is_flash_phys() {
             self.flash_phys.loader_path = Some(path);
             self.flash_phys.step = 1;
         }
@@ -6577,19 +6603,19 @@ impl App {
                 // single-device flow.
                 if matches!(a, AdvAction::FlashPartitions) {
                     self.flash_parts.reset();
-                    self.flash_parts_open = true;
+                    self.advanced_wizard_open = AdvancedWizardOpen::FlashParts;
                     self.apply_default_loader_to_advanced_wizard();
                 } else if matches!(a, AdvAction::DumpPartitions) {
                     self.dump_parts.reset();
-                    self.dump_parts_open = true;
+                    self.advanced_wizard_open = AdvancedWizardOpen::DumpParts;
                     self.apply_default_loader_to_advanced_wizard();
                 } else if matches!(a, AdvAction::DumpPhysical) {
                     self.dump_phys.reset();
-                    self.dump_phys_open = true;
+                    self.advanced_wizard_open = AdvancedWizardOpen::DumpPhys;
                     self.apply_default_loader_to_advanced_wizard();
                 } else if matches!(a, AdvAction::FlashPhysical) {
                     self.flash_phys.reset();
-                    self.flash_phys_open = true;
+                    self.advanced_wizard_open = AdvancedWizardOpen::FlashPhys;
                     self.apply_default_loader_to_advanced_wizard();
                 } else {
                     return self.update(Message::AdvWizOpen(a));
@@ -7384,10 +7410,7 @@ impl App {
                         // "Start over" on any Advanced sub-wizard should
                         // return to the Advanced grid, not step 0 of the
                         // currently open sub-flow.
-                        self.flash_parts_open = false;
-                        self.dump_parts_open = false;
-                        self.dump_phys_open = false;
-                        self.flash_phys_open = false;
+                        self.advanced_wizard_open = AdvancedWizardOpen::None;
                         self.flash_parts.reset();
                         self.dump_parts.reset();
                         self.dump_phys.reset();
@@ -7724,7 +7747,7 @@ impl App {
             },
             Message::FlashPartsBack => self.flash_parts.back(),
             Message::FlashPartsClose => {
-                self.flash_parts_open = false;
+                self.advanced_wizard_open = AdvancedWizardOpen::None;
                 self.flash_parts.reset();
             }
             Message::FlashPartsScanStart => {
@@ -7841,7 +7864,7 @@ impl App {
             },
             Message::DumpPartsBack => self.dump_parts.back(),
             Message::DumpPartsClose => {
-                self.dump_parts_open = false;
+                self.advanced_wizard_open = AdvancedWizardOpen::None;
                 self.dump_parts.reset();
             }
             Message::DumpPartsScanStart => {
@@ -7970,7 +7993,7 @@ impl App {
             },
             Message::DumpPhysBack => self.dump_phys.back(),
             Message::DumpPhysClose => {
-                self.dump_phys_open = false;
+                self.advanced_wizard_open = AdvancedWizardOpen::None;
                 self.dump_phys.reset();
             }
             Message::DumpPhysSelectFolder => {
@@ -8074,7 +8097,7 @@ impl App {
             },
             Message::FlashPhysBack => self.flash_phys.back(),
             Message::FlashPhysClose => {
-                self.flash_phys_open = false;
+                self.advanced_wizard_open = AdvancedWizardOpen::None;
                 self.flash_phys.reset();
             }
             Message::FlashPhysExecStart => {
@@ -8897,11 +8920,7 @@ impl App {
         // scrollable+padding wrapper so the step bar isn't pinched and
         // the 280 px browse card doesn't stretch.
         if self.current_view == View::Advanced
-            && (self.flash_parts_open
-                || self.dump_parts_open
-                || self.dump_phys_open
-                || self.flash_phys_open
-                || self.adv_wizard.action.is_some())
+            && (self.advanced_wizard_open.is_open() || self.adv_wizard.action.is_some())
         {
             return self.view_advanced();
         }
@@ -11751,16 +11770,16 @@ impl App {
 
     fn view_advanced(&self) -> Element<'_, Message> {
         // Dedicated wizards preempt the grid.
-        if self.flash_parts_open {
+        if self.advanced_wizard_open.is_flash_parts() {
             return self.view_flash_parts_wizard();
         }
-        if self.dump_parts_open {
+        if self.advanced_wizard_open.is_dump_parts() {
             return self.view_dump_parts_wizard();
         }
-        if self.dump_phys_open {
+        if self.advanced_wizard_open.is_dump_phys() {
             return self.view_dump_phys_wizard();
         }
-        if self.flash_phys_open {
+        if self.advanced_wizard_open.is_flash_phys() {
             return self.view_flash_phys_wizard();
         }
         if self.adv_wizard.action.is_some() {
@@ -14985,22 +15004,21 @@ mod tests {
         assert!(!app.should_show_busy_progress_dialog());
 
         app.current_view = View::Advanced;
-        app.flash_parts_open = true;
+        app.advanced_wizard_open = AdvancedWizardOpen::FlashParts;
         app.flash_parts.step = 0;
         assert!(app.should_show_busy_progress_dialog());
 
         app.flash_parts.step = 3;
         assert!(!app.should_show_busy_progress_dialog());
 
-        app.flash_parts_open = false;
-        app.dump_parts_open = true;
+        app.advanced_wizard_open = AdvancedWizardOpen::DumpParts;
         app.dump_parts.step = 0;
         assert!(app.should_show_busy_progress_dialog());
 
         app.dump_parts.step = 2;
         assert!(!app.should_show_busy_progress_dialog());
 
-        app.dump_parts_open = false;
+        app.advanced_wizard_open = AdvancedWizardOpen::None;
         app.current_view = View::Flash;
         app.flash.step = FLASH_STEPS.len() - 1;
         assert!(!app.should_show_busy_progress_dialog());
@@ -15021,7 +15039,7 @@ mod tests {
             app.t(AdvAction::PatchDevinfo.label_key()).to_string()
         );
 
-        app.flash_parts_open = true;
+        app.advanced_wizard_open = AdvancedWizardOpen::FlashParts;
         assert_eq!(
             app.busy_operation_label(),
             app.t(AdvAction::FlashPartitions.label_key()).to_string()
