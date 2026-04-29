@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "3.0.0-alpha.4"
+version = "3.0.0-beta.1"
 edition = "2024"
 license = "CC-BY-NC-SA-4.0"
 
