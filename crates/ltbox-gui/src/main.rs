@@ -10459,11 +10459,7 @@ impl App {
         )
         .on_press(Message::Flash(FlashMsg::FlashSelectFolder))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let chips = self.recent_chips(
             self.recent_paths
                 .recent(PickerTarget::FlashFolder.kind().storage_key()),
@@ -10829,11 +10825,7 @@ impl App {
         )
         .on_press(Message::Sys(SysMsg::SysRescueSelectFolder))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         // Loader recents share the File bucket with other loader
         // pickers (root, advanced) — filter to the same ext set the
         // dialog itself accepts.
@@ -11372,11 +11364,7 @@ impl App {
         )
         .on_press(Message::Unroot(UnrootMsg::UnrootSelectFolder))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let chips = self.recent_chips(
             self.recent_paths
                 .recent(PickerTarget::UnrootFolder.kind().storage_key()),
@@ -11432,11 +11420,7 @@ impl App {
             )
             .on_press(Message::Unroot(UnrootMsg::UnrootSelectLoader))
             .padding(0)
-            .style(|t: &Theme, _s| button::Style {
-                background: None,
-                text_color: pal_of(t).on_surface,
-                ..Default::default()
-            });
+            .style(|t: &Theme, status| sel_card_btn_style(t, status, false));
             col = col.push(loader_btn);
         } else if let Some(p) = self.unroot.loader_path.as_deref() {
             col = col.push(
@@ -11551,6 +11535,7 @@ impl App {
 
     fn root_kpm_step(&self) -> Element<'_, Message> {
         // No recents here — the KPM list already competes for vertical space.
+        let kpm_selected = !self.root.kpm_paths.is_empty();
         let pick_btn = button(
             container(
                 column![
@@ -11566,15 +11551,11 @@ impl App {
             )
             .padding([20, 24])
             .width(280)
-            .style(|t: &Theme| sel_card_style(t, !self.root.kpm_paths.is_empty())),
+            .style(move |t: &Theme| sel_card_style(t, kpm_selected)),
         )
         .on_press(Message::Root(RootMsg::RootSelectKpm))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, kpm_selected));
 
         let mut list = column![].spacing(4).width(Length::Fill);
         for path in &self.root.kpm_paths {
@@ -11955,11 +11936,7 @@ impl App {
             .padding(0)
             .width(Length::Fill)
             .height(Length::Fill)
-            .style(|t: &Theme, _s| button::Style {
-                background: None,
-                text_color: pal_of(t).on_surface,
-                ..Default::default()
-            })
+            .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected))
             .into()
         };
 
@@ -12056,11 +12033,7 @@ impl App {
         )
         .on_press(Message::Root(RootMsg::RootSelectFile))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
 
         // Root OTA file picker flips between AnyKernel3 zip (GKI route)
         // and provider APK (Magisk fork / APatch manual) — mirror the
@@ -12228,11 +12201,7 @@ impl App {
         )
         .on_press(Message::Root(RootMsg::RootSelectFolder))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let chips = self.recent_file_chips(
             &["melf"],
             |p| Message::RecentFilePicked(PickerTarget::RootLoader, p),
@@ -12678,11 +12647,7 @@ impl App {
         .width(Length::Shrink)
         .on_press(Message::Adv(AdvMsg::AdvWizBrowse))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         // Shrink-wrap the 280 px card so the hit area stays tight.
         let btn_row = row![
             Space::new().width(Length::Fill),
@@ -12765,11 +12730,7 @@ impl App {
         .width(Length::Shrink)
         .on_press(Message::Adv(AdvMsg::AdvWizOpenCountry))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let btn_row = row![
             Space::new().width(Length::Fill),
             btn,
@@ -12831,11 +12792,7 @@ impl App {
         .width(Length::Shrink)
         .on_press(Message::Adv(AdvMsg::AdvWizOpenRegionTarget))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let btn_row = row![
             Space::new().width(Length::Fill),
             btn,
@@ -13146,11 +13103,7 @@ impl App {
         )
         .on_press(Message::FlashParts(FlashPartsMsg::FlashPartsSelectLoader))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let status_color = if self.flash_parts.scan_error.is_some() {
             iced::Color::from_rgb(0.9, 0.2, 0.2)
         } else if selected {
@@ -13514,11 +13467,7 @@ impl App {
         )
         .on_press(Message::DumpParts(DumpPartsMsg::DumpPartsSelectLoader))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let status_color = if self.dump_parts.scan_error.is_some() {
             iced::Color::from_rgb(0.9, 0.2, 0.2)
         } else if selected {
@@ -13733,11 +13682,7 @@ impl App {
         )
         .on_press(Message::DumpPhys(DumpPhysMsg::DumpPhysSelectLoader))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let status_color = if self.dump_phys.loader_error.is_some() {
             iced::Color::from_rgb(0.9, 0.2, 0.2)
         } else if selected {
@@ -13896,11 +13841,7 @@ impl App {
         )
         .on_press(Message::FlashPhys(FlashPhysMsg::FlashPhysSelectLoader))
         .padding(0)
-        .style(|t: &Theme, _s| button::Style {
-            background: None,
-            text_color: pal_of(t).on_surface,
-            ..Default::default()
-        });
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let status_color = if self.flash_phys.loader_error.is_some() {
             iced::Color::from_rgb(0.9, 0.2, 0.2)
         } else if selected {
@@ -14124,11 +14065,7 @@ impl App {
                     .padding(0)
                     .width(Length::Fill)
                     .height(Length::Fill)
-                    .style(|t: &Theme, _s| button::Style {
-                        background: None,
-                        text_color: pal_of(t).on_surface,
-                        ..Default::default()
-                    })
+                    .style(|t: &Theme, status| sel_card_btn_style(t, status, false))
                     .into()
             } else {
                 card_inner.into()
@@ -14525,12 +14462,15 @@ fn info_kv_center<'a>(label: &str, value: &str) -> Element<'a, Message> {
 }
 
 fn adv_grid_btn<'a>(item: AdvAction, label: &str) -> Element<'a, Message> {
+    // Inner container: border-only via `sel_card_style`. Earlier
+    // version used `theme::surface_card_style` which paints an opaque
+    // bg — that bg sat on top of the button's hover fill, swallowing
+    // the highlight and making the grid feel dead on hover.
     let content = container(
         text(label.to_string())
             .size(12)
             .center()
             .width(Length::Fill)
-            // Palette on_surface — iced default (black) is unreadable in dark mode.
             .style(|t: &Theme| iced::widget::text::Style {
                 color: Some(pal_of(t).on_surface),
             }),
@@ -14538,29 +14478,13 @@ fn adv_grid_btn<'a>(item: AdvAction, label: &str) -> Element<'a, Message> {
     .padding([18, 12])
     .width(Length::Fill)
     .center_x(Length::Fill)
-    .style(|t: &Theme| {
-        theme::surface_card_style(t, theme::SurfaceLevel::Default, theme::shape::MD, 0)
-    });
+    .style(|t: &Theme| sel_card_style(t, false));
 
     button(content)
         .on_press(Message::Adv(AdvMsg::AdvConfirm(item)))
         .padding(0)
         .width(Length::Fill)
-        .style(|t: &Theme, status| {
-            let p = pal_of(t);
-            match status {
-                button::Status::Hovered => button::Style {
-                    background: Some(with_alpha(p.primary, theme::state::HOVER).into()),
-                    text_color: p.on_surface,
-                    ..Default::default()
-                },
-                _ => button::Style {
-                    background: None,
-                    text_color: p.on_surface,
-                    ..Default::default()
-                },
-            }
-        })
+        .style(|t: &Theme, status| sel_card_btn_style(t, status, false))
         .into()
 }
 
@@ -15506,11 +15430,7 @@ fn icon_option_card_sub(
     .on_press(msg)
     .padding(0)
     .width(Length::Fill)
-    .style(|t: &Theme, _s| button::Style {
-        background: None,
-        text_color: pal_of(t).on_surface,
-        ..Default::default()
-    })
+    .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected))
     .into()
 }
 
@@ -15567,28 +15487,51 @@ fn sidebar_bg(t: &Theme) -> container::Style {
     }
 }
 
+/// Inner container style for option / Browse cards. Transparent
+/// background — the outer button paints a hover-aware fill via
+/// [`sel_card_btn_style`]; this style only renders the rounded border
+/// so the visual outline survives without blocking the button's
+/// interactive bg.
 fn sel_card_style(t: &Theme, selected: bool) -> container::Style {
     let p = pal_of(t);
-    if selected {
-        container::Style {
-            background: Some(with_alpha(p.primary, 0.12).into()),
-            border: iced::Border {
-                color: p.primary,
-                width: 2.0,
-                radius: theme::shape::MD.into(),
+    container::Style {
+        background: None,
+        border: iced::Border {
+            color: if selected {
+                p.primary
+            } else {
+                p.outline_variant
             },
-            ..Default::default()
-        }
+            width: if selected { 2.0 } else { 1.0 },
+            radius: theme::shape::MD.into(),
+        },
+        ..Default::default()
+    }
+}
+
+/// Outer button style for option / Browse cards. Drives the per-state
+/// background (resting / hover / selected) so wizard cards visibly
+/// react to mouse hover. Border carries the same MD radius as
+/// [`sel_card_style`] so the bg fill clips to the rounded shape
+/// instead of bleeding out as a square.
+fn sel_card_btn_style(t: &Theme, status: button::Status, selected: bool) -> button::Style {
+    let p = pal_of(t);
+    let hovered = matches!(status, button::Status::Hovered);
+    let bg = if selected {
+        with_alpha(p.primary, 0.12)
+    } else if hovered {
+        with_alpha(p.primary, theme::state::HOVER)
     } else {
-        container::Style {
-            background: Some(p.surface_container.into()),
-            border: iced::Border {
-                color: p.outline_variant,
-                width: 1.0,
-                radius: theme::shape::MD.into(),
-            },
+        p.surface_container
+    };
+    button::Style {
+        background: Some(bg.into()),
+        text_color: p.on_surface,
+        border: iced::Border {
+            radius: theme::shape::MD.into(),
             ..Default::default()
-        }
+        },
+        ..Default::default()
     }
 }
 
