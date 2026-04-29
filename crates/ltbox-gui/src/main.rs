@@ -8670,7 +8670,24 @@ impl App {
             View::Settings => self.view_settings(),
             _ => self.view_placeholder(),
         };
-        container(scrollable(container(inner).padding(24).width(Length::Fill)))
+        // Dashboard wants the log card to fill the leftover vertical space
+        // so the inner top + bottom margins stay symmetric. A `scrollable`
+        // gives its child unbounded height, which collapses every
+        // `Length::Fill` inside the dashboard tree to zero — so the
+        // dashboard skips the scrollable wrapper and lets its own
+        // `column.height(Fill)` claim the bounded viewport directly.
+        // Other views (Advanced, Settings, …) keep the scrollable wrapper
+        // because their content can legitimately grow past the viewport.
+        let body: Element<'_, Message> = if matches!(self.current_view, View::Dashboard) {
+            container(inner)
+                .padding(24)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        } else {
+            scrollable(container(inner).padding(24).width(Length::Fill)).into()
+        };
+        container(body)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
@@ -8868,8 +8885,13 @@ impl App {
 
         // Title + divider dropped — sidebar already labels the active view,
         // so the duplicate header was eating vertical space without telling
-        // the user anything new.
-        let mut content = column![].spacing(14).width(Length::Fill);
+        // the user anything new. `height(Fill)` so the log card (the last
+        // child) can claim the remaining vertical space — keeps the top +
+        // bottom dashboard margins symmetric.
+        let mut content = column![]
+            .spacing(14)
+            .width(Length::Fill)
+            .height(Length::Fill);
 
         // Unauthorized ADB wins over the platform warning — empty
         // `ro.boot.hardware` otherwise reads as "unsupported platform".
@@ -8951,8 +8973,14 @@ impl App {
             .spacing(40),
         );
 
+        // Pin the inner row to 160 px regardless of whether the device is
+        // populated. Without this the empty-state card collapses to the
+        // text column's natural height, then jumps taller once a device
+        // connects — same card, two different sizes. The portrait branch
+        // already used `height(160)`; the empty branch now matches so the
+        // dashboard layout doesn't reflow on connect.
         let device_card_inner: Element<'_, Message> = if self.device_model.is_empty() {
-            device_col.into()
+            container(device_col).width(Length::Fill).height(160).into()
         } else {
             let portrait: Element<'_, Message> = match device_portrait(&self.device_model) {
                 DevicePortrait::Png(h) => iced::widget::image(h)
@@ -8994,11 +9022,15 @@ impl App {
             }),
         );
         content = content.push(card(self.t("dash_current_operation"), op_text));
-        // Read-only text_editor so drag-select + Ctrl+C work.
+        // Read-only text_editor so drag-select + Ctrl+C work. `Length::Fill`
+        // height so the editor expands to fill whatever space the parent log
+        // card claims — combined with the log card's own `height(Fill)` and
+        // the dashboard column's `height(Fill)`, this is what makes the log
+        // grow to balance the dashboard's top and bottom padding.
         let dash_log_editor: Element<'_, Message> = iced::widget::text_editor(&self.log_editor)
             .on_action(Message::LogEditorAction)
             .size(11)
-            .height(120)
+            .height(Length::Fill)
             .into();
         // Bottom-right "Save Log" — same neutral pill the wizard exec
         // step uses, sized so the label doesn't get clipped at any
@@ -9029,9 +9061,11 @@ impl App {
                 bottom: 14.0,
                 left: 18.0,
             })
-            .width(Length::Fill),
+            .width(Length::Fill)
+            .height(Length::Fill),
         )
         .width(Length::Fill)
+        .height(Length::Fill)
         .style(|t: &Theme| {
             theme::surface_card_style(t, theme::SurfaceLevel::Default, theme::shape::MD, 1)
         });
