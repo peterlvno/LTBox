@@ -14643,10 +14643,16 @@ fn wizard_step_bar<'a>(steps: &[&str], current: usize) -> Element<'a, Message> {
         );
     }
 
-    container(r)
-        .width(Length::Fill)
-        .style(|t: &Theme| sidebar_bg(t))
-        .into()
+    // Bottom-edge divider only — top + sides come from the
+    // surrounding window outline / sidebar rule, so a 4-side
+    // border here would render the bottom + left as a double line.
+    column![
+        container(r)
+            .width(Length::Fill)
+            .style(|t: &Theme| panel_bg(t)),
+        widget::rule::horizontal(1).style(shell_rule_style),
+    ]
+    .into()
 }
 
 fn wizard_nav<'a>(
@@ -14678,10 +14684,16 @@ fn wizard_nav<'a>(
         next_btn
     });
 
-    container(r)
-        .width(Length::Fill)
-        .style(|t: &Theme| sidebar_bg(t))
-        .into()
+    // Top-edge divider only — bottom + sides come from the window
+    // outline / sidebar rule, so a 4-side border here would render
+    // the top + left as a double line.
+    column![
+        widget::rule::horizontal(1).style(shell_rule_style),
+        container(r)
+            .width(Length::Fill)
+            .style(|t: &Theme| panel_bg(t)),
+    ]
+    .into()
 }
 
 /// M3 filled button — primary bg + state-layer overlay on hover/press.
@@ -15915,31 +15927,18 @@ fn wizard_nav_generic<'a>(
     } else {
         next_btn
     });
-    container(r)
-        .width(Length::Fill)
-        .style(|t: &Theme| sidebar_bg(t))
-        .into()
+    // Top-edge divider only — bottom + sides come from the window
+    // outline / sidebar rule.
+    column![
+        widget::rule::horizontal(1).style(shell_rule_style),
+        container(r)
+            .width(Length::Fill)
+            .style(|t: &Theme| panel_bg(t)),
+    ]
+    .into()
 }
 
 // -- Shared styles --------------------------------------------------------
-
-/// Surface fill for sticky wizard nav bars. Carries a 1-px outline
-/// on every edge — fine in isolation, but produces a doubled
-/// border anywhere two of these touch (shell sidebar + status bar
-/// at the bottom-left, etc.). Use [`panel_bg`] + an explicit
-/// `Rule` for those shell-level surfaces instead.
-fn sidebar_bg(t: &Theme) -> container::Style {
-    let p = pal_of(t);
-    container::Style {
-        background: Some(p.surface_container_low.into()),
-        border: iced::Border {
-            color: p.outline_variant,
-            width: 1.0,
-            radius: 0.0.into(),
-        },
-        ..Default::default()
-    }
-}
 
 /// Shared `Rule` styling so every shell-level divider (window
 /// outline, title-bar bottom, sidebar-content split, status-bar
