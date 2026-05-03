@@ -1607,6 +1607,7 @@ impl CountryAction {
 #[derive(Debug, Clone, Default)]
 struct WorkflowConfig {
     modify_region: bool,
+    device_region: Option<DeviceRegion>,
     modify_rollback: RollbackSetting,
     wipe: bool,
     country_action: CountryAction,
@@ -2061,6 +2062,13 @@ impl DeviceRegion {
         match self {
             Self::Prc => "deviceregion_prc",
             Self::Row => "deviceregion_row",
+        }
+    }
+
+    fn to_region_target(self) -> ltbox_patch::region::RegionTarget {
+        match self {
+            Self::Prc => ltbox_patch::region::RegionTarget::Prc,
+            Self::Row => ltbox_patch::region::RegionTarget::Row,
         }
     }
 }
@@ -4702,6 +4710,7 @@ impl App {
                 if self.flash.step == 2 {
                     self.wf_config = WorkflowConfig {
                         modify_region: self.flash.target == Some(FlashTarget::OtherRegion),
+                        device_region: self.flash.device_region,
                         modify_rollback: if self.flash.target == Some(FlashTarget::OtherRegion) {
                             RollbackSetting::On
                         } else {
@@ -4912,6 +4921,7 @@ impl App {
                             );
 
                             // 4. Region conversion
+                            let mut region_pair: Option<ltbox_patch::region::RegionBootChainOutput> = None;
                             if cfg.modify_region {
                                 if has_vendor_boot && has_vbmeta {
                                     ltbox_core::live!(
@@ -4924,6 +4934,67 @@ impl App {
                                         "[Region] {}",
                                         ltbox_core::i18n::tr("live_region_ready")
                                     );
+                                    let Some(device_region) = cfg.device_region else {
+                                        return Err(
+                                            "Region conversion requested but no device region was selected"
+                                                .to_string(),
+                                        );
+                                    };
+                                    let target = device_region.to_region_target();
+                                    let output_dir =
+                                        ltbox_core::app_paths::auto_output_dir_for("region_convert");
+                                    ltbox_core::live!(
+                                        log,
+                                        "[Region] Building vendor_boot/vbmeta pair for {:?} hardware",
+                                        device_region
+                                    );
+                                    match ltbox_patch::region::build_region_converted_boot_chain(
+                                        fw_dir,
+                                        &output_dir,
+                                        target,
+                                        &ltbox_patch::region::RegionPatternSet::default(),
+                                    ) {
+                                        Ok(ltbox_patch::region::RegionBootChainBuild::Built(output)) => {
+                                            ltbox_core::live!(
+                                                log,
+                                                "[Region] {}",
+                                                ltbox_core::i18n::tr("live_region_source_target")
+                                                    .replace("{source}", &format!("{:?}", output.source_region))
+                                                    .replace("{target}", &format!("{:?}", output.target))
+                                            );
+                                            ltbox_core::live!(
+                                                log,
+                                                "[Region] {}",
+                                                ltbox_core::i18n::tr("live_region_patched")
+                                                    .replace("{count}", &output.replacement_count.to_string())
+                                                    .replace("{path}", &output.vendor_boot.display().to_string())
+                                            );
+                                            ltbox_core::live!(
+                                                log,
+                                                "[Region] Repaired vendor_boot footer and rebuilt vbmeta: {}",
+                                                output.vbmeta.display()
+                                            );
+                                            region_pair = Some(output);
+                                        }
+                                        Ok(ltbox_patch::region::RegionBootChainBuild::Skipped {
+                                            source_region,
+                                            target,
+                                        }) => {
+                                            ltbox_core::live!(
+                                                log,
+                                                "[Region] {}",
+                                                ltbox_core::i18n::tr("live_region_source_target")
+                                                    .replace("{source}", &format!("{:?}", source_region))
+                                                    .replace("{target}", &format!("{:?}", target))
+                                            );
+                                            ltbox_core::live!(
+                                                log,
+                                                "[Region] {}",
+                                                ltbox_core::i18n::tr("live_region_source_matches_target")
+                                            );
+                                        }
+                                        Err(e) => return Err(format!("Region conversion failed: {e}")),
+                                    }
                                 } else {
                                     ltbox_core::live!(
                                         log,
@@ -5260,6 +5331,42 @@ impl App {
                                     &mut log,
                                 ) {
                                     return Err(format!("ARB flash {label}: {e}"));
+                                }
+                            }
+
+                            // Overwrite rawprogram's stock vendor_boot/vbmeta
+                            // with the final region-converted AVB-valid pair.
+                            // This must happen after rawprogram (and after any
+                            // ARB overlays) so stock XML entries cannot put the
+                            // unconverted ROW pair back on top.
+                            if let Some(output) = &region_pair {
+                                let overlays: [(&str, &std::path::Path); 2] = [
+                                    ("vendor_boot_a", output.vendor_boot.as_path()),
+                                    ("vbmeta_a", output.vbmeta.as_path()),
+                                ];
+                                for (label, image) in overlays {
+                                    let Some(lun) =
+                                        ltbox_core::partition_lun::lun_for_partition(label)
+                                    else {
+                                        return Err(format!(
+                                            "Region flash {label}: no hardcoded LUN"
+                                        ));
+                                    };
+                                    live!(
+                                        log,
+                                        "[Region] Flashing final {} ← {}",
+                                        label,
+                                        image.display()
+                                    );
+                                    if let Err(e) = session.flash_partition(
+                                        label,
+                                        image,
+                                        0,
+                                        lun,
+                                        &mut log,
+                                    ) {
+                                        return Err(format!("Region flash {label}: {e}"));
+                                    }
                                 }
                             }
 
@@ -7501,72 +7608,77 @@ impl App {
                                         );
                                     }
                                     AdvAction::RegionConvert => {
-                                        // Detect source region (PRC/ROW) by
-                                        // scanning for the IROW marker; the
-                                        // user-picked target comes from the
-                                        // wizard's region popup. Skip the
-                                        // patch when source already matches
-                                        // target so the user gets a clear
-                                        // signal instead of a no-op patched
-                                        // file with zero replacements.
                                         let Some(target_region) = adv_region_target else {
                                             return Err(
                                                 "No target region selected — pick PRC or ROW in the popup before starting"
                                                     .into(),
                                             );
                                         };
-                                        let data = match std::fs::read(input) {
-                                            Ok(b) => b,
-                                            Err(e) => return Err(format!("Read vendor_boot failed: {e}")),
-                                        };
-                                        let prc_dot = vec![0x2E, 0x50, 0x52, 0x43]; // ".PRC"
-                                        let prc_i = vec![0x49, 0x50, 0x52, 0x43];   // "IPRC"
-                                        let row_dot = vec![0x2E, 0x52, 0x4F, 0x57]; // ".ROW"
-                                        let row_i = vec![0x49, 0x52, 0x4F, 0x57];   // "IROW"
-                                        let has_row = data.windows(4).any(|w| w == row_i.as_slice());
-                                        let source_region = if has_row {
-                                            DeviceRegion::Row
-                                        } else {
-                                            DeviceRegion::Prc
-                                        };
-                                        ltbox_core::live!(
-                                            log,
-                                            "[Region] {}",
-                                            ltbox_core::i18n::tr("live_region_source_target")
-                                                .replace("{source}", &format!("{:?}", source_region))
-                                                .replace("{target}", &format!("{:?}", target_region))
-                                        );
-                                        if source_region == target_region {
-                                            ltbox_core::live!(
-                                                log,
-                                                "[Region] {}",
-                                                ltbox_core::i18n::tr("live_region_source_matches_target")
+                                        if input
+                                            .file_name()
+                                            .and_then(|s| s.to_str())
+                                            .map(|s| !s.eq_ignore_ascii_case("vendor_boot.img"))
+                                            .unwrap_or(true)
+                                        {
+                                            return Err(
+                                                "Region Convert expects vendor_boot.img; select the firmware folder's vendor_boot.img"
+                                                    .to_string(),
                                             );
-                                            return Ok(log);
                                         }
-                                        let target = match target_region {
-                                            DeviceRegion::Prc => ltbox_patch::region::RegionTarget::Prc,
-                                            DeviceRegion::Row => ltbox_patch::region::RegionTarget::Row,
-                                        };
-                                        let prc_patterns: Vec<(Vec<u8>, Vec<u8>)> = vec![
-                                            (prc_dot.clone(), row_dot.clone()),
-                                            (prc_i.clone(), row_i.clone()),
-                                        ];
-                                        let row_patterns: Vec<(Vec<u8>, Vec<u8>)> = vec![
-                                            (row_dot, prc_dot),
-                                            (row_i, prc_i),
-                                        ];
-                                        let stem = input.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                                        let output = output_dir.join(format!("{stem}.patched.img"));
-                                        match ltbox_patch::region::patch_vendor_boot(input, &output, target, &prc_patterns, &row_patterns) {
-                                            Ok(n) => ltbox_core::live!(
-                                                log,
-                                                "[Region] {}",
-                                                ltbox_core::i18n::tr("live_region_patched")
-                                                    .replace("{count}", &n.to_string())
-                                                    .replace("{path}", &output.display().to_string())
-                                            ),
-                                            Err(e) => return Err(format!("Region patch failed: {e}")),
+                                        let firmware_dir = parent;
+                                        let sibling_vbmeta = firmware_dir.join("vbmeta.img");
+                                        if !sibling_vbmeta.is_file() {
+                                            return Err(format!(
+                                                "Region Convert requires vbmeta.img beside vendor_boot.img; missing {}",
+                                                sibling_vbmeta.display()
+                                            ));
+                                        }
+                                        let target = target_region.to_region_target();
+                                        match ltbox_patch::region::build_region_converted_boot_chain(
+                                            firmware_dir,
+                                            &output_dir,
+                                            target,
+                                            &ltbox_patch::region::RegionPatternSet::default(),
+                                        ) {
+                                            Ok(ltbox_patch::region::RegionBootChainBuild::Built(output)) => {
+                                                ltbox_core::live!(
+                                                    log,
+                                                    "[Region] {}",
+                                                    ltbox_core::i18n::tr("live_region_source_target")
+                                                        .replace("{source}", &format!("{:?}", output.source_region))
+                                                        .replace("{target}", &format!("{:?}", output.target))
+                                                );
+                                                ltbox_core::live!(
+                                                    log,
+                                                    "[Region] {}",
+                                                    ltbox_core::i18n::tr("live_region_patched")
+                                                        .replace("{count}", &output.replacement_count.to_string())
+                                                        .replace("{path}", &output.vendor_boot.display().to_string())
+                                                );
+                                                ltbox_core::live!(
+                                                    log,
+                                                    "[Region] Final vbmeta written: {}",
+                                                    output.vbmeta.display()
+                                                );
+                                            }
+                                            Ok(ltbox_patch::region::RegionBootChainBuild::Skipped {
+                                                source_region,
+                                                target,
+                                            }) => {
+                                                ltbox_core::live!(
+                                                    log,
+                                                    "[Region] {}",
+                                                    ltbox_core::i18n::tr("live_region_source_target")
+                                                        .replace("{source}", &format!("{:?}", source_region))
+                                                        .replace("{target}", &format!("{:?}", target))
+                                                );
+                                                ltbox_core::live!(
+                                                    log,
+                                                    "[Region] {}",
+                                                    ltbox_core::i18n::tr("live_region_source_matches_target")
+                                                );
+                                            }
+                                            Err(e) => return Err(format!("Region conversion failed: {e}")),
                                         }
                                     }
                                     AdvAction::PatchDevinfo => {
@@ -7848,6 +7960,17 @@ impl App {
                                                 return Err(format!("Rebuild vbmeta fallback resign failed: {e}"));
                                             }
                                         } else {
+                                            if chained.iter().any(|p| {
+                                                p.file_name()
+                                                    .and_then(|s| s.to_str())
+                                                    .map(|s| s.starts_with("vendor_boot"))
+                                                    .unwrap_or(false)
+                                            }) {
+                                                ltbox_core::live!(
+                                                    log,
+                                                    "[AVB] Warning: Rebuild vbmeta does not repair chained image footers; use Region Convert output for modified vendor_boot.img"
+                                                );
+                                            }
                                             let output = output_dir.join("vbmeta.rebuilt.img");
                                             let chained_refs: Vec<&std::path::Path> =
                                                 chained.iter().map(|p| p.as_path()).collect();

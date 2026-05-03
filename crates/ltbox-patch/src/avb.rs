@@ -307,12 +307,13 @@ mod tests {
             }
 
             let vendor_boot_info = extract_image_avb_info(&vendor_boot).unwrap();
+            let patterns = region::RegionPatternSet::default();
             let replaced = region::patch_vendor_boot(
                 &vendor_boot,
                 &patched_vendor_boot,
                 region::RegionTarget::Prc,
-                &[],
-                &[(b".ROW".to_vec(), b".PRC".to_vec())],
+                &patterns.prc_patterns,
+                &patterns.row_patterns,
             )
             .unwrap();
             assert!(replaced > 0);
