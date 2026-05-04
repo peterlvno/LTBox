@@ -9385,7 +9385,20 @@ impl App {
         // 1-px divider below the chromeless title bar so the title
         // surface doesn't bleed into the content area.
         main = main.push(widget::rule::horizontal(1).style(shell_rule_style));
-        main = main.push(row![self.sidebar(), self.content()].height(Length::Fill));
+        // Sidebar overlay layout: the row reserves a fixed-width rail
+        // placeholder (matching the collapsed sidebar width) so the
+        // content area never reflows when the sidebar tweens. The real
+        // sidebar floats above this rail in a `Stack`, expanding
+        // rightward over content on hover instead of shoving the
+        // dashboard horizontally each time `sidebar_anim` ticks.
+        let rail_placeholder = container(iced::widget::Space::new())
+            .width(Length::Fixed(SIDEBAR_RAIL_WIDTH))
+            .height(Length::Fill);
+        let row_base = row![rail_placeholder, self.content()].height(Length::Fill);
+        let row_area = iced::widget::Stack::with_children(vec![row_base.into(), self.sidebar()])
+            .width(Length::Fill)
+            .height(Length::Fill);
+        main = main.push(row_area);
         main = main.push(self.status_bar());
 
         // 1-px outline around the entire window so the borderless
@@ -10054,7 +10067,8 @@ impl App {
         // Width tween: lerp 64 ↔ 210 based on `sidebar_anim`.
         // Inner content swaps to label form at the midpoint so the
         // labels don't pop in over an under-sized shell.
-        let width = 64.0 + (210.0 - 64.0) * self.sidebar_anim;
+        let width =
+            SIDEBAR_RAIL_WIDTH + (SIDEBAR_EXPANDED_WIDTH - SIDEBAR_RAIL_WIDTH) * self.sidebar_anim;
         // Right-edge divider via an explicit `vertical_rule` (1 px)
         // instead of a container border, so the corner where the
         // sidebar meets the status bar reads as one line per
@@ -15015,6 +15029,13 @@ fn sec_hdr<'a>(label: &str, expanded: bool) -> Element<'a, Message> {
 /// the sidebar tween's mid-frame swap between icon-only and
 /// label content doesn't push every row vertically.
 const NAV_BTN_HEIGHT: f32 = 38.0;
+
+/// Collapsed sidebar rail width (icon-only). The main row reserves
+/// exactly this much space so the content area never reflows when the
+/// sidebar tweens — the expanded form floats over content via a
+/// `Stack` overlay.
+const SIDEBAR_RAIL_WIDTH: f32 = 64.0;
+const SIDEBAR_EXPANDED_WIDTH: f32 = 210.0;
 
 fn nav_btn<'a>(
     view: View,
