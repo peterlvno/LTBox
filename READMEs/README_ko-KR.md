@@ -36,11 +36,41 @@ LTBox는 이를 활용하여 다음을 가능하게 합니다:
 
 ## 🚀 빠른 시작
 
-1. [최신 릴리즈](../../releases/latest)를 다운로드하고 압축 해제 (경로에 공백/특수문자 없이)
+### Windows
+
+1. [최신 릴리즈](../../releases/latest) 다운로드 후 압축 해제 (경로에 공백/특수문자 없이)
 2. **`ltbox.exe`** 더블클릭
 3. 사이드바에서 작업을 선택하고 위저드를 따라 진행
 
-현재 Windows x86_64 및 aarch64 빌드가 배포됩니다.
+Windows `x86_64` 및 `arm64` 빌드가 배포됩니다.
+
+> **퀄컴 USB 드라이버:** 퀄컴 USB 드라이버가 누락된 경우 대시보드에 "드라이버 설치" 배너가 표시됩니다. 클릭하면 GitHub에서 최신 `qcom-usb-kernel-drivers` 릴리즈를 다운로드하여 `pnputil`로 설치합니다. 첫 실행 시 `pnputil`이 `.inf` 파일을 설치할 수 있도록 LTBox를 관리자 권한으로 실행하세요.
+
+### Linux
+
+1. 런타임 의존성 설치 (Debian/Ubuntu 기준 — 다른 배포판은 적절히 변경):
+   ```bash
+   sudo apt install \
+     libusb-1.0-0 libudev1 \
+     libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 \
+     libxcb1 libxcb-render0 libxcb-shape0 libxcb-xfixes0 \
+     libfontconfig1 \
+     xdg-utils
+   ```
+2. [최신 릴리즈](../../releases/latest)의 Linux 타르볼 다운로드 (`tar -xzf LTBox-linux_*.tar.gz`). `ltbox` 실행 비트는 보존됩니다.
+3. 데스크톱 세션이 root 없이 Qualcomm 9008 / Lenovo USB 장치를 열 수 있도록 udev 규칙 설치:
+   ```bash
+   sudo ./ltbox --install-udev
+   ```
+4. 연결된 기기를 **재연결**하세요.
+5. (선택) 사용자 단위 앱 메뉴 항목 + 아이콘 추가 (root 불필요):
+   ```bash
+   ./ltbox --install-desktop
+   ```
+   `~/.local/share/applications/`에 `.desktop` 파일을, `~/.local/share/icons/hicolor/scalable/apps/`에 SVG 아이콘을 설치합니다. GNOME / KDE에서 몇 초 내로 인식됩니다. 바이너리를 옮긴 뒤에는 다시 실행하세요.
+6. `./ltbox` 실행.
+
+Linux `x86_64` 및 `aarch64` 빌드가 배포됩니다.
 
 ---
 
@@ -57,21 +87,26 @@ LTBox는 이를 활용하여 다음을 가능하게 합니다:
 | **루팅 해제** | 이전 루팅 백업에서 순정 부트 이미지 복원 |
 | **재부팅** | System / Recovery / Bootloader / EDL로 이동 |
 | **고급 메뉴** | 파이프라인 개별 단계 수동 제어 — 아래 참조 |
-| **설정** | 언어(en/ko/zh/ru), 테마, 기본 지역, 롤백 프리셋, ADB 건너뛰기 |
+| **설정** | 언어(en/ko/zh/ru), 테마(시스템/라이트/다크), 기본 EDL 로더 경로 |
 
 ### 고급 메뉴
 
-파이프라인 개별 단계 수동 제어:
+파이프라인 개별 단계 수동 제어, 세 섹션으로 구성:
 
+**지역 & 패치**
 - 지역 변환 (vendor_boot + vbmeta 재구성)
-- devinfo & persist 덤프 / 패치 / 플래싱
-- 안티롤백 인덱스 감지 및 패치
-- `.x` 파일 복호화 → XML
-- 플래싱용 XML 수정 (초기화 또는 데이터 유지)
-- EDL을 통한 펌웨어 또는 선택 파티션 플래싱
-- 수정된 이미지에 대한 vbmeta 재구성
-- 커스텀 리커버리 서명 및 플래싱
+- devinfo / persist 패치
+
+**롤백**
 - `.img` AVB 메타데이터 확인
+- 안티롤백 인덱스 감지
+- 안티롤백 인덱스 패치
+- 수정된 이미지에 대한 vbmeta 재구성
+
+**EDL 작업**
+- `.x` 파일 복호화 → XML
+- 파티션 이름 기준 덤프 / 플래싱 (GPT-by-name, EDL)
+- 물리 LUN 단위 덤프 / 플래싱 (전체 LUN, EDL)
 
 ---
 
@@ -83,7 +118,7 @@ LTBox는 이를 활용하여 다음을 가능하게 합니다:
 
 **안티롤백 우회**는 Fastboot를 통해 기기의 현재 롤백 인덱스를 읽은 뒤, 대상 펌웨어 이미지를 일치하는 인덱스로 재서명하여 부트로더가 "이전" 빌드를 거부하지 않게 합니다.
 
-**모든 플래싱**은 EDL 모드를 통해 수행됩니다 — LTBox가 전체 흐름을 처리합니다: ADB → Fastboot → EDL 전환, 프로그래머 업로드, 파티션 읽기/쓰기, 재부팅.
+**모든 플래싱**은 EDL 모드를 통해 수행됩니다 — LTBox가 전체 흐름을 처리합니다: ADB → Fastboot → EDL 전환, 프로그래머 업로드, 파티션 읽기/쓰기, 재부팅. AVB 서명에는 `avbtool-rs`에 내장된 AOSP `testkey_rsa2048` / `testkey_rsa4096` 스펙을 사용하므로 별도 PEM 파일이 필요 없습니다 — 재서명된 `vbmeta`와 루팅 주입된 `boot` 이미지가 부트로더에 고정된 테스트 키로 검증됩니다.
 
 ---
 
@@ -91,12 +126,10 @@ LTBox는 이를 활용하여 다음을 가능하게 합니다:
 
 | 크레이트 | 역할 |
 |---|---|
-| `ltbox-core` | 프리미티브 — 에러, 설정, 로깅, GitHub/nightly.link 클라이언트, 암호화, XML 복호화 |
-| `ltbox-device` | 전송 계층 — ADB, Fastboot, EDL / QDL, serialport 탐지 |
-| `ltbox-patch` | 이미지 파이프라인 — AVB, 부트 이미지 ramdisk 패치, 지역 변환, 롤백, 루트 프로바이더 통합 |
+| `ltbox-core` | 프리미티브 — 에러, 설정, 로깅, GitHub / nightly.link / Lenovo PTSTPD 클라이언트, 암호화, XML 복호화, 라이브 로그 싱크 |
+| `ltbox-device` | 전송 계층 — ADB, Fastboot, EDL / QDL, serialport 탐지, Windows 퀄컴 USB 드라이버 감지 + 자동 설치 |
+| `ltbox-patch` | 이미지 파이프라인 — AVB(내장 AOSP testkey 스펙), 부트 이미지 ramdisk 패치, 지역 변환, 롤백 인덱스 처리, 루트 프로바이더 통합 |
 | `ltbox-gui` | `iced` 데스크톱 앱 — `ltbox.exe` 바이너리 |
-
-CI에서 `windows-latest` 러너로 `x86_64-pc-windows-msvc` 와 `aarch64-pc-windows-msvc` 두 타겟을 `cargo build --release` 로 빌드 및 서명합니다.
 
 ---
 

@@ -44,6 +44,8 @@ LTBox exploits this to enable:
 
 Windows `x86_64` and `arm64` builds are published.
 
+> **Qualcomm USB drivers:** the dashboard shows an "Install drivers" banner when the Qualcomm USB drivers are missing. Clicking it downloads and installs the latest `qcom-usb-kernel-drivers` release from GitHub via `pnputil`. Run LTBox as Administrator the first time so `pnputil` can land the `.inf` files.
+
 ### Linux
 
 1. Install runtime deps (Debian/Ubuntu shown — adapt for your distro):
@@ -85,21 +87,26 @@ The app is a sidebar-driven GUI. Each entry opens a guided wizard.
 | **Unroot Device** | Restore the stock boot image from a prior Root backup |
 | **Reboot** | Jump to System, Recovery, Bootloader, or EDL |
 | **Advanced** | Individual pipeline steps for manual control — see below |
-| **Settings** | Language (en/ko/zh/ru), theme, default region, rollback preset, ADB skip |
+| **Settings** | Language (en/ko/zh/ru), theme (system/light/dark), default EDL loader path |
 
 ### Advanced Menu
 
-Step-by-step manual control over the pipeline:
+Step-by-step manual control over the pipeline, grouped into three sections:
 
+**Region & patch**
 - Convert region (vendor_boot + vbmeta rebuild)
-- Dump / patch / flash devinfo & persist
-- Detect and patch anti-rollback indices
-- Decrypt `.x` files → XML
-- Modify XML for flashing (wipe or keep data)
-- Flash firmware or selected partitions via EDL
-- Rebuild vbmeta for modified images
-- Sign & flash custom recovery
+- Patch devinfo / persist
+
+**Rollback**
 - Inspect `.img` AVB metadata
+- Detect anti-rollback index
+- Patch anti-rollback index
+- Rebuild vbmeta for modified images
+
+**EDL ops**
+- Decrypt `.x` files → XML
+- Dump / flash partitions by name (GPT-by-name, EDL)
+- Dump / flash physical LUNs (whole-LUN, EDL)
 
 ---
 
@@ -111,7 +118,7 @@ Step-by-step manual control over the pipeline:
 
 **Anti-rollback bypass** reads the device's current rollback index via Fastboot, then re-signs the target firmware images with a matching index so the bootloader doesn't reject them as "older" builds.
 
-**All flashing** goes through EDL mode — LTBox handles the full flow: ADB → Fastboot → EDL transition, programmer upload, partition read/write, and reset.
+**All flashing** goes through EDL mode — LTBox handles the full flow: ADB → Fastboot → EDL transition, programmer upload, partition read/write, and reset. AVB-signed images use the embedded AOSP `testkey_rsa2048` / `testkey_rsa4096` specs from `avbtool-rs` (no PEM file needed) so re-signed `vbmeta` and root-injected `boot` images verify against the bootloader's pinned test keys.
 
 ---
 
@@ -119,9 +126,9 @@ Step-by-step manual control over the pipeline:
 
 | Crate | Role |
 |---|---|
-| `ltbox-core` | Primitives — errors, settings, logging, GitHub/nightly.link clients, crypto, XML decrypt |
-| `ltbox-device` | Transport layer — ADB, Fastboot, EDL / QDL, serialport discovery |
-| `ltbox-patch` | Image pipeline — AVB, boot image ramdisk patching, region conversion, rollback, root provider integration |
+| `ltbox-core` | Primitives — errors, settings, logging, GitHub / nightly.link / Lenovo PTSTPD clients, crypto, XML decrypt, live-log sink |
+| `ltbox-device` | Transport layer — ADB, Fastboot, EDL / QDL, serialport discovery, Windows Qualcomm USB driver probe + auto-install |
+| `ltbox-patch` | Image pipeline — AVB (embedded AOSP testkey specs), boot image ramdisk patching, region conversion, rollback index handling, root provider integration |
 | `ltbox-gui` | `iced` desktop app — the `ltbox.exe` binary |
 
 ---

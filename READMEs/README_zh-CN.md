@@ -36,11 +36,41 @@ LTBox 利用这一特性实现：
 
 ## 🚀 快速开始
 
+### Windows
+
 1. 下载[最新版本](../../releases/latest)并解压（路径中不要包含空格或特殊字符）
 2. 双击 **`ltbox.exe`**
 3. 从侧边栏选择任务并按向导操作
 
-目前发布 Windows x86_64 和 aarch64 两种架构的构建。
+发布 Windows `x86_64` 和 `arm64` 构建。
+
+> **高通 USB 驱动：** 如果缺少高通 USB 驱动，仪表盘会显示"安装驱动"横幅。点击后会从 GitHub 下载最新的 `qcom-usb-kernel-drivers` 版本，并通过 `pnputil` 进行安装。首次运行时请以管理员身份启动 LTBox，以便 `pnputil` 能成功安装 `.inf` 文件。
+
+### Linux
+
+1. 安装运行时依赖（以 Debian/Ubuntu 为例 — 其他发行版请相应调整）：
+   ```bash
+   sudo apt install \
+     libusb-1.0-0 libudev1 \
+     libxkbcommon0 libxkbcommon-x11-0 libwayland-client0 \
+     libxcb1 libxcb-render0 libxcb-shape0 libxcb-xfixes0 \
+     libfontconfig1 \
+     xdg-utils
+   ```
+2. 下载[最新版本](../../releases/latest)的 Linux 压缩包（`tar -xzf LTBox-linux_*.tar.gz`）。`ltbox` 的可执行位会被保留。
+3. 安装 udev 规则，让桌面会话无需 root 权限即可打开 Qualcomm 9008 / 联想 USB 设备：
+   ```bash
+   sudo ./ltbox --install-udev
+   ```
+4. **重新插拔**已连接的设备。
+5. （可选）添加用户级别的应用菜单项 + 图标（无需 root）：
+   ```bash
+   ./ltbox --install-desktop
+   ```
+   将 `.desktop` 文件放入 `~/.local/share/applications/`，SVG 图标放入 `~/.local/share/icons/hicolor/scalable/apps/`。GNOME / KDE 会在几秒内识别。移动二进制后请重新执行。
+6. 运行 `./ltbox`。
+
+发布 Linux `x86_64` 和 `aarch64` 构建。
 
 ---
 
@@ -57,21 +87,26 @@ LTBox 利用这一特性实现：
 | **取消 Root** | 从之前的 Root 备份恢复原始引导镜像 |
 | **重启** | 跳转到系统 / Recovery / Bootloader / EDL |
 | **高级菜单** | 单独的流水线步骤供手动控制 — 见下方 |
-| **设置** | 语言 (en/ko/zh/ru)、主题、默认区域、回滚预设、跳过 ADB |
+| **设置** | 语言（en/ko/zh/ru）、主题（系统/浅色/深色）、默认 EDL 加载器路径 |
 
 ### 高级菜单
 
-逐步手动控制流水线：
+逐步手动控制流水线，分为三个部分：
 
+**区域 & 补丁**
 - 区域转换（vendor_boot + vbmeta 重建）
-- devinfo 和 persist 分区的转储 / 补丁 / 刷写
-- 检测并补丁反回滚索引
-- 解密 `.x` 文件 → XML
-- 修改 XML 用于刷写（清除或保留数据）
-- 通过 EDL 刷写固件或选定分区
-- 为修改后的镜像重建 vbmeta
-- 签名并刷写自定义 Recovery
+- 补丁 devinfo / persist
+
+**回滚**
 - 查看 `.img` AVB 元数据
+- 检测反回滚索引
+- 补丁反回滚索引
+- 为修改后的镜像重建 vbmeta
+
+**EDL 操作**
+- 解密 `.x` 文件 → XML
+- 按名称转储 / 刷写分区（GPT-by-name, EDL）
+- 物理 LUN 整体转储 / 刷写（whole-LUN, EDL）
 
 ---
 
@@ -83,7 +118,7 @@ LTBox 利用这一特性实现：
 
 **反回滚绕过** 通过 Fastboot 读取设备当前的回滚索引，然后使用匹配的索引重新签名目标固件镜像，使引导加载程序不会将其视为"旧版本"而拒绝。
 
-**所有刷写** 都通过 EDL 模式进行 — LTBox 处理完整流程：ADB → Fastboot → EDL 过渡、程序上传、分区读写和重置。
+**所有刷写** 都通过 EDL 模式进行 — LTBox 处理完整流程：ADB → Fastboot → EDL 过渡、程序上传、分区读写和重置。AVB 签名使用 `avbtool-rs` 内嵌的 AOSP `testkey_rsa2048` / `testkey_rsa4096` 规范，无需 PEM 文件 — 重新签名的 `vbmeta` 和注入 Root 的 `boot` 镜像可通过引导加载程序固定的测试密钥验证。
 
 ---
 
@@ -91,12 +126,10 @@ LTBox 利用这一特性实现：
 
 | Crate | 职责 |
 |---|---|
-| `ltbox-core` | 基础原语 — 错误、设置、日志、GitHub/nightly.link 客户端、加密、XML 解密 |
-| `ltbox-device` | 传输层 — ADB、Fastboot、EDL / QDL、serialport 探测 |
-| `ltbox-patch` | 镜像流水线 — AVB、引导镜像 ramdisk 补丁、区域转换、回滚、Root 方案集成 |
+| `ltbox-core` | 基础原语 — 错误、设置、日志、GitHub / nightly.link / 联想 PTSTPD 客户端、加密、XML 解密、实时日志接收器 |
+| `ltbox-device` | 传输层 — ADB、Fastboot、EDL / QDL、serialport 探测、Windows 高通 USB 驱动检测 + 自动安装 |
+| `ltbox-patch` | 镜像流水线 — AVB（内嵌 AOSP testkey 规范）、引导镜像 ramdisk 补丁、区域转换、回滚索引处理、Root 方案集成 |
 | `ltbox-gui` | `iced` 桌面应用 — `ltbox.exe` 二进制 |
-
-CI 在 `windows-latest` 运行器上通过 `cargo build --release` 同时为 `x86_64-pc-windows-msvc` 和 `aarch64-pc-windows-msvc` 两个目标构建与签名。
 
 ---
 
