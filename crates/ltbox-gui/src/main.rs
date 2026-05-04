@@ -4757,27 +4757,13 @@ impl App {
                 let fw_folder = self.flash.firmware_folder.clone().unwrap_or_default();
                 let rollback_label = self.t(cfg.modify_rollback.label_key()).to_string();
                 self.log_push(format!(
-                    "[Flash] Starting: modify_region={} rollback={} wipe={}",
-                    cfg.modify_region, rollback_label, cfg.wipe
+                    "[Flash] {}",
+                    self.t("live_flash_starting")
+                        .replace("{modify_region}", &cfg.modify_region.to_string())
+                        .replace("{rollback}", &rollback_label)
+                        .replace("{wipe}", &cfg.wipe.to_string())
                 ));
                 let rb_label_for_log = rollback_label.clone();
-                // Snapshot rollback index before EDL — `stored_rollback_index`
-                // vanishes past Fastboot. Two `None` flavours matter:
-                // vars-returned-no-index (no ARB committed, skip) vs
-                // vars-unreachable (unsafe for ON mode, caller aborts).
-                let (device_rollback_index, fastboot_reachable): (Option<u64>, bool) =
-                    match ltbox_device::fastboot::FastbootDevice::open() {
-                        Ok(mut dev) => match dev.get_all_vars() {
-                            Ok(v) => (
-                                ltbox_patch::rollback::compute_device_rollback_index(
-                                    &v.rollback_indices,
-                                ),
-                                true,
-                            ),
-                            Err(_) => (None, false),
-                        },
-                        Err(_) => (None, false),
-                    };
                 let rb_mode = cfg.modify_rollback.to_mode();
                 let ll = self.live_labels();
                 return Task::perform(
@@ -4798,6 +4784,74 @@ impl App {
                                 ltbox_core::i18n::tr("live_flash_firmware_folder")
                                     .replace("{path}", &fw_folder)
                             );
+
+                            // Snapshot rollback index before EDL —
+                            // `stored_rollback_index` vanishes past
+                            // Fastboot. Probe Fastboot vars first, and
+                            // when the device is sitting in ADB bridge
+                            // it through `adb reboot bootloader` before
+                            // retrying — otherwise the user sees the
+                            // ARB=ON abort on every PRC↔ROW flash that
+                            // started from the ADB-connected state, even
+                            // though Fastboot is reachable in principle.
+                            let probe_fastboot = || -> (Option<u64>, bool) {
+                                match ltbox_device::fastboot::FastbootDevice::open() {
+                                    Ok(mut dev) => match dev.get_all_vars() {
+                                        Ok(v) => (
+                                            ltbox_patch::rollback::compute_device_rollback_index(
+                                                &v.rollback_indices,
+                                            ),
+                                            true,
+                                        ),
+                                        Err(_) => (None, false),
+                                    },
+                                    Err(_) => (None, false),
+                                }
+                            };
+                            let mut probe = probe_fastboot();
+                            let adb_connected = matches!(
+                                conn,
+                                ConnectionStatus::Adb | ConnectionStatus::AdbRecovery
+                            );
+                            if !probe.1 && adb_connected {
+                                ltbox_core::live!(
+                                    log,
+                                    "[Flash] {}",
+                                    ltbox_core::i18n::tr("live_flash_adb_to_bootloader")
+                                );
+                                let mut adb = ltbox_device::adb::AdbManager::new();
+                                if adb.check_device().unwrap_or(false) {
+                                    match adb.reboot("bootloader") {
+                                        Ok(()) => {
+                                            // Poll for Fastboot up to
+                                            // 60s — ADB→bootloader
+                                            // typically lands inside 8 s
+                                            // but cold boots can drag.
+                                            let deadline = std::time::Instant::now()
+                                                + std::time::Duration::from_secs(60);
+                                            while std::time::Instant::now() < deadline {
+                                                if ltbox_device::fastboot::FastbootDevice::check_device()
+                                                {
+                                                    break;
+                                                }
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(500),
+                                                );
+                                            }
+                                            probe = probe_fastboot();
+                                        }
+                                        Err(e) => {
+                                            ltbox_core::live!(
+                                                log,
+                                                "[ADB] {}",
+                                                ltbox_core::i18n::tr("live_adb_reboot_failed")
+                                                    .replace("{error}", &e.to_string())
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            let (device_rollback_index, fastboot_reachable) = probe;
 
                             // Rollback=ON + no fastboot vars → can't target
                             // a safe index. Bail before risking a brick.
@@ -4834,7 +4888,9 @@ impl App {
                                         ltbox_core::i18n::tr("live_adb_no_reboot_route")
                                     );
                                 }
-                                return Err("Rollback=ON requires fastboot var access. Device not in fastboot or getvar failed — aborted without flashing.".to_string());
+                                return Err(
+                                    ltbox_core::i18n::tr("err_rollback_on_fastboot_unreachable"),
+                                );
                             }
 
                             // 2. Device detection
