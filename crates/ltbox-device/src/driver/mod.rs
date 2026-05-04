@@ -56,6 +56,14 @@ pub enum DriverError {
     Zip(#[from] zip::result::ZipError),
     #[error("No .inf files found under a Windows10 subdirectory in the archive")]
     NoInf,
+    /// `pnputil /add-driver /install` rejected every `.inf` — usually
+    /// because LTBox is not running elevated. Carries the count so the
+    /// GUI can surface "0/N succeeded" without knowing how many INFs
+    /// the archive shipped.
+    #[error(
+        "pnputil failed for all {count} driver(s). LTBox needs to run as Administrator to install drivers."
+    )]
+    PnputilAllFailed { count: usize },
 }
 
 impl From<ureq::Error> for DriverError {

@@ -8661,7 +8661,7 @@ impl App {
                     return Task::none();
                 }
                 self.installing_drivers = true;
-                self.log_push("[Driver] Starting Qualcomm USB driver install...".to_string());
+                self.log_push(format!("[Driver] {}", self.t("live_driver_starting")));
                 return Task::perform(
                     async {
                         tokio::task::spawn_blocking(|| {
@@ -9242,12 +9242,17 @@ impl App {
             }
             Message::InstallDriversDone(result) => {
                 self.installing_drivers = false;
+                // Drain any lines still pending in the sink/tap so the
+                // worker's terminal `live_driver_install_finished`
+                // line lands before the banner re-check fires. Don't
+                // append a separate `driver_install_done` line — the
+                // worker already emitted a localized completion line
+                // (`Installation finished (N/N succeeded)`), so the
+                // extra log_push here was a near-duplicate of the same
+                // message in a different wording.
+                let _ = self.drain_pending_log_streams();
                 match result {
-                    Ok(log) => {
-                        for line in log {
-                            self.log_push(line);
-                        }
-                        self.log_push(self.t("driver_install_done").to_string());
+                    Ok(_log) => {
                         // Re-run the presence check to clear the banner.
                         return Task::perform(
                             async {
@@ -10336,13 +10341,29 @@ impl App {
         } else {
             self.t("driver_install_btn").to_string()
         };
-        let mut btn = button(text(btn_label).size(theme::text_size::LABEL_LARGE))
+        // `Length::Shrink` width on the inner text + `wrapping::None` so
+        // a long localized label (e.g. Korean "다운로드 & 설치") never
+        // collapses into a per-grapheme vertical column when the parent
+        // row decides the button's natural width is wider than the slot
+        // it has — let the button overflow its slot instead of shredding
+        // the label.
+        let btn_label_text = text(btn_label)
+            .size(theme::text_size::LABEL_LARGE)
+            .wrapping(iced::widget::text::Wrapping::None);
+        let mut btn = button(btn_label_text)
             .padding([8, 18])
             .style(md_filled_btn_style);
         if !installing {
             btn = btn.on_press(Message::InstallDrivers);
         }
 
+        // `body` fills the remainder via `Length::Fill` so the button
+        // sits flush right with its natural width — the previous
+        // `Space::new().width(Fill)` between two `Shrink` siblings made
+        // the row's total width depend on each text's natural width,
+        // which under a long desc string overflowed the banner and left
+        // the button only a sliver — collapsing its label into a
+        // vertical glyph stack.
         let body = column![
             text(self.t("driver_missing_title").to_string())
                 .size(theme::text_size::TITLE_MEDIUM)
@@ -10351,10 +10372,12 @@ impl App {
                 .size(theme::text_size::BODY_SMALL)
                 .color(iced::Color::WHITE),
         ]
-        .spacing(4);
+        .spacing(4)
+        .width(Length::Fill);
 
-        let content = row![body, Space::new().width(Length::Fill), btn,]
+        let content = row![body, btn]
             .spacing(12)
+            .width(Length::Fill)
             .align_y(iced::Alignment::Center);
 
         container(content)

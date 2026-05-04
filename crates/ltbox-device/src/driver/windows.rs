@@ -11,8 +11,12 @@
 //! `cfg!(windows)` runtime check from the pre-rename module folds
 //! into compile-time guarantees here.
 
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use ltbox_core::i18n::tr;
+use ltbox_core::live;
 
 use super::{DriverError, DriverStatus, Result};
 
@@ -103,17 +107,28 @@ fn driver_present_via_driver_store(inf_name: &str) -> bool {
 }
 
 /// Download the latest `qcom-usb-kernel-drivers` release and `pnputil`-install
-/// each `.inf` under a `Windows10/` folder. `log` is pushed per milestone.
+/// each `.inf` under a `Windows10/` folder.
+///
+/// Every milestone routes through `live!` so the GUI streams progress in
+/// real time — the previous `log.push` only surfaced after the whole task
+/// returned, so a stalled download looked indistinguishable from a fast
+/// success until the final timeout error fired.
+///
+/// Two ureq agents:
+///   * `meta_agent` — 30 s global, used for the small JSON release listing.
+///   * `dl_agent` — no global cap; per-stage `connect` / `recv-response` /
+///     `recv-body` timeouts so a slow link can finish a multi-MB ZIP
+///     without the previous 30-s "timeout: global" guillotine cutting the
+///     body read partway through.
 pub fn download_and_install(log: &mut Vec<String>) -> Result<()> {
-    log.push("[Driver] Fetching latest release metadata...".to_string());
-    // Shorter timeout than core::build_agent — zip is <10 MB; bail fast.
-    let agent = ureq::Agent::config_builder()
+    live!(log, "[Driver] {}", tr("live_driver_fetch_meta"));
+    let meta_agent = ureq::Agent::config_builder()
         .user_agent(USER_AGENT)
         .timeout_global(Some(std::time::Duration::from_secs(30)))
         .build()
         .new_agent();
 
-    let release: GithubRelease = agent
+    let release: GithubRelease = meta_agent
         .get(RELEASES_API)
         .call()?
         .body_mut()
@@ -127,21 +142,29 @@ pub fn download_and_install(log: &mut Vec<String>) -> Result<()> {
         .map(|a| (a.name, a.browser_download_url))
         .ok_or(DriverError::NoAsset)?;
 
-    log.push(format!("[Driver] Asset: {asset_name}"));
+    live!(
+        log,
+        "[Driver] {}",
+        tr("live_driver_asset").replace("{name}", &asset_name)
+    );
 
     let tmp_dir = std::env::temp_dir().join(format!("ltbox_qcom_drv_{}", std::process::id()));
     std::fs::create_dir_all(&tmp_dir)?;
     let zip_path = tmp_dir.join(&asset_name);
 
-    log.push("[Driver] Downloading...".to_string());
-    {
-        let mut resp = agent.get(&asset_url).call()?;
-        let mut reader = resp.body_mut().as_reader();
-        let mut file = std::fs::File::create(&zip_path)?;
-        std::io::copy(&mut reader, &mut file)?;
-    }
+    // No global cap — stalls/slow links should still finish a 10–20 MB
+    // ZIP without the previous "timeout: global" guillotine.
+    let dl_agent = ureq::Agent::config_builder()
+        .user_agent(USER_AGENT)
+        .timeout_connect(Some(std::time::Duration::from_secs(15)))
+        .timeout_recv_response(Some(std::time::Duration::from_secs(30)))
+        .timeout_recv_body(Some(std::time::Duration::from_secs(300)))
+        .build()
+        .new_agent();
 
-    log.push("[Driver] Extracting archive...".to_string());
+    download_with_progress(&dl_agent, &asset_url, &asset_name, &zip_path, log)?;
+
+    live!(log, "[Driver] {}", tr("live_driver_extracting"));
     let extract_dir = tmp_dir.join("extracted");
     std::fs::create_dir_all(&extract_dir)?;
     extract_zip(&zip_path, &extract_dir)?;
@@ -153,29 +176,192 @@ pub fn download_and_install(log: &mut Vec<String>) -> Result<()> {
         return Err(DriverError::NoInf);
     }
 
+    let mut succeeded = 0usize;
+    let mut failed = 0usize;
     for inf in &inf_files {
         let name = inf
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default();
-        log.push(format!("[Driver] Installing {name}..."));
+        live!(
+            log,
+            "[Driver] {}",
+            tr("live_driver_installing_inf").replace("{name}", &name)
+        );
         let out = silent_command("pnputil")
             .arg("/add-driver")
             .arg(inf)
             .arg("/install")
             .output();
         match out {
-            Ok(o) if o.status.success() => {}
-            Ok(o) => {
-                let stderr = String::from_utf8_lossy(&o.stderr);
-                log.push(format!("[Driver] pnputil {name} failed: {stderr}"));
+            Ok(o) if o.status.success() => {
+                succeeded += 1;
             }
-            Err(e) => log.push(format!("[Driver] pnputil {name} spawn failed: {e}")),
+            Ok(o) => {
+                failed += 1;
+                // pnputil writes its diagnostics to stdout, not stderr,
+                // so logging only stderr left every failure as a blank
+                // "failed: " line. Decode both, prefer stdout when
+                // populated, fall back to a friendly hint when both are
+                // empty (typical when pnputil bails on UAC before
+                // emitting any text).
+                let exit = o.status.code().unwrap_or(-1);
+                let stdout = decode_console(&o.stdout);
+                let stderr = decode_console(&o.stderr);
+                let detail = if !stdout.trim().is_empty() {
+                    stdout.trim().to_string()
+                } else if !stderr.trim().is_empty() {
+                    stderr.trim().to_string()
+                } else {
+                    tr("live_driver_pnputil_no_diag")
+                };
+                live!(
+                    log,
+                    "[Driver] {}",
+                    tr("live_driver_pnputil_failed")
+                        .replace("{name}", &name)
+                        .replace("{exit}", &exit.to_string())
+                        .replace("{detail}", &detail)
+                );
+            }
+            Err(e) => {
+                failed += 1;
+                live!(
+                    log,
+                    "[Driver] {}",
+                    tr("live_driver_pnputil_spawn_failed")
+                        .replace("{name}", &name)
+                        .replace("{error}", &e.to_string())
+                );
+            }
         }
     }
 
-    log.push("[Driver] Installation finished. Reboot is recommended.".to_string());
     cleanup(&tmp_dir);
+
+    // All installs flopped → surface as hard failure so the GUI shows
+    // the red banner instead of the green "install complete" toast.
+    if succeeded == 0 && failed > 0 {
+        live!(
+            log,
+            "[Driver] {}",
+            tr("live_driver_all_failed").replace("{count}", &failed.to_string())
+        );
+        return Err(DriverError::PnputilAllFailed { count: failed });
+    }
+
+    let total = succeeded + failed;
+    live!(
+        log,
+        "[Driver] {}",
+        tr("live_driver_install_finished")
+            .replace("{succeeded}", &succeeded.to_string())
+            .replace("{total}", &total.to_string())
+    );
+    Ok(())
+}
+
+/// Decode bytes captured from a Windows console subprocess. Tries UTF-8
+/// first, then falls back to lossy UTF-8 (which keeps ASCII intact and
+/// only mangles the high-byte ranges) so localized pnputil output at
+/// least surfaces something instead of a blank "failed: " tail.
+fn decode_console(bytes: &[u8]) -> String {
+    if let Ok(s) = std::str::from_utf8(bytes) {
+        s.to_string()
+    } else {
+        String::from_utf8_lossy(bytes).into_owned()
+    }
+}
+
+/// Stream `url` to `out_path` in 64 KiB chunks, emitting a progress line
+/// every 5 % bucket (or every 750 ms for chunked / unknown-length
+/// responses). Mirrors `ltbox_core::downloader::download_to_file` but
+/// kept local to the driver crate so this stays self-contained for the
+/// Windows-only `pnputil` install path.
+fn download_with_progress(
+    agent: &ureq::Agent,
+    url: &str,
+    display_name: &str,
+    out_path: &Path,
+    log: &mut Vec<String>,
+) -> Result<()> {
+    live!(
+        log,
+        "[Driver] {}",
+        tr("live_driver_downloading").replace("{name}", display_name)
+    );
+    let mut resp = agent.get(url).call()?;
+    let total: Option<u64> = resp
+        .headers()
+        .get(ureq::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok());
+
+    let mut reader = resp.body_mut().as_reader();
+    let mut file = std::fs::File::create(out_path)?;
+    let mut buf = [0u8; 64 * 1024];
+    let mut downloaded: u64 = 0;
+    let mut last_pct_bucket: i32 = -1;
+    let started_at = std::time::Instant::now();
+    let mut last_emit_at = started_at;
+
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .map_err(|e| DriverError::Http(format!("download read: {e}")))?;
+        if n == 0 {
+            break;
+        }
+        file.write_all(&buf[..n])?;
+        downloaded += n as u64;
+
+        let now = std::time::Instant::now();
+        let dl_mb = downloaded as f64 / 1_000_000.0;
+        let elapsed = now.duration_since(started_at).as_secs_f64().max(0.001);
+        let speed = dl_mb / elapsed;
+        if let Some(total) = total
+            && total > 0
+        {
+            let pct = (downloaded * 100 / total) as i32;
+            let bucket = pct / 5;
+            if bucket > last_pct_bucket {
+                last_pct_bucket = bucket;
+                last_emit_at = now;
+                let total_mb = total as f64 / 1_000_000.0;
+                live!(
+                    log,
+                    "[Driver] {}",
+                    tr("live_driver_progress_pct")
+                        .replace("{name}", display_name)
+                        .replace("{pct}", &format!("{pct:>3}"))
+                        .replace("{downloaded}", &format!("{dl_mb:.1}"))
+                        .replace("{total}", &format!("{total_mb:.1}"))
+                        .replace("{speed}", &format!("{speed:.1}"))
+                );
+            }
+        } else if now.duration_since(last_emit_at) >= std::time::Duration::from_millis(750) {
+            last_emit_at = now;
+            live!(
+                log,
+                "[Driver] {}",
+                tr("live_driver_progress_chunked")
+                    .replace("{name}", display_name)
+                    .replace("{downloaded}", &format!("{dl_mb:.1}"))
+                    .replace("{speed}", &format!("{speed:.1}"))
+            );
+        }
+    }
+
+    let elapsed = started_at.elapsed().as_secs_f64().max(0.001);
+    let dl_mb = downloaded as f64 / 1_000_000.0;
+    live!(
+        log,
+        "[Driver] {}",
+        tr("live_driver_dl_done")
+            .replace("{name}", display_name)
+            .replace("{size}", &format!("{dl_mb:.1}"))
+            .replace("{elapsed}", &format!("{elapsed:.1}"))
+    );
     Ok(())
 }
 
