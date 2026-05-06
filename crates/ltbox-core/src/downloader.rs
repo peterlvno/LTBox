@@ -10,13 +10,27 @@ use std::path::Path;
 use crate::error::{LtboxError, Result};
 
 const USER_AGENT: &str = "LTBox-rs/3.0";
-const DOWNLOAD_TIMEOUT_SECS: u64 = 120;
 
-/// Shared ureq agent (user-agent + timeout) for all outbound HTTP in this crate.
+/// Shared ureq agent (user-agent + per-stage timeouts) for all outbound HTTP
+/// in this crate.
+///
+/// The previous `timeout_global(120 s)` covered the entire request lifecycle
+/// — connect + redirects + headers + the multi-MB body read all shared one
+/// budget. GitHub release downloads redirect from `github.com` to
+/// `objects.githubusercontent.com` (S3), so a slow link burned most of the
+/// budget on connect / TLS / redirect resolution before the body even
+/// started, and the body read then tripped `timeout: global` mid-payload.
+/// Split into per-stage timeouts so the connect / response phases get a
+/// short cap each (fast-fail on a dead link) while the body has 10 minutes
+/// to land — enough for the largest root-pipeline payload (Magisk APK,
+/// KSU `.ko` + ksuinit, APatch APK→kpimg, GKI AnyKernel3 zips) on slow
+/// network connections.
 pub(crate) fn build_agent() -> ureq::Agent {
     ureq::Agent::config_builder()
         .user_agent(USER_AGENT)
-        .timeout_global(Some(std::time::Duration::from_secs(DOWNLOAD_TIMEOUT_SECS)))
+        .timeout_connect(Some(std::time::Duration::from_secs(15)))
+        .timeout_recv_response(Some(std::time::Duration::from_secs(30)))
+        .timeout_recv_body(Some(std::time::Duration::from_secs(600)))
         .build()
         .new_agent()
 }
