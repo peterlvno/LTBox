@@ -3823,6 +3823,14 @@ struct App {
     /// handler can re-issue the same query without recapturing the
     /// dashboard fields.
     ota_popup: Option<(String, String, OtaPopupState)>,
+    /// Session-scoped cache for OTA results, keyed by
+    /// `(serial, firmware_id)`. `None` value = "upstream returned an
+    /// empty `<firmwareupdate/>`" (NoUpdate state) — still cached so
+    /// reopening the popup doesn't re-issue the same negative query.
+    /// Errors are intentionally NOT cached so a transient network
+    /// failure clears on the next open.
+    ota_cache:
+        std::collections::HashMap<(String, String), Option<ltbox_core::lenovo_ota::OtaUpdate>>,
     /// Read-only `text_editor::Content` mirror of the OTA popup's
     /// changelog text. Pulled out of the popup state so drag-select +
     /// Ctrl+C work — the `text` widget is a static label and won't
@@ -3992,6 +4000,7 @@ impl Default for App {
             device_info_cache: std::collections::HashMap::new(),
             device_info_popup: None,
             ota_popup: None,
+            ota_cache: std::collections::HashMap::new(),
             ota_changelog_editor: iced::widget::text_editor::Content::with_text(""),
             arb_index_popup_open: false,
             toast_msg: None,
@@ -8838,6 +8847,21 @@ impl App {
                 if serial.is_empty() || firmware_id.is_empty() {
                     return Task::none();
                 }
+                // Cache hit → restore the prior result without
+                // re-issuing the upstream query. Mirrors
+                // `device_info_cache` so the popup doesn't burn a
+                // network round-trip every time the user reopens it
+                // within the same session.
+                let key = (serial.clone(), firmware_id.clone());
+                if let Some(cached) = self.ota_cache.get(&key).cloned() {
+                    let new_state = match cached {
+                        Some(update) => OtaPopupState::Ready(update),
+                        None => OtaPopupState::NoUpdate,
+                    };
+                    self.seed_ota_changelog_editor(&new_state);
+                    self.ota_popup = Some((serial, firmware_id, new_state));
+                    return Task::none();
+                }
                 self.ota_popup =
                     Some((serial.clone(), firmware_id.clone(), OtaPopupState::Loading));
                 let s = serial.clone();
@@ -8868,26 +8892,22 @@ impl App {
                     Ok(None) => OtaPopupState::NoUpdate,
                     Err(e) => OtaPopupState::Error(e),
                 };
-                // Re-seed the changelog editor — pick desc_cn for
-                // Chinese GUI locale (with desc_en fallback when cn is
-                // empty), desc_en otherwise. Mirrors the popup view's
-                // own selection so the editor's text matches what the
-                // popup will render.
-                let editor_text = if let OtaPopupState::Ready(u) = &new_state {
-                    let prefer_cn = matches!(self.settings.language, Language::Zh);
-                    let raw = if prefer_cn && !u.desc_cn.trim().is_empty() {
-                        &u.desc_cn
-                    } else if !u.desc_en.trim().is_empty() {
-                        &u.desc_en
-                    } else {
-                        &u.desc_cn
-                    };
-                    ltbox_core::lenovo_ota::format_changelog(raw)
-                } else {
-                    String::new()
-                };
-                self.ota_changelog_editor =
-                    iced::widget::text_editor::Content::with_text(&editor_text);
+                // Cache success / NoUpdate so reopening the popup
+                // doesn't re-issue the same query. Errors are not
+                // cached — a transient network failure should clear
+                // on the next open instead of sticking until the
+                // user manually retries.
+                let key = (serial.clone(), firmware_id.clone());
+                match &new_state {
+                    OtaPopupState::Ready(u) => {
+                        self.ota_cache.insert(key, Some(u.clone()));
+                    }
+                    OtaPopupState::NoUpdate => {
+                        self.ota_cache.insert(key, None);
+                    }
+                    _ => {}
+                }
+                self.seed_ota_changelog_editor(&new_state);
                 self.ota_popup = Some((serial, firmware_id, new_state));
             }
             Message::OtaClose => {
@@ -10487,6 +10507,29 @@ impl App {
     /// only KernelSU GKI + APatch family work cleanly on this kernel).
     fn is_tb320fc(&self) -> bool {
         self.device_model.eq_ignore_ascii_case("TB320FC")
+    }
+
+    /// Re-populate `ota_changelog_editor` from the current popup
+    /// state. Picks `desc_cn` for the Chinese GUI locale (with
+    /// `desc_en` fallback when `desc_cn` is empty), `desc_en`
+    /// otherwise. Called from both `OtaOpen` (cache restore) and
+    /// `OtaFetched` (fresh fetch) so the editor's contents stay in
+    /// lockstep with whatever the popup is about to render.
+    fn seed_ota_changelog_editor(&mut self, state: &OtaPopupState) {
+        let editor_text = if let OtaPopupState::Ready(u) = state {
+            let prefer_cn = matches!(self.settings.language, Language::Zh);
+            let raw = if prefer_cn && !u.desc_cn.trim().is_empty() {
+                &u.desc_cn
+            } else if !u.desc_en.trim().is_empty() {
+                &u.desc_en
+            } else {
+                &u.desc_cn
+            };
+            ltbox_core::lenovo_ota::format_changelog(raw)
+        } else {
+            String::new()
+        };
+        self.ota_changelog_editor = iced::widget::text_editor::Content::with_text(&editor_text);
     }
 
     fn sidebar(&self) -> Element<'_, Message> {
