@@ -332,7 +332,7 @@
   "live_fastboot_continue_failed": "fastboot continue 실패: {error}",
   "live_fastboot_oem_edl_failed": "fastboot oem edl 실패: {error}",
   "live_fastboot_open_failed": "Fastboot 기기 열기 실패: {error}",
-  "live_flash_adb_to_bootloader": "기기가 ADB 모드 — fastboot 변수 조회를 위해 bootloader로 재부팅 중...",
+  "live_flash_adb_to_bootloader": "기기가 ADB 모드 — fastboot 변수 조회를 위해 부트로더로 재부팅 중...",
   "live_flash_boot_status": "boot.img: {status}",
   "live_flash_completed": "펌웨어 플래싱 완료",
   "live_flash_country_devinfo": "국가 코드: {code} — devinfo/persist 패치 예정",
