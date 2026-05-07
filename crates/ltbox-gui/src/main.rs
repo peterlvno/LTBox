@@ -3248,6 +3248,29 @@ fn neutral_pill_btn_style(t: &Theme, _s: button::Status) -> button::Style {
     }
 }
 
+/// Transparent-base button style with a subtle tinted background on
+/// hover. Used by dashboard cells (firmware kv + device portrait) that
+/// want a click affordance without inheriting the full M3 button chrome
+/// — resting state stays flush with the card surface, hover lifts via
+/// the same alpha mixing the wizard option cards use.
+fn dash_clickable_btn_style(t: &Theme, status: button::Status) -> button::Style {
+    let p = pal_of(t);
+    let hovered = matches!(status, button::Status::Hovered);
+    button::Style {
+        background: if hovered {
+            Some(with_alpha(p.primary, theme::state::HOVER).into())
+        } else {
+            None
+        },
+        text_color: p.on_surface,
+        border: iced::Border {
+            radius: theme::shape::SM.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 /// M3 dialog shell — centred card on a dim scrim, 28 dp radius,
 /// `surface_container` fill, elevation-2 shadow. Inner content owns
 /// its own padding + width.
@@ -10954,16 +10977,18 @@ impl App {
         device_col = device_col.push(Space::new().height(6));
         // Firmware kv is clickable when a firmware id is populated —
         // tap to fetch the matching Lenovo OTA update payload. Wrap in
-        // `mouse_area` so the kv column renders identically to the
-        // ARB / Model / etc cells (no button chrome) but registers
-        // clicks. `interaction(Pointer)` flips the cursor on hover so
-        // the affordance is discoverable.
+        // a `button` with `dash_clickable_btn_style` so the cell stays
+        // flush with the card at rest but tints on hover, making the
+        // click affordance visible. The previous `mouse_area` only set
+        // the cursor — users on a stable pointer (touchpad tap) had no
+        // visual cue.
         let firmware_kv: Element<'_, Message> = if self.device_firmware.is_empty() {
             info_kv(self.t("device_firmware"), firmware)
         } else {
-            iced::widget::mouse_area(info_kv(self.t("device_firmware"), firmware))
+            button(info_kv(self.t("device_firmware"), firmware))
                 .on_press(Message::OtaOpen)
-                .interaction(iced::mouse::Interaction::Pointer)
+                .padding([4, 8])
+                .style(dash_clickable_btn_style)
                 .into()
         };
         device_col =
@@ -11000,9 +11025,12 @@ impl App {
             let portrait_clickable: Element<'_, Message> = if self.device_serial.is_empty() {
                 portrait_box.into()
             } else {
-                iced::widget::mouse_area(portrait_box)
+                // Same hover-tint pattern as the firmware kv so both
+                // dashboard click targets look identically interactive.
+                button(portrait_box)
                     .on_press(Message::DeviceInfoOpen)
-                    .interaction(iced::mouse::Interaction::Pointer)
+                    .padding(0)
+                    .style(dash_clickable_btn_style)
                     .into()
             };
             row![device_col, portrait_clickable,]
