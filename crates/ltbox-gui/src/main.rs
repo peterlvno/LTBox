@@ -3366,6 +3366,12 @@ where
 
 #[derive(Debug, Clone)]
 enum Message {
+    /// No-op handler for `mouse_area` widgets that exist purely to
+    /// swallow pointer events (e.g. sidebar overlay click-blocker so
+    /// the underlying content doesn't react to hover / clicks landing
+    /// in the gaps between nav buttons). Update path matches all by
+    /// returning `Task::none()` so the runtime drops the message.
+    Noop,
     Navigate(View),
     SetTheme(ThemeChoice),
     ToggleLogPopup(bool),
@@ -4744,6 +4750,7 @@ impl App {
                 }
             }
             // Navigation
+            Message::Noop => {}
             Message::Navigate(v) => {
                 self.current_view = v;
                 // Keep wizard state during a running op or on the
@@ -10698,9 +10705,20 @@ impl App {
             .style(panel_bg);
         let shell =
             row![panel, widget::rule::vertical(1).style(shell_rule_style)].height(Length::Fill);
+        // `on_press` consumes the click; `interaction(Idle)` makes
+        // `iced::widget::Stack` levitate the cursor for the layer
+        // below — without a non-`None` interaction reported here,
+        // the gap pixels between nav rows fall through to whatever
+        // wizard card the sidebar floats over and that lower widget
+        // independently registers `Hovered` (its `draw` checks
+        // `cursor.is_over(bounds)`, not Move events). `Idle` is the
+        // plain arrow cursor; the inner nav buttons override it to
+        // `Pointer` on their own bounds.
         iced::widget::mouse_area(shell)
             .on_enter(Message::SidebarHoverEnter)
             .on_exit(Message::SidebarHoverExit)
+            .on_press(Message::Noop)
+            .interaction(iced::mouse::Interaction::Idle)
             .into()
     }
 
