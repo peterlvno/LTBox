@@ -9913,6 +9913,45 @@ impl App {
             .into()
     }
 
+    /// Shared loading-state body for any `_popup_view` that fetches
+    /// upstream data. 48 px tall slim box with a centred spinner —
+    /// every popup uses the same shape, so consolidate here instead
+    /// of duplicating the container chain in each call site.
+    fn popup_loading_view(&self) -> Element<'_, Message> {
+        container(Spinner::new())
+            .width(Length::Fill)
+            .height(48)
+            .center_x(Length::Fill)
+            .center_y(48)
+            .into()
+    }
+
+    /// Shared error-state body. Renders the localized header
+    /// (`error_key`), the raw upstream error text, and a Retry pill
+    /// that fires `retry_msg`. Same shape as the loading view —
+    /// pulled out of the device-info / OTA popups which had two
+    /// near-identical copies.
+    fn popup_error_view(
+        &self,
+        error_key: &str,
+        e: &str,
+        retry_msg: Message,
+    ) -> Element<'_, Message> {
+        column![
+            text(self.t(error_key).to_string())
+                .size(13)
+                .color(iced::Color::from_rgb(0.9, 0.2, 0.2)),
+            text(e.to_string()).size(11).style(muted_style),
+            Space::new().height(8),
+            button(text(self.t("btn_retry").to_string()).size(12))
+                .on_press(retry_msg)
+                .padding([6, 18])
+                .style(md_filled_btn_style),
+        ]
+        .spacing(8)
+        .into()
+    }
+
     /// Device-info popup: render the Lenovo PTSTPD `data` block as a
     /// 2-column key/value table. Branches on `DeviceInfoState` so the
     /// modal stays open through Loading / Error / Ready transitions
@@ -9981,25 +10020,10 @@ impl App {
             .style(muted_style);
 
         let body: Element<'_, Message> = match &state {
-            DeviceInfoState::Loading => container(Spinner::new())
-                .width(Length::Fill)
-                .height(48)
-                .center_x(Length::Fill)
-                .center_y(48)
-                .into(),
-            DeviceInfoState::Error(e) => column![
-                text(self.t("device_info_popup_error").to_string())
-                    .size(13)
-                    .color(iced::Color::from_rgb(0.9, 0.2, 0.2)),
-                text(e.clone()).size(11).style(muted_style),
-                Space::new().height(8),
-                button(text(self.t("btn_retry").to_string()).size(12))
-                    .on_press(Message::DeviceInfoRetry)
-                    .padding([6, 18])
-                    .style(md_filled_btn_style),
-            ]
-            .spacing(8)
-            .into(),
+            DeviceInfoState::Loading => self.popup_loading_view(),
+            DeviceInfoState::Error(e) => {
+                self.popup_error_view("device_info_popup_error", e, Message::DeviceInfoRetry)
+            }
             DeviceInfoState::Ready => {
                 let info = match self.device_info_cache.get(&serial) {
                     Some(i) => i,
@@ -10074,25 +10098,10 @@ impl App {
             .align_y(iced::Alignment::Center);
 
         let body: Element<'_, Message> = match &state {
-            OtaPopupState::Loading => container(Spinner::new())
-                .width(Length::Fill)
-                .height(48)
-                .center_x(Length::Fill)
-                .center_y(48)
-                .into(),
-            OtaPopupState::Error(e) => column![
-                text(self.t("ota_popup_error").to_string())
-                    .size(13)
-                    .color(iced::Color::from_rgb(0.9, 0.2, 0.2)),
-                text(e.clone()).size(11).style(muted_style),
-                Space::new().height(8),
-                button(text(self.t("btn_retry").to_string()).size(12))
-                    .on_press(Message::OtaRetry)
-                    .padding([6, 18])
-                    .style(md_filled_btn_style),
-            ]
-            .spacing(8)
-            .into(),
+            OtaPopupState::Loading => self.popup_loading_view(),
+            OtaPopupState::Error(e) => {
+                self.popup_error_view("ota_popup_error", e, Message::OtaRetry)
+            }
             OtaPopupState::NoUpdate => container(
                 text(self.t("ota_popup_unavailable").to_string())
                     .size(14)
