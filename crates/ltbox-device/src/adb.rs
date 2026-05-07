@@ -43,6 +43,21 @@ impl AdbManager {
         }
     }
 
+    /// Convenience for the `let mut adb = AdbManager::new(); if
+    /// adb.check_device().unwrap_or(false) { ... }` pattern repeated
+    /// across the GUI, root pipeline, and rescue flows. Returns
+    /// `Some(adb)` when a fully-authorized device is reachable, `None`
+    /// otherwise (including when the underlying probe errored — every
+    /// existing caller swallowed the error via `unwrap_or(false)`).
+    pub fn new_if_connected() -> Option<Self> {
+        let mut adb = Self::new();
+        if adb.check_device().unwrap_or(false) {
+            Some(adb)
+        } else {
+            None
+        }
+    }
+
     fn server(&self) -> ADBServer {
         ADBServer::new(self.server_addr)
     }

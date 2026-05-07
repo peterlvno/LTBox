@@ -3178,13 +3178,10 @@ fn transition_to_edl(_ll: &LiveLabels, log: &mut Vec<String>) -> std::result::Re
         ConnectionStatus::Edl
     } else if ltbox_device::fastboot::FastbootDevice::check_device() {
         ConnectionStatus::Fastboot
+    } else if ltbox_device::adb::AdbManager::new_if_connected().is_some() {
+        ConnectionStatus::Adb
     } else {
-        let mut adb = ltbox_device::adb::AdbManager::new();
-        if adb.check_device().unwrap_or(false) {
-            ConnectionStatus::Adb
-        } else {
-            ConnectionStatus::None
-        }
+        ConnectionStatus::None
     };
     ensure_edl(conn, "EDL", log).map_err(|()| "Could not transition device to EDL".to_string())
 }
@@ -4903,8 +4900,9 @@ impl App {
                                     "[ADB] {}",
                                     ltbox_core::i18n::tr("live_adb_checking_device")
                                 );
-                                let mut adb = ltbox_device::adb::AdbManager::new();
-                                if adb.check_device().unwrap_or(false) {
+                                if let Some(adb) =
+                                    ltbox_device::adb::AdbManager::new_if_connected()
+                                {
                                     ltbox_core::live!(
                                         log,
                                         "[ADB] {}",
@@ -4955,8 +4953,9 @@ impl App {
                                     "[Flash] {}",
                                     ltbox_core::i18n::tr("live_flash_adb_to_bootloader")
                                 );
-                                let mut adb = ltbox_device::adb::AdbManager::new();
-                                if adb.check_device().unwrap_or(false) {
+                                if let Some(mut adb) =
+                                    ltbox_device::adb::AdbManager::new_if_connected()
+                                {
                                     match adb.reboot("bootloader") {
                                         Ok(()) => {
                                             // Poll for Fastboot up to
@@ -5001,8 +5000,9 @@ impl App {
                                 );
                                 // Best-effort reboot — any failure stays
                                 // in the log; wizard still gets the Err.
-                                let mut adb = ltbox_device::adb::AdbManager::new();
-                                if adb.check_device().unwrap_or(false) {
+                                if let Some(adb) =
+                                    ltbox_device::adb::AdbManager::new_if_connected()
+                                {
                                     if let Err(e) = adb.shell("reboot") {
                                         ltbox_core::live!(
                                             log,
@@ -6608,16 +6608,13 @@ impl App {
                         // `RootKernelVersionProbeDone`.
                         return task_heavy(
                             || {
-                                let mut adb = ltbox_device::adb::AdbManager::new();
-                                if adb.check_device().unwrap_or(false) {
+                                ltbox_device::adb::AdbManager::new_if_connected().and_then(|adb| {
                                     adb.get_kernel_version().ok().flatten().and_then(|kv| {
                                         ltbox_patch::root_pipeline::normalize_ksu_kernel_version(
                                             &kv,
                                         )
                                     })
-                                } else {
-                                    None
-                                }
+                                })
                             },
                             |__v| Message::Root(RootMsg::RootKernelVersionProbeDone(__v)),
                             |_e| None,
@@ -6852,8 +6849,9 @@ impl App {
                         self.connection,
                         ConnectionStatus::Adb | ConnectionStatus::AdbRecovery
                     ) {
-                    let mut adb = ltbox_device::adb::AdbManager::new();
-                    let (mountinfo, encrypt_type) = if adb.check_device().unwrap_or(false) {
+                    let (mountinfo, encrypt_type) = if let Some(adb) =
+                        ltbox_device::adb::AdbManager::new_if_connected()
+                    {
                         let mi = adb.shell("cat /proc/self/mountinfo").unwrap_or_default();
                         let cs = adb.shell("getprop ro.crypto.state").unwrap_or_default();
                         let ct = adb.shell("getprop ro.crypto.type").unwrap_or_default();
@@ -7010,8 +7008,9 @@ impl App {
                             let mut kernel_version: Option<String> = gui_kernel_version.clone();
                             let mut adb_ready_at_start = false;
                             if !skip_adb {
-                                let mut adb = ltbox_device::adb::AdbManager::new();
-                                if adb.check_device().unwrap_or(false) {
+                                if let Some(adb) =
+                                    ltbox_device::adb::AdbManager::new_if_connected()
+                                {
                                     adb_ready_at_start = true;
                                     if mode == Some(RootMode::Lkm) {
                                         if let Ok(Some(kv)) = adb.get_kernel_version() {
