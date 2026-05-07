@@ -3404,6 +3404,10 @@ enum Message {
     OtaRetry,
     /// Open the OTA download URL in the host's default browser.
     OtaOpenDownload(String),
+    /// Read-only forward of `text_editor::Action` for the OTA popup's
+    /// changelog editor. Edit actions are dropped so the user can
+    /// drag-select / Ctrl+C without mutating the changelog buffer.
+    OtaChangelogAction(iced::widget::text_editor::Action),
     /// Copy `payload` to the OS clipboard. Pairs with `ToastShow` so
     /// the user gets a visual confirmation; clipboard writes return a
     /// `Task<Message>` from iced so the second message is chained.
@@ -3807,6 +3811,12 @@ struct App {
     /// handler can re-issue the same query without recapturing the
     /// dashboard fields.
     ota_popup: Option<(String, String, OtaPopupState)>,
+    /// Read-only `text_editor::Content` mirror of the OTA popup's
+    /// changelog text. Pulled out of the popup state so drag-select +
+    /// Ctrl+C work — the `text` widget is a static label and won't
+    /// surface a selection. Re-populated when a Ready state lands and
+    /// reset to empty on every Loading / NoUpdate / Error transition.
+    ota_changelog_editor: iced::widget::text_editor::Content,
     /// PatchArb wizard's unix-timestamp input popup. `true` while the
     /// modal is on screen between picking the firmware folder and the
     /// Confirm step.
@@ -3969,6 +3979,7 @@ impl Default for App {
             device_info_cache: std::collections::HashMap::new(),
             device_info_popup: None,
             ota_popup: None,
+            ota_changelog_editor: iced::widget::text_editor::Content::with_text(""),
             arb_index_popup_open: false,
             toast_msg: None,
             sidebar_expanded: false,
@@ -8828,10 +8839,37 @@ impl App {
                     Ok(None) => OtaPopupState::NoUpdate,
                     Err(e) => OtaPopupState::Error(e),
                 };
+                // Re-seed the changelog editor — pick desc_cn for
+                // Chinese GUI locale (with desc_en fallback when cn is
+                // empty), desc_en otherwise. Mirrors the popup view's
+                // own selection so the editor's text matches what the
+                // popup will render.
+                let editor_text = if let OtaPopupState::Ready(u) = &new_state {
+                    let prefer_cn = matches!(self.settings.language, Language::Zh);
+                    let raw = if prefer_cn && !u.desc_cn.trim().is_empty() {
+                        &u.desc_cn
+                    } else if !u.desc_en.trim().is_empty() {
+                        &u.desc_en
+                    } else {
+                        &u.desc_cn
+                    };
+                    ltbox_core::lenovo_ota::format_changelog(raw)
+                } else {
+                    String::new()
+                };
+                self.ota_changelog_editor =
+                    iced::widget::text_editor::Content::with_text(&editor_text);
                 self.ota_popup = Some((serial, firmware_id, new_state));
             }
             Message::OtaClose => {
                 self.ota_popup = None;
+                self.ota_changelog_editor = iced::widget::text_editor::Content::with_text("");
+            }
+            Message::OtaChangelogAction(action) => {
+                use iced::widget::text_editor::Action;
+                if !matches!(action, Action::Edit(_)) {
+                    self.ota_changelog_editor.perform(action);
+                }
             }
             Message::OtaRetry => {
                 let Some((serial, firmware_id, _)) = self.ota_popup.clone() else {
@@ -10032,19 +10070,12 @@ impl App {
             .center_y(Length::Fill)
             .into(),
             OtaPopupState::Ready(update) => {
-                // Changelog source: prefer `desc_cn` when the user is
-                // running the GUI in Chinese, fall back to `desc_en`
-                // otherwise (and also when `desc_cn` is empty so a
-                // missing translation never leaves the section blank).
-                let prefer_cn = matches!(self.settings.language, Language::Zh);
-                let raw_desc = if prefer_cn && !update.desc_cn.trim().is_empty() {
-                    &update.desc_cn
-                } else if !update.desc_en.trim().is_empty() {
-                    &update.desc_en
-                } else {
-                    &update.desc_cn
-                };
-                let changelog = ltbox_core::lenovo_ota::format_changelog(raw_desc);
+                // Changelog text lives in `self.ota_changelog_editor`,
+                // seeded by the `OtaFetched` handler from `desc_cn`
+                // (Chinese GUI locale, when populated) or `desc_en`.
+                // Rendered here through `text_editor` so drag-select +
+                // Ctrl+C work — a plain `text` widget is a static label
+                // and won't surface a selection.
                 let size_str = ltbox_core::lenovo_ota::format_size(update.size_bytes);
 
                 let from_to_row = column![
@@ -10061,11 +10092,16 @@ impl App {
                 ]
                 .spacing(40);
 
+                let changelog_editor: Element<'_, Message> =
+                    iced::widget::text_editor(&self.ota_changelog_editor)
+                        .on_action(Message::OtaChangelogAction)
+                        .size(12)
+                        .into();
                 let changelog_block = column![
                     text(self.t("ota_popup_changelog").to_string())
                         .size(11)
                         .style(label_style),
-                    container(text(changelog).size(12))
+                    container(changelog_editor)
                         .padding([8, 10])
                         .width(Length::Fill)
                         .style(|t: &Theme| {
