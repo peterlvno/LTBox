@@ -189,19 +189,29 @@ impl AdbManager {
     }
 
     pub fn get_kernel_version(&self) -> Result<Option<String>> {
+        const PREFIX: &str = "Linux version ";
         match self.shell("cat /proc/version") {
             Ok(v) => {
-                if let Some(start) = v.find("Linux version ") {
-                    let rest = &v[start + 14..];
-                    let ver: String = rest
-                        .chars()
-                        .take_while(|c| c.is_ascii_digit() || *c == '.')
-                        .collect();
-                    if !ver.is_empty() {
-                        return Ok(Some(ver));
-                    }
+                // `find` + the rest-slice path used a hardcoded
+                // `start + 14` arithmetic that drifted silently if the
+                // prefix string ever changed; do the lookup via
+                // `find` + `strip_prefix` on the trimmed tail so the
+                // length stays in sync with the literal automatically.
+                let Some(start) = v.find(PREFIX) else {
+                    return Ok(None);
+                };
+                let Some(rest) = v[start..].strip_prefix(PREFIX) else {
+                    return Ok(None);
+                };
+                let ver: String = rest
+                    .chars()
+                    .take_while(|c| c.is_ascii_digit() || *c == '.')
+                    .collect();
+                if !ver.is_empty() {
+                    Ok(Some(ver))
+                } else {
+                    Ok(None)
                 }
-                Ok(None)
             }
             Err(_) => Ok(None),
         }
