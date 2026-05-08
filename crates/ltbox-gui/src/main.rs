@@ -2197,11 +2197,18 @@ struct SysUpdateWizard {
     /// Rescue: firmware folder containing loader (`xbl_s_devprg_ns.melf`).
     rescue_folder: Option<String>,
     /// Rescue: selected target region. Set via popup between Folder and
-    /// Confirm steps.
+    /// Confirm steps. May be pre-seeded from `inferred_flash_region`
+    /// (PTSTPD `SaleArea`) before the popup opens — `rescue_region_confirmed`
+    /// tracks whether the user explicitly clicked through.
     rescue_region: Option<RescueRegion>,
     /// Rescue: region popup overlay flag. Opens on Next press from the
-    /// Folder step when no region is committed yet.
+    /// Folder step when the user hasn't yet confirmed a region pick.
     rescue_region_popup_open: bool,
+    /// Rescue: true once the user has clicked a region radio in the
+    /// popup. Distinguishes a pre-seeded `rescue_region` (initial
+    /// preselect from `inferred_flash_region`) from a user-confirmed
+    /// pick — preselect alone shouldn't skip the popup.
+    rescue_region_confirmed: bool,
 }
 
 const SYSUPDATE_STEPS_COMPACT: &[&str] = &[
@@ -6004,12 +6011,28 @@ impl App {
                 self.sysupdate.rescue_folder = None;
                 self.sysupdate.rescue_region = None;
                 self.sysupdate.rescue_region_popup_open = false;
+                self.sysupdate.rescue_region_confirmed = false;
             }
             Message::Sys(SysMsg::SysNext) => {
                 // Rescue flow: Action(0) → Folder(1) → Confirm(2) → Exec(3).
                 // Gate: popping the region popup between Folder and Confirm.
                 if self.sysupdate.is_rescue() {
-                    if self.sysupdate.step == 1 && self.sysupdate.rescue_region.is_none() {
+                    if self.sysupdate.step == 1 && !self.sysupdate.rescue_region_confirmed {
+                        // Pre-select rescue region from the polled
+                        // device's PTSTPD `SaleArea` when we have it,
+                        // mirroring how Flash seeds `device_region`
+                        // from `inferred_flash_region`. The popup
+                        // still opens — users get to see/confirm —
+                        // but the matching radio is checked on entry
+                        // so a CN device doesn't force a blind pick.
+                        if self.sysupdate.rescue_region.is_none()
+                            && let Some(inferred) = self.inferred_flash_region()
+                        {
+                            self.sysupdate.rescue_region = Some(match inferred {
+                                DeviceRegion::Prc => RescueRegion::Prc,
+                                DeviceRegion::Row => RescueRegion::Row,
+                            });
+                        }
                         self.sysupdate.rescue_region_popup_open = true;
                         return Task::none();
                     }
@@ -6047,10 +6070,12 @@ impl App {
                     // region from a prior firmware could target the wrong
                     // hardware.
                     self.sysupdate.rescue_region = None;
+                    self.sysupdate.rescue_region_confirmed = false;
                 }
             }
             Message::Sys(SysMsg::SysRescueRegion(r)) => {
                 self.sysupdate.rescue_region = Some(r);
+                self.sysupdate.rescue_region_confirmed = true;
                 self.sysupdate.rescue_region_popup_open = false;
                 // Auto-advance out of Folder step into Confirm — picking
                 // the region is the implicit "Next" of the popup.
