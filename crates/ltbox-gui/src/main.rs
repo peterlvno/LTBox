@@ -331,6 +331,13 @@ fn main() -> iced::Result {
             .ok();
     let window_settings = iced::window::Settings {
         size: iced::Size::new(820.0, 620.0),
+        // Cursor-drag resize: 820x620 is the floor; anything below is
+        // unsupported (sidebar + wizard cards stop laying out cleanly).
+        // The borderless decorations strip native resize edges off the
+        // window, so the GUI overlays 8 invisible resize handles on the
+        // root Stack which emit `WindowMsg::WindowResize(direction)`
+        // and call `iced::window::drag_resize` on the host window.
+        min_size: Some(iced::Size::new(820.0, 620.0)),
         icon: win_icon,
         decorations: false,
         ..Default::default()
@@ -3485,6 +3492,10 @@ enum WindowMsg {
     WindowMinimize,
     WindowToggleMaximize,
     WindowClose,
+    /// Cursor-drag resize emitted by the invisible edge/corner
+    /// handles overlaid on the root Stack. The borderless titlebar
+    /// removes native winit resize edges, so the GUI synthesizes them.
+    WindowResize(iced::window::Direction),
 }
 
 #[derive(Debug, Clone)]
@@ -4713,6 +4724,11 @@ impl App {
             Message::Window(WindowMsg::WindowClose) => {
                 if let Some(id) = self.window_id {
                     return iced::window::close(id);
+                }
+            }
+            Message::Window(WindowMsg::WindowResize(direction)) => {
+                if let Some(id) = self.window_id {
+                    return iced::window::drag_resize(id, direction);
                 }
             }
             // Navigation
@@ -9798,6 +9814,122 @@ impl App {
         Task::none()
     }
 
+    /// Eight invisible resize handles (4 edges + 4 corners) overlaid
+    /// on the root Stack. Each handle is a `mouse_area` wrapping a
+    /// fixed-size empty container, aligned to the corresponding edge
+    /// or corner of an outer `Length::Fill` positioner. Events outside
+    /// each handle's bounding box pass through to the layers below so
+    /// normal UI clicks aren't intercepted.
+    ///
+    /// Corner handles render after edge handles so a click in the
+    /// 8x8 corner square triggers a diagonal resize cursor rather
+    /// than the orthogonal edge cursor that overlaps it.
+    fn resize_handles(&self) -> Element<'_, Message> {
+        const EDGE: f32 = 4.0;
+        const CORNER: f32 = 8.0;
+
+        // Build one positioned, transparent handle.
+        // `dir`: which window edge / corner this handle resizes.
+        // `w` / `h`: handle hit-area size.
+        // `x` / `y`: alignment of the handle inside the Fill outer.
+        // `interaction`: cursor to show on hover.
+        let handle = |dir: iced::window::Direction,
+                      w: Length,
+                      h: Length,
+                      x: iced::alignment::Horizontal,
+                      y: iced::alignment::Vertical,
+                      interaction: iced::mouse::Interaction|
+         -> Element<'_, Message> {
+            let hit = container(iced::widget::Space::new()).width(w).height(h);
+            let area = iced::widget::mouse_area(hit)
+                .on_press(Message::Window(WindowMsg::WindowResize(dir)))
+                .interaction(interaction);
+            container(area)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(x)
+                .align_y(y)
+                .into()
+        };
+
+        use iced::alignment::{Horizontal, Vertical};
+        use iced::mouse::Interaction;
+        use iced::window::Direction;
+        let edges: Vec<Element<'_, Message>> = vec![
+            // Edges first (lower z) so corners can overlap them.
+            handle(
+                Direction::North,
+                Length::Fill,
+                Length::Fixed(EDGE),
+                Horizontal::Center,
+                Vertical::Top,
+                Interaction::ResizingVertically,
+            ),
+            handle(
+                Direction::South,
+                Length::Fill,
+                Length::Fixed(EDGE),
+                Horizontal::Center,
+                Vertical::Bottom,
+                Interaction::ResizingVertically,
+            ),
+            handle(
+                Direction::West,
+                Length::Fixed(EDGE),
+                Length::Fill,
+                Horizontal::Left,
+                Vertical::Center,
+                Interaction::ResizingHorizontally,
+            ),
+            handle(
+                Direction::East,
+                Length::Fixed(EDGE),
+                Length::Fill,
+                Horizontal::Right,
+                Vertical::Center,
+                Interaction::ResizingHorizontally,
+            ),
+            // Corners on top so the diagonal cursor + diagonal resize
+            // win at the actual corner pixels.
+            handle(
+                Direction::NorthWest,
+                Length::Fixed(CORNER),
+                Length::Fixed(CORNER),
+                Horizontal::Left,
+                Vertical::Top,
+                Interaction::ResizingDiagonallyDown,
+            ),
+            handle(
+                Direction::NorthEast,
+                Length::Fixed(CORNER),
+                Length::Fixed(CORNER),
+                Horizontal::Right,
+                Vertical::Top,
+                Interaction::ResizingDiagonallyUp,
+            ),
+            handle(
+                Direction::SouthWest,
+                Length::Fixed(CORNER),
+                Length::Fixed(CORNER),
+                Horizontal::Left,
+                Vertical::Bottom,
+                Interaction::ResizingDiagonallyUp,
+            ),
+            handle(
+                Direction::SouthEast,
+                Length::Fixed(CORNER),
+                Length::Fixed(CORNER),
+                Horizontal::Right,
+                Vertical::Bottom,
+                Interaction::ResizingDiagonallyDown,
+            ),
+        ];
+        iced::widget::Stack::with_children(edges)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
     fn title_bar(&self) -> Element<'_, Message> {
         let title_content = container(
             row![
@@ -9971,11 +10103,14 @@ impl App {
             layers.push(self.toast_view());
         }
 
-        if layers.len() == 1 {
-            layers.into_iter().next().unwrap()
-        } else {
-            iced::widget::Stack::with_children(layers).into()
-        }
+        // Resize handles last so the 4px/8px hit areas at the window
+        // edges and corners sit above every popup/toast — the user can
+        // still grab the border while a dialog is open. Events outside
+        // each handle's bounding box pass through to the layers below
+        // so normal UI clicks aren't intercepted.
+        layers.push(self.resize_handles());
+
+        iced::widget::Stack::with_children(layers).into()
     }
 
     fn busy_progress_dialog(&self) -> Element<'_, Message> {
