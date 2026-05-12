@@ -168,6 +168,58 @@ pub mod state {
     pub const DRAGGED: f32 = 0.16;
 }
 
+/// M3 motion tokens — easing curves (cubic-bezier control points) and
+/// duration tokens (milliseconds). Spring-driven animations (sidebar
+/// rail) stay on their physical model; these are reference values for
+/// linear-interpolated tweens (popup fade, toast slide, page transition).
+pub mod motion {
+    /// `cubic-bezier(x1, y1, x2, y2)` — outer control points.
+    pub type Easing = (f32, f32, f32, f32);
+
+    // Emphasized — primary easing for incoming/outgoing content,
+    // navigation, and other large layout changes.
+    pub const EMPHASIZED: Easing = (0.2, 0.0, 0.0, 1.0);
+    pub const EMPHASIZED_DECELERATE: Easing = (0.05, 0.7, 0.1, 1.0);
+    pub const EMPHASIZED_ACCELERATE: Easing = (0.3, 0.0, 0.8, 0.15);
+    // Standard — secondary easing for small UI elements and state
+    // changes that should feel routine rather than emphasized.
+    pub const STANDARD: Easing = (0.2, 0.0, 0.0, 1.0);
+    pub const STANDARD_DECELERATE: Easing = (0.0, 0.0, 0.0, 1.0);
+    pub const STANDARD_ACCELERATE: Easing = (0.3, 0.0, 1.0, 1.0);
+    pub const LINEAR: Easing = (0.0, 0.0, 1.0, 1.0);
+
+    // Duration tokens (ms). M3 groups durations into short / medium /
+    // long / extra long; pick by the magnitude of the layout change.
+    pub const SHORT_1: u32 = 50;
+    pub const SHORT_2: u32 = 100;
+    pub const SHORT_3: u32 = 150;
+    pub const SHORT_4: u32 = 200;
+    pub const MEDIUM_1: u32 = 250;
+    pub const MEDIUM_2: u32 = 300;
+    pub const MEDIUM_3: u32 = 350;
+    pub const MEDIUM_4: u32 = 400;
+    pub const LONG_1: u32 = 450;
+    pub const LONG_2: u32 = 500;
+    pub const LONG_3: u32 = 550;
+    pub const LONG_4: u32 = 600;
+    pub const EXTRA_LONG_1: u32 = 700;
+    pub const EXTRA_LONG_2: u32 = 800;
+    pub const EXTRA_LONG_3: u32 = 900;
+    pub const EXTRA_LONG_4: u32 = 1000;
+
+    /// Parametric evaluation of a cubic Bézier at `t in [0, 1]`. This
+    /// returns `y(t)` for parameter `t`, not `y(x)` (CSS easing form).
+    /// For animation tweens both forms read close enough since the
+    /// curves are monotonic; if exact CSS parity matters, invert via
+    /// Newton's method on `x` first.
+    pub fn eval(curve: Easing, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        let (_, p1y, _, p2y) = curve;
+        let u = 1.0 - t;
+        3.0 * u * u * t * p1y + 3.0 * u * t * t * p2y + t * t * t
+    }
+}
+
 /// M3 shape scale (corner radius in px). Expressive uses rounder
 /// corners than baseline M3.
 pub mod shape {

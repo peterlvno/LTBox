@@ -11413,6 +11413,11 @@ impl App {
                     Message::Settings(SettingsMsg::SetLanguage(l))
                 },
             )
+            // Match the row label's 13 px size so the trigger button
+            // doesn't tower over the "Language" label next to it. The
+            // menu items inherit `text_size` for visual consistency
+            // with the trigger.
+            .text_size(13)
             .width(160),
         ]
         .align_y(iced::Alignment::Center);
@@ -11440,6 +11445,9 @@ impl App {
                 };
                 Message::SetTheme(choice)
             },)
+            // Match the row label's 13 px size. Same rationale as the
+            // language pick list.
+            .text_size(13)
             .width(160),
         ]
         .align_y(iced::Alignment::Center);
@@ -15891,39 +15899,65 @@ fn nav_btn<'a>(
     enabled: bool,
     label_alpha: f32,
 ) -> Element<'a, Message> {
+    // M3 active indicator pill: a 32x28 `secondary_container` chip
+    // wraps the icon when the item is selected. Replaces the older
+    // "tint the whole button" treatment so the active marker stays
+    // anchored to the icon and the label stays readable in its
+    // standard `on_surface` color.
     let icon = lucide_icon(view.nav_icon(), 18.0, move |t: &Theme| {
         let p = pal_of(t);
         if !enabled {
             with_alpha(p.on_surface, 0.38)
         } else if active {
-            p.primary
+            p.on_secondary_container
         } else {
             p.on_surface_variant
         }
     });
+    let icon_pill: Element<'a, Message> = container(icon)
+        .width(Length::Fixed(32.0))
+        .height(Length::Fixed(28.0))
+        .align_x(iced::alignment::Horizontal::Center)
+        .align_y(iced::alignment::Vertical::Center)
+        .style(move |t: &Theme| {
+            if active && enabled {
+                iced::widget::container::Style {
+                    background: Some(pal_of(t).secondary_container.into()),
+                    border: iced::Border {
+                        radius: theme::shape::FULL.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }
+            } else {
+                iced::widget::container::Style::default()
+            }
+        })
+        .into();
 
     // Single base layout in both modes: icon left-anchored + optional
     // label. Keeping the icon's horizontal position constant across
     // modes means it does not jump from "centered in 64 px shell"
     // to "left-padded next to label" the moment the label mounts.
-    // Identical `padding([0, 22])` on the outer button makes the
-    // icon's left margin (22 px) and the collapsed shell's natural
-    // icon center (≈ 23 px) read as the same x position to the eye.
-    let mut inner = iced::widget::row![icon]
-        .spacing(12)
+    // Outer padding shrinks from 22 → 15 (= 22 - (32-18)/2) so the
+    // pill's geometric center sits at the same x as the bare icon
+    // did before, avoiding a horizontal shift the moment a row
+    // becomes active.
+    let mut inner = iced::widget::row![icon_pill]
+        .spacing(8)
         .align_y(iced::Alignment::Center);
     if label_alpha > 0.0 {
-        // Resolve the base text color (active / hover / disabled apply
-        // via the button style below; here we just fade the label in
-        // along the spring), then re-apply alpha so the glyph fades
-        // in step with the sidebar width tween.
+        // Resolve the base text color (hover / disabled apply via the
+        // button style below; here we just fade the label in along
+        // the spring), then re-apply alpha so the glyph fades in step
+        // with the sidebar width tween. M3 nav rail uses `on_surface`
+        // for both active and inactive labels in the expanded form —
+        // the pill carries the emphasis, the label stays uniform.
         let alpha = label_alpha;
         let base_label_color = move |t: &Theme| -> iced::Color {
             let p = pal_of(t);
             if !enabled {
                 with_alpha(p.on_surface, 0.38)
-            } else if active {
-                p.primary
             } else {
                 p.on_surface
             }
@@ -15952,11 +15986,12 @@ fn nav_btn<'a>(
         .align_y(iced::Alignment::Center)
         .into();
 
-    // Horizontal padding stays at 22 in both modes so the icon
-    // doesn't slide horizontally as the sidebar tween crosses its
-    // midpoint. Vertical padding was already symmetrical.
+    // Outer padding 15px on each side: the 32-wide pill centered in
+    // a 62-wide content box places the pill (and the 18px icon inside)
+    // at the same on-screen x as the 18px icon at padding 22 used to.
+    // Vertical padding stays 0; height is fixed by NAV_BTN_HEIGHT.
     let btn = button(content)
-        .padding([0, 22])
+        .padding([0, 15])
         .width(Length::Fill)
         .height(Length::Fixed(NAV_BTN_HEIGHT))
         .style(move |t: &Theme, status| {
@@ -15968,25 +16003,32 @@ fn nav_btn<'a>(
                     ..Default::default()
                 };
             }
-            if active {
-                button::Style {
-                    background: Some(with_alpha(p.primary, 0.14).into()),
-                    text_color: p.primary,
-                    ..Default::default()
-                }
+            // State layers per M3: hover 8%, pressed 12%. Active items
+            // get a faint 4% on_surface wash so the row reads as
+            // "selected" even when not hovered — the pill carries the
+            // primary emphasis, this is just a quiet background hint.
+            let base_bg = if active {
+                Some(with_alpha(p.on_surface, 0.04).into())
             } else {
-                match status {
-                    button::Status::Hovered => button::Style {
-                        background: Some(with_alpha(p.on_surface, theme::state::HOVER).into()),
-                        text_color: p.on_surface,
-                        ..Default::default()
-                    },
-                    _ => button::Style {
-                        background: None,
-                        text_color: p.on_surface_variant,
-                        ..Default::default()
-                    },
+                None
+            };
+            let bg = match status {
+                button::Status::Hovered => {
+                    Some(with_alpha(p.on_surface, theme::state::HOVER).into())
                 }
+                button::Status::Pressed => {
+                    Some(with_alpha(p.on_surface, theme::state::PRESSED).into())
+                }
+                _ => base_bg,
+            };
+            button::Style {
+                background: bg,
+                text_color: if active {
+                    p.on_surface
+                } else {
+                    p.on_surface_variant
+                },
+                ..Default::default()
             }
         });
     if enabled {
