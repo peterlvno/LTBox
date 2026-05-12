@@ -3851,7 +3851,12 @@ struct App {
     /// Sidebar hover state — true when mouse is over the rail.
     sidebar_expanded: bool,
     /// Tween progress in [0.0, 1.0]. Width = lerp(64, 210, anim).
+    /// Driven by an M3 Expressive Spatial spring (see `SidebarAnimTick`).
     sidebar_anim: f32,
+    /// Spring velocity for `sidebar_anim`. Settle requires both the
+    /// displacement to target AND the velocity to be near zero so we
+    /// don't stop the subscription mid-overshoot.
+    sidebar_velocity: f32,
     // Device portrait derived at view time via `device_portrait()`.
     platform_supported: Option<bool>,
     busy: bool,
@@ -3997,6 +4002,7 @@ impl Default for App {
             toast_msg: None,
             sidebar_expanded: false,
             sidebar_anim: 0.0,
+            sidebar_velocity: 0.0,
             platform_supported: None,
             busy: false,
             busy_view: None,
@@ -4659,10 +4665,11 @@ impl App {
             iced::time::every(std::time::Duration::from_millis(500))
                 .map(|_| Message::DrainStdoutTap),
         ];
-        // Sidebar width tween: only emit ticks while the animation
+        // Sidebar width tween: only emit ticks while the spring
         // hasn't settled at its target so the GPU isn't woken every
-        // 16 ms forever.
-        let sidebar_settled = (self.sidebar_anim - self.sidebar_anim_target()).abs() < 0.005;
+        // 16 ms forever. Velocity check catches the overshoot tail.
+        let sidebar_settled = (self.sidebar_anim - self.sidebar_anim_target()).abs() < 0.001
+            && self.sidebar_velocity.abs() < 0.05;
         if !sidebar_settled {
             subs.push(
                 iced::time::every(std::time::Duration::from_millis(16))
@@ -9113,17 +9120,26 @@ impl App {
                 self.sidebar_expanded = false;
             }
             Message::SidebarAnimTick => {
+                // M3 Expressive Spatial spring: critically damped enough
+                // that navigation doesn't oscillate, with a touch of
+                // overshoot at hover-exit so the rail "snaps" closed.
+                // stiffness=180, damping_ratio≈0.85 → damping ≈ 22.8.
+                const STIFFNESS: f32 = 180.0;
+                const DAMPING: f32 = 22.8;
+                const DT: f32 = 0.016;
                 let target = self.sidebar_anim_target();
-                // Exponential decay toward the target. ~0.30 per
-                // 16 ms tick lands at ~99% in ~75 ms — fast enough
-                // that label mount (gated below) does not feel
-                // delayed but still smooth.
-                let factor = 0.30;
-                let next = self.sidebar_anim + (target - self.sidebar_anim) * factor;
-                if (next - target).abs() < 0.005 {
+                let displacement = target - self.sidebar_anim;
+                let force = displacement * STIFFNESS;
+                let damp = -self.sidebar_velocity * DAMPING;
+                self.sidebar_velocity += (force + damp) * DT;
+                let next = self.sidebar_anim + self.sidebar_velocity * DT;
+                // Settle: both displacement AND velocity near zero.
+                // Avoids clipping the tail of the spring response.
+                if displacement.abs() < 0.001 && self.sidebar_velocity.abs() < 0.05 {
                     self.sidebar_anim = target;
+                    self.sidebar_velocity = 0.0;
                 } else {
-                    self.sidebar_anim = next;
+                    self.sidebar_anim = next.clamp(-0.05, 1.05);
                 }
             }
             Message::DriverCheckDone(status) => {
@@ -10719,8 +10735,12 @@ impl App {
     }
 
     fn sidebar(&self) -> Element<'_, Message> {
-        // Settle threshold avoids glyph twitch from per-frame reshape.
-        let expanded = self.sidebar_anim >= 0.85;
+        // Label opacity tween — mounts at 40% width so there's room
+        // for glyphs to land, fades in via ease-out-cubic to 100% at
+        // the spring's settle point. Width and opacity ride the same
+        // spring so visual coherence holds across the whole animation.
+        let label_t = ((self.sidebar_anim - 0.4) / 0.5).clamp(0.0, 1.0);
+        let label_alpha = ease_out_cubic(label_t);
         let mut col = column![].spacing(1).padding([16, 0]);
         for &v in NAV_MAIN {
             col = col.push(nav_btn(
@@ -10728,17 +10748,17 @@ impl App {
                 self.t(v.label_key()),
                 self.current_view == v,
                 self.is_nav_enabled(v),
-                expanded,
+                label_alpha,
             ));
         }
-        col = col.push(sec_hdr(self.t("nav_section_tools"), expanded));
+        col = col.push(sec_hdr(self.t("nav_section_tools"), label_alpha));
         for &v in NAV_TOOLS {
             col = col.push(nav_btn(
                 v,
                 self.t(v.label_key()),
                 self.current_view == v,
                 self.is_nav_enabled(v),
-                expanded,
+                label_alpha,
             ));
         }
 
@@ -10784,17 +10804,30 @@ impl App {
         _release: &ltbox_core::github::StableRelease,
     ) -> Element<'_, Message> {
         let label = self.t("sidebar_update_available").to_string();
-        // Match the sidebar's settled-only check so the pill swaps
-        // in lockstep with the nav-button labels.
-        let expanded = self.sidebar_anim >= 0.85;
-        let inner: Element<'_, Message> = if expanded {
+        // Pill label rides the same opacity tween as nav-button labels
+        // for visual coherence. Mount text at any non-zero alpha so it
+        // fades in alongside the sidebar width spring rather than
+        // popping in at a threshold.
+        let label_t = ((self.sidebar_anim - 0.4) / 0.5).clamp(0.0, 1.0);
+        let label_alpha = ease_out_cubic(label_t);
+        let show_label = label_alpha > 0.0;
+        let inner: Element<'_, Message> = if show_label {
             row![
                 icon::tile_update_on()
                     .size(16)
                     .style(|t: &Theme| iced::widget::text::Style {
                         color: Some(pal_of(t).on_tertiary)
                     }),
-                text(label).size(13).line_height(1.2),
+                text(label)
+                    .size(13)
+                    .line_height(1.2)
+                    // No-wrap during sidebar spring: pill label
+                    // ("업데이트 가능" / "Доступно обновление") must
+                    // not wrap into 2 lines while the panel is narrow.
+                    .wrapping(iced::widget::text::Wrapping::None)
+                    .style(move |t: &Theme| iced::widget::text::Style {
+                        color: Some(with_alpha(pal_of(t).on_tertiary, label_alpha)),
+                    }),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center)
@@ -10816,7 +10849,11 @@ impl App {
                 })
                 .into()
         };
-        let btn_padding = if expanded { [10, 16] } else { [10, 10] };
+        // Horizontal padding tweens with label_alpha so the pill grows
+        // smoothly from icon-only (10) to label-bearing (16) rather
+        // than jumping in a single frame.
+        let pad_x = 10.0 + 6.0 * label_alpha;
+        let btn_padding = [10.0, pad_x];
         container(
             button(inner)
                 .on_press(Message::OpenUpdateUrl)
@@ -15804,23 +15841,35 @@ fn blend(base: iced::Color, overlay: iced::Color, t: f32) -> iced::Color {
 /// crosses its midpoint.
 const SEC_HDR_HEIGHT: f32 = 36.0;
 
-fn sec_hdr<'a>(label: &str, expanded: bool) -> Element<'a, Message> {
-    if !expanded {
+fn sec_hdr<'a>(label: &str, label_alpha: f32) -> Element<'a, Message> {
+    if label_alpha <= 0.0 {
         return container(text(""))
             .height(Length::Fixed(SEC_HDR_HEIGHT))
             .into();
     }
     let owned = label.to_string();
+    let alpha = label_alpha;
     container(
         text(owned)
             .size(theme::text_size::LABEL_SMALL)
-            .style(|t: &Theme| iced::widget::text::Style {
-                color: Some(pal_of(t).on_surface_variant),
+            // Same no-wrap rationale as nav_btn — section header text
+            // ("Tools" / "도구") must not flow into two lines mid-tween.
+            .wrapping(iced::widget::text::Wrapping::None)
+            .style(move |t: &Theme| iced::widget::text::Style {
+                color: Some(with_alpha(pal_of(t).on_surface_variant, alpha)),
             }),
     )
     .padding([10, 22])
     .height(Length::Fixed(SEC_HDR_HEIGHT))
     .into()
+}
+
+/// Cubic ease-out curve `f(t) = 1 - (1 - t)^3`, mapped to `[0, 1]`.
+/// Used by the sidebar tween so labels fade in faster early and
+/// settle smoothly near the spring's resting point.
+fn ease_out_cubic(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    1.0 - (1.0 - t).powi(3)
 }
 
 /// Pinned nav button height — matches the expanded label form so
@@ -15840,7 +15889,7 @@ fn nav_btn<'a>(
     label: &str,
     active: bool,
     enabled: bool,
-    expanded: bool,
+    label_alpha: f32,
 ) -> Element<'a, Message> {
     let icon = lucide_icon(view.nav_icon(), 18.0, move |t: &Theme| {
         let p = pal_of(t);
@@ -15863,12 +15912,38 @@ fn nav_btn<'a>(
     let mut inner = iced::widget::row![icon]
         .spacing(12)
         .align_y(iced::Alignment::Center);
-    if expanded {
+    if label_alpha > 0.0 {
+        // Resolve the base text color (active / hover / disabled apply
+        // via the button style below; here we just fade the label in
+        // along the spring), then re-apply alpha so the glyph fades
+        // in step with the sidebar width tween.
+        let alpha = label_alpha;
+        let base_label_color = move |t: &Theme| -> iced::Color {
+            let p = pal_of(t);
+            if !enabled {
+                with_alpha(p.on_surface, 0.38)
+            } else if active {
+                p.primary
+            } else {
+                p.on_surface
+            }
+        };
         inner = inner.push(
             text(label.to_string())
                 .size(13)
                 .height(Length::Fill)
-                .align_y(iced::alignment::Vertical::Center),
+                .align_y(iced::alignment::Vertical::Center)
+                // Forbid wrapping: during the sidebar spring there is
+                // a brief window where the panel is wide enough to
+                // mount the label but too narrow for long glyphs to
+                // fit on one line. Wrapping into 2 rows mid-tween then
+                // collapsing back to 1 row reads as a jank flicker.
+                // No-wrap lets the text overflow under the panel's
+                // clip rect instead — invisible until width settles.
+                .wrapping(iced::widget::text::Wrapping::None)
+                .style(move |t: &Theme| iced::widget::text::Style {
+                    color: Some(with_alpha(base_label_color(t), alpha)),
+                }),
         );
     }
     let content: Element<'a, Message> = container(inner)
