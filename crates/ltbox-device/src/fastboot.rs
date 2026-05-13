@@ -230,18 +230,36 @@ impl FastbootDevice {
         }
         if let Ok(lines) = self.command_all("getvar:all") {
             for line in &lines {
-                // hwboardid:TB322FC_SM8750P_16+512 → model=TB322FC, ram=16, storage=512
+                // hwboardid layout varies per SKU:
+                //   `TB322FC_SM8750P_16+512`  (model + SoC + spec)
+                //   `SM8750P_16+512`          (SoC + spec, no model token)
+                // RAM/storage always sit in the trailing `<n>+<n>` block,
+                // so we parse them off the tail regardless of layout.
+                // Model identification moved to the dedicated
+                // `modelname:` line below — the leading hwboardid token
+                // is the SoC name on stripped SKUs and not a reliable
+                // model source.
                 if let Some(val) = line.strip_prefix("hwboardid:") {
                     let val = val.trim();
-                    let parts: Vec<&str> = val.split('_').collect();
-                    if !parts.is_empty() {
-                        vars.model = Some(parts[0].to_string());
-                    }
-                    if let Some(last) = parts.last()
-                        && let Some((ram, storage)) = last.split_once('+')
-                    {
+                    if let Some((_prefix, tail)) = val.rsplit_once('_') {
+                        if let Some((ram, storage)) = tail.split_once('+') {
+                            vars.ram_gb = Some(format!("{ram} GB"));
+                            vars.storage_gb = Some(format!("{storage} GB"));
+                        }
+                    } else if let Some((ram, storage)) = val.split_once('+') {
+                        // Single-token form like `16+512` (defensive
+                        // fallback — no SKU observed shipping this).
                         vars.ram_gb = Some(format!("{ram} GB"));
                         vars.storage_gb = Some(format!("{storage} GB"));
+                    }
+                }
+                // `modelname:TB322FC` — the bootloader-published model
+                // identifier. Stable across SKUs that strip the model
+                // token from `hwboardid`.
+                if let Some(val) = line.strip_prefix("modelname:") {
+                    let val = val.trim();
+                    if !val.is_empty() {
+                        vars.model = Some(val.to_string());
                     }
                 }
                 if let Some((slot, val)) = parse_stored_rollback_line(line) {
