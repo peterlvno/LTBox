@@ -4722,6 +4722,109 @@ impl App {
         });
     }
 
+    // --- Window-chrome message handlers ------------------------------
+    //
+    // Extracted from the main `update` match so the per-variant detail
+    // doesn't bloat the 5 k-line dispatch tree. Each handler returns a
+    // `Task<Message>` (typically `Task::none()` when there's no
+    // outbound iced action).
+
+    /// Dispatch a `WindowMsg` — titlebar drag / minimize / maximize /
+    /// close / cursor-drag resize. All variants except
+    /// `WindowIdReceived` are gated on `self.window_id` being set;
+    /// before iced delivers the window id those calls would be
+    /// no-ops anyway.
+    fn update_window(&mut self, msg: WindowMsg) -> Task<Message> {
+        match msg {
+            WindowMsg::WindowIdReceived(id) => {
+                self.window_id = id;
+                Task::none()
+            }
+            WindowMsg::WindowDrag => self
+                .window_id
+                .map(iced::window::drag)
+                .unwrap_or_else(Task::none),
+            WindowMsg::WindowMinimize => self
+                .window_id
+                .map(|id| iced::window::minimize(id, true))
+                .unwrap_or_else(Task::none),
+            WindowMsg::WindowToggleMaximize => self
+                .window_id
+                .map(iced::window::toggle_maximize)
+                .unwrap_or_else(Task::none),
+            WindowMsg::WindowClose => self
+                .window_id
+                .map(iced::window::close)
+                .unwrap_or_else(Task::none),
+            WindowMsg::WindowResize(direction) => self
+                .window_id
+                .map(|id| iced::window::drag_resize(id, direction))
+                .unwrap_or_else(Task::none),
+        }
+    }
+
+    /// Cursor-drag resize / maximize / restore funnel through here.
+    /// Snap the persisted size to the `MIN_WINDOW_*` floor so a
+    /// maximize → store → relaunch sequence still launches at a usable
+    /// geometry rather than below the layout floor.
+    fn update_window_resized(&mut self, w: f32, h: f32) -> Task<Message> {
+        let w = w.max(MIN_WINDOW_WIDTH);
+        let h = h.max(MIN_WINDOW_HEIGHT);
+        if (w, h) != self.window_size {
+            self.window_size = (w, h);
+            self.window_size_dirty = true;
+        }
+        Task::none()
+    }
+
+    /// Debounced persistence tick — only flushes when the resize
+    /// stream has been quiet for `WINDOW_SIZE_SAVE_INTERVAL`.
+    fn update_persist_window_size(&mut self) -> Task<Message> {
+        if self.window_size_dirty
+            && self.window_size_last_save.elapsed() >= WINDOW_SIZE_SAVE_INTERVAL
+        {
+            self.persist_settings();
+            self.window_size_dirty = false;
+            self.window_size_last_save = std::time::Instant::now();
+        }
+        Task::none()
+    }
+
+    /// Settings view — language pick, theme dropdown, default-loader
+    /// path management. Each variant either updates `self.settings`
+    /// and persists, or spawns the file picker `Task` for the loader
+    /// path.
+    fn update_settings(&mut self, msg: SettingsMsg) -> Task<Message> {
+        match msg {
+            SettingsMsg::SetLanguage(l) => {
+                self.settings.language = l;
+                self.translations = Translations::load(l);
+                install_core_translator(l);
+                self.persist_settings();
+                Task::none()
+            }
+            SettingsMsg::SettingsPickDefaultLoader => {
+                let spec = loader_file_spec("picker_target_edl_loader");
+                pickers::pick_file_for(spec, &self.recent_paths, |__v| {
+                    Message::Settings(SettingsMsg::SettingsDefaultLoaderChosen(__v))
+                })
+            }
+            SettingsMsg::SettingsDefaultLoaderChosen(path) => {
+                if let Some(p) = path {
+                    self.remember_recent(pickers::PickerKind::File, &p);
+                    self.default_loader_path = Some(p);
+                    self.persist_settings();
+                }
+                Task::none()
+            }
+            SettingsMsg::SettingsClearDefaultLoader => {
+                self.default_loader_path = None;
+                self.persist_settings();
+                Task::none()
+            }
+        }
+    }
+
     /// Record `path` in the MRU list for `kind`. Persists on change so
     /// the list survives restarts (write is cheap — small JSON, and only
     /// triggers when the list actually moves).
@@ -4823,54 +4926,13 @@ impl App {
 
     fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
-            // Window controls
-            Message::Window(WindowMsg::WindowIdReceived(id)) => self.window_id = id,
-            Message::Window(WindowMsg::WindowDrag) => {
-                if let Some(id) = self.window_id {
-                    return iced::window::drag(id);
-                }
-            }
-            Message::Window(WindowMsg::WindowMinimize) => {
-                if let Some(id) = self.window_id {
-                    return iced::window::minimize(id, true);
-                }
-            }
-            Message::Window(WindowMsg::WindowToggleMaximize) => {
-                if let Some(id) = self.window_id {
-                    return iced::window::toggle_maximize(id);
-                }
-            }
-            Message::Window(WindowMsg::WindowClose) => {
-                if let Some(id) = self.window_id {
-                    return iced::window::close(id);
-                }
-            }
-            Message::Window(WindowMsg::WindowResize(direction)) => {
-                if let Some(id) = self.window_id {
-                    return iced::window::drag_resize(id, direction);
-                }
-            }
-            Message::WindowResized(w, h) => {
-                // Maximize / restore / cursor-drag resize all funnel
-                // through here. Snap the persisted size to the floor so
-                // a maximize → store → relaunch sequence still launches
-                // at a usable geometry rather than below MIN_*.
-                let w = w.max(MIN_WINDOW_WIDTH);
-                let h = h.max(MIN_WINDOW_HEIGHT);
-                if (w, h) != self.window_size {
-                    self.window_size = (w, h);
-                    self.window_size_dirty = true;
-                }
-            }
-            Message::PersistWindowSize => {
-                if self.window_size_dirty
-                    && self.window_size_last_save.elapsed() >= WINDOW_SIZE_SAVE_INTERVAL
-                {
-                    self.persist_settings();
-                    self.window_size_dirty = false;
-                    self.window_size_last_save = std::time::Instant::now();
-                }
-            }
+            // Window chrome (titlebar buttons, cursor-drag move/resize,
+            // persisted geometry) delegated to a focused handler so the
+            // monster match in `update` doesn't have to spell every
+            // variant out inline.
+            Message::Window(m) => return self.update_window(m),
+            Message::WindowResized(w, h) => return self.update_window_resized(w, h),
+            Message::PersistWindowSize => return self.update_persist_window_size(),
             // Navigation
             Message::Noop => {}
             Message::Navigate(v) => {
@@ -4934,30 +4996,8 @@ impl App {
             Message::ToggleLogPopup(open) => {
                 self.log_popup_open = open;
             }
-            // Settings
-            Message::Settings(SettingsMsg::SetLanguage(l)) => {
-                self.settings.language = l;
-                self.translations = Translations::load(l);
-                install_core_translator(l);
-                self.persist_settings();
-            }
-            Message::Settings(SettingsMsg::SettingsPickDefaultLoader) => {
-                let spec = loader_file_spec("picker_target_edl_loader");
-                return pickers::pick_file_for(spec, &self.recent_paths, |__v| {
-                    Message::Settings(SettingsMsg::SettingsDefaultLoaderChosen(__v))
-                });
-            }
-            Message::Settings(SettingsMsg::SettingsDefaultLoaderChosen(path)) => {
-                if let Some(p) = path {
-                    self.remember_recent(pickers::PickerKind::File, &p);
-                    self.default_loader_path = Some(p);
-                    self.persist_settings();
-                }
-            }
-            Message::Settings(SettingsMsg::SettingsClearDefaultLoader) => {
-                self.default_loader_path = None;
-                self.persist_settings();
-            }
+            // Settings dispatch delegates to a focused handler.
+            Message::Settings(m) => return self.update_settings(m),
             // Flash wizard
             Message::Flash(FlashMsg::FlashRegion(r)) => {
                 // TB322FC is a PRC-only SKU. The region card UI grays
