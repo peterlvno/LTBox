@@ -31,6 +31,16 @@ const INTERIM_EMIT_INTERVAL: Duration = Duration::from_millis(800);
 #[cfg(windows)]
 const TAP_QUEUE_MAX: usize = 512;
 
+/// Cap on the in-flight `pending` byte buffer between line emits.
+/// Without a hard ceiling, a stream that never emits `\n` and never
+/// hits the `\r` interim path (e.g. raw binary on the tap) grows the
+/// buffer without bound and burns memory until the process exits.
+/// 64 KiB comfortably exceeds any single legitimate log line; older
+/// bytes are dropped from the front so the most recent tail stays
+/// recognisable to the next `\n`.
+#[cfg(windows)]
+const PENDING_BUFFER_CAP: usize = 64 * 1024;
+
 static TAP_QUEUE: OnceLock<Queue> = OnceLock::new();
 
 /// Drain every captured line since the last call. Empty on non-Windows
@@ -118,9 +128,30 @@ fn install_inner() -> Queue {
                         } else if last_emit.elapsed() >= INTERIM_EMIT_INTERVAL {
                             // No `\n` yet — surface the most recent `\r`
                             // segment so the log shows live progress.
+                            // Then compact `pending` so a CR-only
+                            // progress bar (no `\n` between updates)
+                            // can't grow `pending` without bound: drop
+                            // everything up to and including the last
+                            // `\r`, leaving only the in-flight segment.
+                            // The interim emit has already pushed the
+                            // last visible segment to the queue, so
+                            // truncation is safe.
                             if emit_interim_progress(&pending, &q) {
                                 last_emit = Instant::now();
+                                if let Some(idx) = pending.iter().rposition(|&b| b == b'\r') {
+                                    pending.drain(..=idx);
+                                }
                             }
+                        }
+                        // Safety net: even without interim emits (no `\r`
+                        // and no `\n` arriving), cap the buffer so a
+                        // pathological stream — e.g. raw binary on the
+                        // tap — can't grow it without bound. Keep the
+                        // tail so the next `\n` still produces a
+                        // recognisable line.
+                        if pending.len() > PENDING_BUFFER_CAP {
+                            let drop = pending.len() - PENDING_BUFFER_CAP;
+                            pending.drain(..drop);
                         }
                     }
                     Err(_) => break,
