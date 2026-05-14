@@ -3,7 +3,7 @@
 //! Writes `work_dir/new-boot.img` for the subsequent AVB re-sign step.
 
 use fs_err as fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use ltbox_core::i18n::tr;
@@ -140,17 +140,35 @@ fn extract_kernel_from_zip(zip_path: &Path, dst: &Path, log: &mut Vec<String>) -
     let mut entry = archive
         .by_name(&name)
         .map_err(|e| LtboxError::Patch(format!("kernel zip {name}: {e}")))?;
-    let mut buf = Vec::with_capacity(entry.size() as usize);
-    entry.read_to_end(&mut buf).map_err(LtboxError::Io)?;
-    drop(entry);
-
+    // Stream the zip entry to disk instead of buffering it whole. The
+    // previous `Vec::with_capacity(entry.size() as usize)` trusted the
+    // local zip header's declared size, so a malformed or hostile
+    // AnyKernel zip could declare an enormous kernel and force an OOM
+    // before any bytes were read. A sane upper bound (200 MiB — well
+    // above any real Android boot kernel) protects against a runaway
+    // copy if the entry's actual stream is malformed too.
+    const MAX_KERNEL_BYTES: u64 = 200 * 1024 * 1024;
     let mut out = fs::File::create(dst)?;
-    out.write_all(&buf)?;
+    let copied = {
+        // `take(MAX + 1)` so an exactly-MAX-byte kernel reads through
+        // without flagging, and only a > MAX byte stream surfaces as
+        // the cap error (avoids a false positive on a real 200 MiB
+        // image that happens to land on the boundary).
+        let mut limited = (&mut entry).take(MAX_KERNEL_BYTES + 1);
+        std::io::copy(&mut limited, &mut out)?
+    };
+    if copied > MAX_KERNEL_BYTES {
+        return Err(LtboxError::Patch(format!(
+            "kernel zip entry {name} exceeds {MAX_KERNEL_BYTES} byte cap; \
+             refusing to stage"
+        )));
+    }
+    drop(entry);
     ltbox_core::live!(
         log,
         "[GKI] {} {name} → kernel ({} bytes)",
         tr("log_gki_staged"),
-        buf.len()
+        copied
     );
     Ok(())
 }
