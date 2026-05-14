@@ -101,7 +101,24 @@ pub fn load_image_slots(xml_path: &Path) -> Result<(ImageSlots, Vec<PathBuf>)> {
     let parent = xml_path
         .parent()
         .ok_or_else(|| LtboxError::Other("Sahara XML has no parent directory".to_string()))?;
-    let max_id = entries.iter().map(|e| e.image_id).max().unwrap_or(0) as usize;
+    // `image_id` is a u32 from untrusted manifest XML. Without a cap, a
+    // hostile / corrupted entry could pre-allocate up to (u32::MAX + 1) ×
+    // size_of::<Option<Vec<u8>>>() bytes (~32 GiB on 64-bit) before we
+    // ever look at the referenced files — easy OOM / DoS vector. The
+    // Sahara protocol's image IDs sit in a small enumerated range (the
+    // qdl-rs upstream defines ~30 well-known IDs; production Qualcomm
+    // SoCs use double-digit values), so clamp at 256 which leaves
+    // headroom for vendor extensions without exposing the OOM.
+    const MAX_SAHARA_IMAGE_ID: u32 = 256;
+    let raw_max_id = entries.iter().map(|e| e.image_id).max().unwrap_or(0);
+    if raw_max_id > MAX_SAHARA_IMAGE_ID {
+        return Err(LtboxError::Other(format!(
+            "Sahara manifest image_id {raw_max_id} exceeds supported cap \
+             {MAX_SAHARA_IMAGE_ID} ({}); manifest may be malformed",
+            xml_path.display(),
+        )));
+    }
+    let max_id = raw_max_id as usize;
     let mut slots: ImageSlots = vec![None; max_id + 1];
     let mut paths: Vec<PathBuf> = Vec::with_capacity(entries.len());
     for entry in &entries {
