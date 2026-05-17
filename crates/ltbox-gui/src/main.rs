@@ -9404,7 +9404,7 @@ impl App {
         };
 
         let btn_label = if self.root.is_gki() {
-            self.t("btn_browse_kernel_zip")
+            self.t("btn_browse_kernel_image")
         } else {
             self.t("btn_browse_apk")
         };
@@ -9430,11 +9430,12 @@ impl App {
         .padding(0)
         .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
 
-        // Root OTA file picker flips between AnyKernel3 zip (GKI route)
-        // and provider APK (Magisk fork / APatch manual) — mirror the
-        // dialog filter so recents don't surface the wrong family.
+        // Root OTA file picker flips between AnyKernel3 zip + raw
+        // boot.img (GKI route) and provider APK (Magisk fork / APatch
+        // manual) — mirror the dialog filter so recents don't surface
+        // the wrong family.
         let accepted: &[&str] = if self.root.is_gki() {
-            &["zip"]
+            &["zip", "img"]
         } else {
             &["apk"]
         };
@@ -15517,8 +15518,13 @@ impl App {
             RootMsg::RootSelectFile => {
                 self.picker_target = PickerTarget::RootFile;
                 let spec = if self.root.is_gki() {
-                    pickers::FilePickSpec::single("picker_target_kernelsu_zip")
-                        .with_filter("ZIP", &["zip"])
+                    // GKI route accepts both an AnyKernel3 zip and a raw
+                    // boot.img — the patcher branches on the extension
+                    // (`gki::patch_boot` unpacks the .img with
+                    // magiskboot in a scratch subdir to pull the kernel
+                    // out, then reuses the existing repack path).
+                    pickers::FilePickSpec::single("picker_target_kernel_image")
+                        .with_filter("Kernel image", &["zip", "img"])
                 } else {
                     pickers::FilePickSpec::single("picker_target_apatch_apk")
                         .with_filter("APK", &["apk"])
