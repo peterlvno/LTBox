@@ -238,28 +238,20 @@ impl FastbootDevice {
         }
         if let Ok(lines) = self.command_all("getvar:all") {
             for line in &lines {
-                // hwboardid layout varies per SKU:
-                //   `TB322FC_SM8750P_16+512`  (model + SoC + spec)
-                //   `SM8750P_16+512`          (SoC + spec, no model token)
-                // RAM/storage always sit in the trailing `<n>+<n>` block,
-                // so we parse them off the tail regardless of layout.
+                // Spec lives in some `_`-separated segment of `hwboardid`
+                // (varies per SKU + sometimes has a trailing suffix); the
+                // helper walks every segment and picks the first
+                // `<digits>+<digits>` block, so layout drift in newer
+                // bootloaders doesn't silently drop RAM/storage.
                 // Model identification moved to the dedicated
                 // `modelname:` line below — the leading hwboardid token
                 // is the SoC name on stripped SKUs and not a reliable
                 // model source.
-                if let Some(val) = line.strip_prefix("hwboardid:") {
-                    let val = val.trim();
-                    if let Some((_prefix, tail)) = val.rsplit_once('_') {
-                        if let Some((ram, storage)) = tail.split_once('+') {
-                            vars.ram_gb = Some(format!("{ram} GB"));
-                            vars.storage_gb = Some(format!("{storage} GB"));
-                        }
-                    } else if let Some((ram, storage)) = val.split_once('+') {
-                        // Single-token form like `16+512` (defensive
-                        // fallback — no SKU observed shipping this).
-                        vars.ram_gb = Some(format!("{ram} GB"));
-                        vars.storage_gb = Some(format!("{storage} GB"));
-                    }
+                if let Some(val) = line.strip_prefix("hwboardid:")
+                    && let Some((ram, storage)) = parse_hwboardid_ram_storage(val.trim())
+                {
+                    vars.ram_gb = Some(ram);
+                    vars.storage_gb = Some(storage);
                 }
                 // `modelname:TB322FC` — the bootloader-published model
                 // identifier. Stable across SKUs that strip the model
@@ -322,9 +314,34 @@ pub(crate) fn parse_stored_rollback_line(line: &str) -> Option<(u32, u64)> {
     Some((slot, val))
 }
 
+/// Pull RAM + storage out of a Lenovo `hwboardid` getvar value.
+///
+/// Walks every `_`-separated segment and returns the first
+/// `<digits>+<digits>` block as `("<ram> GB", "<storage> GB")`. Covers
+/// every shape we've seen on Lenovo bootloaders:
+///
+/// * `TB322FC_SM8750P_16+512` — model + SoC + spec
+/// * `SM8750P_16+512`         — SoC + spec only
+/// * `SM8650P_12+256_12`      — SoC + spec + trailing suffix
+///
+/// Returns `None` when no segment matches.
+pub(crate) fn parse_hwboardid_ram_storage(val: &str) -> Option<(String, String)> {
+    for part in val.split('_') {
+        if let Some((ram, storage)) = part.split_once('+')
+            && !ram.is_empty()
+            && !storage.is_empty()
+            && ram.chars().all(|c| c.is_ascii_digit())
+            && storage.chars().all(|c| c.is_ascii_digit())
+        {
+            return Some((format!("{ram} GB"), format!("{storage} GB")));
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
-    use super::parse_stored_rollback_line;
+    use super::{parse_hwboardid_ram_storage, parse_stored_rollback_line};
 
     #[test]
     fn bare_hex_parses_as_base16() {
@@ -365,5 +382,36 @@ mod tests {
         // Regression: `(0)` used to fail to parse and silently skip ARB.
         let out = parse_stored_rollback_line("stored_rollback_index:(0) = 41B7A200");
         assert_eq!(out, Some((0, 0x41B7A200)));
+    }
+
+    #[test]
+    fn hwboardid_three_segment_soc_spec() {
+        assert_eq!(
+            parse_hwboardid_ram_storage("TB322FC_SM8750P_16+512"),
+            Some(("16 GB".into(), "512 GB".into()))
+        );
+    }
+
+    #[test]
+    fn hwboardid_two_segment_soc_spec() {
+        assert_eq!(
+            parse_hwboardid_ram_storage("SM8750P_16+512"),
+            Some(("16 GB".into(), "512 GB".into()))
+        );
+    }
+
+    #[test]
+    fn hwboardid_trailing_suffix_after_spec() {
+        // Regression for `rsplit_once('_')` shape that took the trailing
+        // numeric suffix as the tail instead of the spec.
+        assert_eq!(
+            parse_hwboardid_ram_storage("SM8650P_12+256_12"),
+            Some(("12 GB".into(), "256 GB".into()))
+        );
+    }
+
+    #[test]
+    fn hwboardid_no_spec_returns_none() {
+        assert_eq!(parse_hwboardid_ram_storage("SM8750P_only"), None);
     }
 }
