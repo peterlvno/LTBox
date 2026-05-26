@@ -1480,6 +1480,30 @@ fn phase_marker<S: AsRef<str>>(phase: usize, total: usize, label: S) -> String {
         .replace("{label}", label.as_ref())
 }
 
+/// Match a SKU token (e.g. `"TB323FU"`) inside an arbitrary string with
+/// alphanumeric word boundaries so a future variant like `TB323FUX` does
+/// not collide with the bare match. Used by the flash worker to gate
+/// SKU-specific behaviour off either a vendor_boot fingerprint or the
+/// probe-reported device model string.
+fn fingerprint_token_match(haystack: &str, model: &str) -> bool {
+    if model.is_empty() {
+        return false;
+    }
+    let bytes = haystack.as_bytes();
+    let mut start = 0usize;
+    while let Some(pos) = haystack[start..].find(model) {
+        let abs = start + pos;
+        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
+        let end = abs + model.len();
+        let after_ok = end == bytes.len() || !bytes[end].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        start = abs + 1;
+    }
+    false
+}
+
 /// Parse `N/M` out of a log line. Returns `N` (1-indexed).
 /// Shape stays stable across locales as long as a `digit/digit` token
 /// is present in the line — but rejects fractional pairs like
@@ -13548,7 +13572,6 @@ impl App {
                         .replace("{rollback}", &rollback_label)
                         .replace("{wipe}", &cfg.wipe.to_string())
                 ));
-                let rb_label_for_log = rollback_label.clone();
                 let mut rb_mode = cfg.modify_rollback.to_mode();
                 let edl_start = matches!(conn, ConnectionStatus::Edl);
                 if edl_start {
@@ -13784,49 +13807,73 @@ impl App {
                                             // is empty and the comparison would
                                             // false-positive. Single umbrella warning
                                             // already emitted at worker start.
-                                            if has_vendor_boot && !edl_start {
+                                            //
+                                            // Also captures the fingerprint string so a
+                                            // downstream TB323FU detection can force-OFF
+                                            // the region + rollback-index passes (TB323FU
+                                            // doesn't accept the region byte-patch or the
+                                            // boot/vbmeta_system rollback overlay).
+                                            let mut vendor_boot_fingerprint: Option<String> = None;
+                                            if has_vendor_boot {
                                                 match ltbox_patch::avb::extract_image_avb_info(&vendor_boot) {
                                                     Ok(info) => {
-                                                        use ltbox_patch::region::{
-                                                            ModelValidation, validate_device_model,
-                                                        };
-                                                        match validate_device_model(&info, &device_model) {
-                                                            ModelValidation::Match { fingerprint } => {
-                                                                ltbox_core::live!(
-                                                                    log,
-                                                                    "[Flash] {}",
-                                                                    ltbox_core::i18n::tr(
-                                                                        "live_rescue_model_check_ok"
-                                                                    )
-                                                                    .replace("{fingerprint}", &fingerprint)
-                                                                );
-                                                            }
-                                                            ModelValidation::Missing => {
-                                                                ltbox_core::live!(
-                                                                    log,
-                                                                    "[Flash] {}",
-                                                                    ltbox_core::i18n::tr(
-                                                                        "live_rescue_no_fingerprint_skip"
-                                                                    )
-                                                                );
-                                                            }
-                                                            ModelValidation::Mismatch {
-                                                                fingerprint,
-                                                                device_model,
-                                                            } => {
-                                                                ltbox_core::live!(
-                                                                    log,
-                                                                    "[Flash] {}",
-                                                                    ltbox_core::i18n::tr(
-                                                                        "live_rescue_model_mismatch_abort"
-                                                                    )
-                                                                    .replace("{device}", &device_model)
-                                                                    .replace("{fingerprint}", &fingerprint)
-                                                                );
-                                                                return Err(
-                                                                    "Flash: firmware/device model mismatch — aborting before EDL"
-                                                                        .into(),
-                                                                );
+                                                        // Pull the fingerprint prop up-front so the SKU
+                                                        // gate below works on EDL-start too — there
+                                                        // `device_model` is empty and the validate path
+                                                        // would skip without populating it.
+                                                        let fp_prop = info
+                                                            .props
+                                                            .iter()
+                                                            .find(|(k, _)| k == "com.android.build.vendor_boot.fingerprint")
+                                                            .and_then(|(_, v)| std::str::from_utf8(v).ok())
+                                                            .map(|s| s.trim_end_matches('\0').to_string());
+
+                                                        if edl_start {
+                                                            vendor_boot_fingerprint = fp_prop;
+                                                        } else {
+                                                            use ltbox_patch::region::{
+                                                                ModelValidation, validate_device_model,
+                                                            };
+                                                            match validate_device_model(&info, &device_model) {
+                                                                ModelValidation::Match { fingerprint } => {
+                                                                    ltbox_core::live!(
+                                                                        log,
+                                                                        "[Flash] {}",
+                                                                        ltbox_core::i18n::tr(
+                                                                            "live_rescue_model_check_ok"
+                                                                        )
+                                                                        .replace("{fingerprint}", &fingerprint)
+                                                                    );
+                                                                    vendor_boot_fingerprint = Some(fingerprint);
+                                                                }
+                                                                ModelValidation::Missing => {
+                                                                    ltbox_core::live!(
+                                                                        log,
+                                                                        "[Flash] {}",
+                                                                        ltbox_core::i18n::tr(
+                                                                            "live_rescue_no_fingerprint_skip"
+                                                                        )
+                                                                    );
+                                                                    vendor_boot_fingerprint = fp_prop;
+                                                                }
+                                                                ModelValidation::Mismatch {
+                                                                    fingerprint,
+                                                                    device_model,
+                                                                } => {
+                                                                    ltbox_core::live!(
+                                                                        log,
+                                                                        "[Flash] {}",
+                                                                        ltbox_core::i18n::tr(
+                                                                            "live_rescue_model_mismatch_abort"
+                                                                        )
+                                                                        .replace("{device}", &device_model)
+                                                                        .replace("{fingerprint}", &fingerprint)
+                                                                    );
+                                                                    return Err(
+                                                                        "Flash: firmware/device model mismatch — aborting before EDL"
+                                                                            .into(),
+                                                                    );
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -13839,6 +13886,31 @@ impl App {
                                                         );
                                                     }
                                                 }
+                                            }
+
+                                            // TB323FU SKU lacks both the binary region
+                                            // marker the byte-patch targets AND the
+                                            // boot/vbmeta_system layout the ARB overlay
+                                            // depends on — patching either bricks the
+                                            // device. Detect via vendor_boot fingerprint
+                                            // (works on EDL-start) OR the probe-reported
+                                            // device model (covers AVB read failures), and
+                                            // use word-boundary matching so a future SKU
+                                            // suffix doesn't false-trigger.
+                                            let tb323fu_skip = vendor_boot_fingerprint
+                                                .as_deref()
+                                                .map(|fp| fingerprint_token_match(fp, "TB323FU"))
+                                                .unwrap_or(false)
+                                                || fingerprint_token_match(&device_model, "TB323FU");
+                                            if tb323fu_skip {
+                                                ltbox_core::live!(
+                                                    log,
+                                                    "[Flash] {}",
+                                                    ltbox_core::i18n::tr(
+                                                        "live_flash_tb323fu_skip_region_arb"
+                                                    )
+                                                );
+                                                rb_mode = ltbox_patch::rollback::RollbackMode::Off;
                                             }
 
                                             // Count .x and .xml files
@@ -13862,7 +13934,7 @@ impl App {
 
                                             // 4. Region conversion
                                             let mut region_pair: Option<ltbox_patch::region::RegionBootChainOutput> = None;
-                                            if cfg.modify_region {
+                                            if cfg.modify_region && !tb323fu_skip {
                                                 if has_vendor_boot && has_vbmeta {
                                                     ltbox_core::live!(
                                                         log,
@@ -13953,6 +14025,17 @@ impl App {
                                             }
 
                                             // 5. ARB detection
+                                            // Re-derive the label from the EFFECTIVE rb_mode so
+                                            // the EDL-start and TB323FU overrides (both force
+                                            // Off) are reflected in the log instead of the
+                                            // original user selection.
+                                            let rb_label_for_log = ltbox_core::i18n::tr(
+                                                match rb_mode {
+                                                    ltbox_patch::rollback::RollbackMode::On => "rollback_on",
+                                                    ltbox_patch::rollback::RollbackMode::Auto => "rollback_auto",
+                                                    ltbox_patch::rollback::RollbackMode::Off => "rollback_off",
+                                                },
+                                            );
                                             ltbox_core::live!(
                                                 log,
                                                 "[ARB] {}",

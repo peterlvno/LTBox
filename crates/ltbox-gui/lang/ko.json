@@ -333,6 +333,7 @@
   "live_flash_set_bootable": "부팅 가능 LUN을 {lun}로 설정 (xbl_a)",
   "live_flash_skip_adb": "기기가 부트로더/EDL 모드 — ADB 단계 건너뜀",
   "live_flash_starting": "시작: modify_region={modify_region} rollback={rollback} wipe={wipe}",
+  "live_flash_tb323fu_skip_region_arb": "TB323FU 감지 — 지역 변환과 ARB 패치 건너뜀 (해당 SKU 미지원).",
   "live_flash_vbmeta_status": "vbmeta.img: {status}",
   "live_flash_vendor_boot_status": "vendor_boot.img: {status}",
   "live_flashparts_done": "완료.",

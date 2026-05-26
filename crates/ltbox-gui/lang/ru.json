@@ -333,6 +333,7 @@
   "live_flash_set_bootable": "Загрузочный LUN установлен в {lun} (xbl_a)",
   "live_flash_skip_adb": "Устройство в Загрузчике/EDL — пропуск шага ADB",
   "live_flash_starting": "Запуск: modify_region={modify_region} rollback={rollback} wipe={wipe}",
+  "live_flash_tb323fu_skip_region_arb": "Обнаружен TB323FU — пропуск смены региона и патча ARB (не поддерживается этим SKU).",
   "live_flash_vbmeta_status": "vbmeta.img: {status}",
   "live_flash_vendor_boot_status": "vendor_boot.img: {status}",
   "live_flashparts_done": "Готово.",

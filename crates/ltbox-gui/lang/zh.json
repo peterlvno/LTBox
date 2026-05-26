@@ -333,6 +333,7 @@
   "live_flash_set_bootable": "将可启动 LUN 设置为 {lun} (xbl_a)",
   "live_flash_skip_adb": "设备处于引导加载程序/EDL — 跳过 ADB 步骤",
   "live_flash_starting": "开始: modify_region={modify_region} rollback={rollback} wipe={wipe}",
+  "live_flash_tb323fu_skip_region_arb": "检测到 TB323FU — 跳过区域转换与 ARB 修补 (该 SKU 不支持)。",
   "live_flash_vbmeta_status": "vbmeta.img: {status}",
   "live_flash_vendor_boot_status": "vendor_boot.img: {status}",
   "live_flashparts_done": "完成。",
