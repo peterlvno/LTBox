@@ -122,7 +122,7 @@ pub fn load_image_slots(xml_path: &Path) -> Result<(ImageSlots, Vec<PathBuf>)> {
     let mut slots: ImageSlots = vec![None; max_id + 1];
     let mut paths: Vec<PathBuf> = Vec::with_capacity(entries.len());
     for entry in &entries {
-        let img_path = parent.join(&entry.image_path);
+        let img_path = crate::safe_path::safe_join(parent, &entry.image_path)?;
         let bytes = std::fs::read(&img_path).map_err(|e| {
             LtboxError::Other(format!(
                 "Sahara image read failed for id={} ({}): {e}",

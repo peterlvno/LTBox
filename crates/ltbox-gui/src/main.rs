@@ -17600,7 +17600,26 @@ fn dump_parts_execute(
 
     let mut critical_failures: Vec<String> = Vec::new();
     for row in &rows {
-        let out_path = out_dir.join(format!("{}.img", row.label));
+        let out_path =
+            match ltbox_core::safe_path::safe_join(&out_dir, &format!("{}.img", row.label)) {
+                Ok(p) => p,
+                Err(e) => {
+                    // A device-reported GPT label is untrusted; refuse one that
+                    // would escape the chosen output directory rather than
+                    // writing through the traversal.
+                    ltbox_core::live!(
+                        log,
+                        "[DumpParts] {}",
+                        ltbox_core::i18n::tr("live_dumpparts_part_failed")
+                            .replace("{label}", &row.label)
+                            .replace("{error}", &e.to_string())
+                    );
+                    if is_critical_dump_label(&row.label) {
+                        critical_failures.push(row.label.clone());
+                    }
+                    continue;
+                }
+            };
         ltbox_core::live!(
             log,
             "[DumpParts] {}",

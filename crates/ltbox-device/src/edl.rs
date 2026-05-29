@@ -1070,7 +1070,8 @@ impl EdlSession {
         let file_sector_offset: u64 = parse_xml_attr(node, "file_sector_offset", 0u64, &ctx)?;
         let sector_size: u64 = self.dev.fh_config().storage_sector_size as u64;
 
-        let image_path = xml_dir.join(&filename);
+        let image_path = ltbox_core::safe_path::safe_join(xml_dir, &filename)
+            .map_err(|e| EdlError::Session(e.to_string()))?;
         if !image_path.exists() {
             ltbox_core::live!(
                 log,

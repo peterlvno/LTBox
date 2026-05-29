@@ -16,6 +16,7 @@ pub mod lenovo_ota;
 pub mod live_sink;
 pub mod partition_lun;
 pub mod runtime;
+pub mod safe_path;
 pub mod sahara_xml;
 pub mod xml_catalog;
 
