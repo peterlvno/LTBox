@@ -496,7 +496,13 @@ pub fn build_patched_artifacts(
     // preserve device's rollback state. Signing key via `KEY_MAP` on stock pubkey.
     let stock_info = avb::extract_image_avb_info(&stock_boot_src)?;
     let boot_key = resolve_signing_key(stock_info.public_key_sha1.as_deref(), stock_filename, log)?;
-    avb::erase_footer(&final_boot).ok();
+    // Erase any stale AVB footer before re-applying ours. A missing footer
+    // is the normal case for a freshly built image, so this is best-effort —
+    // but surface a real failure (I/O, corruption) in the log instead of
+    // swallowing it silently, since `add_hash_footer` then runs on this image.
+    if let Err(e) = avb::erase_footer(&final_boot) {
+        ltbox_core::live!(log, "[AVB] erase_footer skipped: {e}");
+    }
     avb::add_hash_footer(
         &final_boot,
         &stock_info,
