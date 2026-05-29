@@ -12,3 +12,4 @@ pub mod magisk;
 pub mod region;
 pub mod rollback;
 pub mod root_pipeline;
+pub(crate) mod zip_util;

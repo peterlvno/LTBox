@@ -253,8 +253,6 @@ pub fn download_ksu_payload(
     staging_dir: &Path,
     log: &mut Vec<String>,
 ) -> Result<()> {
-    use std::io::{Read, Write};
-
     let repo = provider_repo(provider)
         .ok_or_else(|| LtboxError::Patch(format!("Unknown KSU provider: {provider:?}")))?;
     let client = GitHubClient::new(repo)?;
@@ -338,18 +336,20 @@ pub fn download_ksu_payload(
     let mut entry = archive
         .by_name(&member_name)
         .map_err(|e| LtboxError::Patch(format!("ksuinit zip entry: {e}")))?;
-    let mut buf = Vec::with_capacity(entry.size() as usize);
-    entry.read_to_end(&mut buf).map_err(LtboxError::Io)?;
-    drop(entry);
-
     // magiskboot expects `init`, not `ksuinit`.
-    let mut out = fs::File::create(staging_dir.join("init"))?;
-    out.write_all(&buf)?;
+    let init_path = staging_dir.join("init");
+    let copied = crate::zip_util::copy_capped(
+        &mut entry,
+        &init_path,
+        crate::zip_util::MAX_ENTRY_BYTES,
+        &member_name,
+    )?;
+    drop(entry);
     let _ = fs::remove_file(&tmp_zip);
     ltbox_core::live!(
         log,
         "[KSU] {}",
-        tr_args!("log_ksu_staged_init_lkm", bytes = buf.len())
+        tr_args!("log_ksu_staged_init_lkm", bytes = copied)
     );
     Ok(())
 }
@@ -364,8 +364,6 @@ pub fn download_ksu_payload_nightly(
     staging_dir: &Path,
     log: &mut Vec<String>,
 ) -> Result<u64> {
-    use std::io::{Read, Write};
-
     let (repo, run_id) = resolve_nightly_run(provider, manual_run_id, log)?;
     let client = GitHubClient::new(repo)?;
     let artifact_names = client.workflow_artifacts(run_id)?;
@@ -414,10 +412,13 @@ pub fn download_ksu_payload_nightly(
         let mut entry = archive
             .by_name(&member_name)
             .map_err(|e| LtboxError::Patch(format!("{repo} {ko_artifact}: {e}")))?;
-        let mut buf = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut buf)?;
-        drop(entry);
-        fs::write(staging_dir.join("kernelsu.ko"), &buf)?;
+        let ko_path = staging_dir.join("kernelsu.ko");
+        crate::zip_util::copy_capped(
+            &mut entry,
+            &ko_path,
+            crate::zip_util::MAX_ENTRY_BYTES,
+            &member_name,
+        )?;
     }
     let _ = fs::remove_file(&ko_zip_path);
 
@@ -453,11 +454,13 @@ pub fn download_ksu_payload_nightly(
         let mut entry = archive
             .by_name(&member_name)
             .map_err(|e| LtboxError::Patch(format!("{repo} {init_artifact}: {e}")))?;
-        let mut buf = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut buf)?;
-        drop(entry);
-        let mut out = fs::File::create(staging_dir.join("init"))?;
-        out.write_all(&buf)?;
+        let init_path = staging_dir.join("init");
+        crate::zip_util::copy_capped(
+            &mut entry,
+            &init_path,
+            crate::zip_util::MAX_ENTRY_BYTES,
+            &member_name,
+        )?;
     }
     let _ = fs::remove_file(&init_zip_path);
     ltbox_core::live!(log, "[KSU] {}", tr("log_ksu_staged_nightly_init"));

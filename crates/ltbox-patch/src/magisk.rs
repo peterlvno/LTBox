@@ -5,7 +5,6 @@
 //! `assets/stub.apk` → `stub.apk`.
 
 use fs_err as fs;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use ltbox_core::i18n::tr;
@@ -178,14 +177,13 @@ pub fn extract_apk_payload(apk_path: &Path, staging_dir: &Path) -> Result<()> {
                 Ok(e) => e,
                 Err(_) => continue,
             };
-            let mut buf = Vec::with_capacity(entry.size() as usize);
-            entry
-                .read_to_end(&mut buf)
-                .map_err(|e| LtboxError::Patch(format!("APK read {entry_name}: {e}")))?;
-
             let dst_path = staging_dir.join(dst_name);
-            let mut out = fs::File::create(&dst_path)?;
-            out.write_all(&buf)?;
+            crate::zip_util::copy_capped(
+                &mut entry,
+                &dst_path,
+                crate::zip_util::MAX_ENTRY_BYTES,
+                entry_name,
+            )?;
             staged = true;
             break;
         }
