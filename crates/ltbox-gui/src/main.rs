@@ -16384,10 +16384,18 @@ impl App {
                                                     .map_err(|e| format!("Dump {boot_primary}: {e}"))?;
                                                 session.dump_partition(&vbmeta_primary, &dumped_vbmeta, 0, ROOT_PARTITIONS_LUN, &mut log)
                                                     .map_err(|e| format!("Dump {vbmeta_primary}: {e}"))?;
-                                                // Dump backup next to `ltbox.exe` for Unroot.
-                                                let _ = std::fs::create_dir_all(&backup_dir);
-                                                let _ = std::fs::copy(&dumped_boot, backup_dir.join(boot_out));
-                                                let _ = std::fs::copy(&dumped_vbmeta, backup_dir.join("vbmeta.img"));
+                                                // Stock-image safety net for Unroot, captured
+                                                // before the irreversible patch + flash. A copy
+                                                // failure must abort the run: the previous
+                                                // `let _ =` logged success even when the backup
+                                                // never landed, leaving Unroot with no images.
+                                                std::fs::create_dir_all(&backup_dir).map_err(|e| {
+                                                    format!("Create backup dir {}: {e}", backup_dir.display())
+                                                })?;
+                                                std::fs::copy(&dumped_boot, backup_dir.join(boot_out))
+                                                    .map_err(|e| format!("Back up {boot_out}: {e}"))?;
+                                                std::fs::copy(&dumped_vbmeta, backup_dir.join("vbmeta.img"))
+                                                    .map_err(|e| format!("Back up vbmeta.img: {e}"))?;
                                                 live!(
                                                     log,
                                                     "[Root] {} {} + vbmeta.img → {}",
