@@ -13434,7 +13434,11 @@ impl App {
                     Ok(p) => p,
                     Err(()) => return Task::none(),
                 };
-                self.begin_op(View::Flash);
+                // Loader-upload + GPT read to enumerate partitions — a
+                // *read*, not a flash. Use the Advanced busy view so the
+                // dialog shows `busy_partition_scan` ("Reading partition
+                // info…") like Read Partitions, not "Flash Firmware".
+                self.begin_op(View::Advanced);
                 self.error_msg = None;
                 self.flash_parts.scanning = true;
                 self.flash_parts.scan_error = None;
