@@ -7117,9 +7117,16 @@ impl App {
             );
         }
         status_row = status_row.push(
-            text(concat!("v", env!("CARGO_PKG_VERSION")))
-                .size(12)
-                .style(muted_style),
+            // Debug builds show "debug" instead of the version so a dev
+            // build is never mistaken for a released one in screenshots/bug
+            // reports.
+            text(if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                concat!("v", env!("CARGO_PKG_VERSION"))
+            })
+            .size(12)
+            .style(muted_style),
         );
         // Top divider via an explicit `horizontal_rule` (1 px) so
         // the meeting point with the sidebar's right divider lands
