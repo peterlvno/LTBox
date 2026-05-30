@@ -433,6 +433,16 @@ impl EdlSession {
     /// few dozen sectors, so 2048 is a generous ceiling.
     const MAX_GPT_METADATA_SECTORS: u64 = 2048;
 
+    /// Extra sectors appended to a GPT metadata read so the partition-entry
+    /// array is never the last sector delivered. The USB Firehose read can
+    /// return the final sector of a transfer short/garbled; a fully-populated
+    /// GPT (TB323FU LUN 4 carries 128 entries filling LBA 2..=5, i.e. up to
+    /// `first_usable_lba`) reads its entry array right up to the buffer's last
+    /// byte, so the flaky tail corrupts it and `gptman` fails to parse. Reading
+    /// a couple of slack sectors keeps the entry array in the reliable middle;
+    /// `gptman` ignores the trailing padding.
+    const GPT_READ_TAIL_MARGIN: usize = 2;
+
     /// Clamp a GPT header's `first_usable_lba` to a sane Firehose read
     /// length, rejecting implausible values instead of over-reading.
     fn gpt_read_sectors(first_usable_lba: u64) -> Result<usize> {
@@ -455,8 +465,10 @@ impl EdlSession {
         let header = gptman::GPTHeader::read_from(&mut buf)
             .map_err(|e| EdlError::Session(format!("GPT header parse failed: {e}")))?;
         let gpt_len = Self::gpt_read_sectors(header.first_usable_lba)?;
+        let read_len =
+            (gpt_len + Self::GPT_READ_TAIL_MARGIN).min(Self::MAX_GPT_METADATA_SECTORS as usize);
         let mut buf = Cursor::new(Vec::<u8>::new());
-        qdl::firehose_read_storage(&mut self.dev, &mut buf, gpt_len, slot, lun, 0)
+        qdl::firehose_read_storage(&mut self.dev, &mut buf, read_len, slot, lun, 0)
             .map_err(|e| EdlError::Session(format!("GPT read failed: {e}")))?;
         buf.set_position(self.dev.fh_config().storage_sector_size as u64);
         gptman::GPT::read_from(&mut buf, self.dev.fh_config().storage_sector_size as u64)
@@ -518,8 +530,11 @@ impl EdlSession {
         let header = gptman::GPTHeader::read_from(&mut buf)
             .map_err(|e| EdlError::Session(format!("GPT header parse failed: {e}")))?;
         let gpt_len = Self::gpt_read_sectors(header.first_usable_lba)?;
+        // Over-read past the GPT metadata — see `GPT_READ_TAIL_MARGIN`.
+        let read_len =
+            (gpt_len + Self::GPT_READ_TAIL_MARGIN).min(Self::MAX_GPT_METADATA_SECTORS as usize);
         buf.rewind()?;
-        qdl::firehose_read_storage(&mut self.dev, &mut buf, gpt_len, slot, lun, 0)
+        qdl::firehose_read_storage(&mut self.dev, &mut buf, read_len, slot, lun, 0)
             .map_err(|e| EdlError::Session(format!("GPT read failed: {e}")))?;
         buf.set_position(self.dev.fh_config().storage_sector_size as u64);
         let gpt = gptman::GPT::read_from(&mut buf, self.dev.fh_config().storage_sector_size as u64)
