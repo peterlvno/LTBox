@@ -4626,6 +4626,33 @@ impl App {
             || self.root.kernel_version_popup_open
     }
 
+    /// True when the Advanced view holds wizard state the user would lose to a
+    /// sidebar bounce: a generic op sitting on its confirm step, or a partition
+    /// read/write whose GPT table is still valid (device still in EDL). The
+    /// `Navigate` handler consults this to skip the entry-time reset so
+    /// navigating away and back keeps the user's place.
+    fn advanced_in_progress(&self) -> bool {
+        use AdvancedWizardOpen as W;
+        match self.advanced_wizard_open {
+            // Generic advanced op (PatchArb / PatchDevinfo / DetectArb / ...):
+            // preserve only on the confirm step (waiting to start).
+            W::None => self.adv_wizard.action.is_some() && self.adv_wizard.is_confirm_step(),
+            // Read/Write Partitions: a rendered GPT table — or the confirm
+            // screen after it — survives as long as the device stays in EDL,
+            // since the table reflects the live partition layout.
+            W::FlashParts => {
+                self.connection == ConnectionStatus::Edl && !self.flash_parts.rows.is_empty()
+            }
+            W::DumpParts => {
+                self.connection == ConnectionStatus::Edl && !self.dump_parts.rows.is_empty()
+            }
+            // Physical storage: preserve the confirm screen (FlashPhys);
+            // DumpPhys runs Select → Exec with no confirm screen to preserve.
+            W::FlashPhys => self.flash_phys.step + 2 == FLASH_PHYS_STEPS.len(),
+            W::DumpPhys => false,
+        }
+    }
+
     fn should_show_busy_progress_dialog(&self) -> bool {
         self.busy
             && self.current_view != View::Dashboard
@@ -5080,7 +5107,7 @@ impl App {
                 // sidebar bounce mid-flow doesn't reopen the same
                 // sub-wizard with the previous picked path still
                 // populated. The `busy` gate covers in-flight ops.
-                if v == View::Advanced && !busy {
+                if v == View::Advanced && !busy && !self.advanced_in_progress() {
                     self.advanced_wizard_open = AdvancedWizardOpen::None;
                     self.adv_wizard = AdvWizard::default();
                     self.flash_parts = FlashPartsWizard::default();
@@ -13334,6 +13361,11 @@ impl App {
                         Some("No partitions returned from device".to_string());
                 } else {
                     self.dump_parts.step = 1;
+                    // A successful Firehose GPT scan proves the device is in
+                    // EDL; reflect it immediately (the 3s poll may still show a
+                    // stale ADB/Fastboot state) so a sidebar bounce right after
+                    // the scan keeps the loaded table via `advanced_in_progress`.
+                    self.connection = ConnectionStatus::Edl;
                 }
                 Task::none()
             }
@@ -13509,6 +13541,11 @@ impl App {
                 self.end_op();
                 if result.error.is_none() && !self.flash_parts.rows.is_empty() {
                     self.flash_parts.next(); // → Select
+                    // A successful Firehose GPT scan proves the device is in
+                    // EDL; reflect it immediately (the 3s poll may still show a
+                    // stale ADB/Fastboot state) so a sidebar bounce right after
+                    // the scan keeps the loaded table via `advanced_in_progress`.
+                    self.connection = ConnectionStatus::Edl;
                 }
                 Task::none()
             }
@@ -17033,6 +17070,14 @@ fn wizard_step_bar<'a>(steps: &[&str], current: usize) -> Element<'a, Message> {
     .into()
 }
 
+/// True for the localized "Start" / "Dump" labels — the primary-action button
+/// shown only on a wizard's confirm/start screen (intermediate steps use
+/// "Next" / "Scan"). Drives the red Cancel button in the footer helpers.
+fn is_start_label(label: &str) -> bool {
+    label == ltbox_core::i18n::tr("btn_start").as_str()
+        || label == ltbox_core::i18n::tr("btn_dump").as_str()
+}
+
 fn wizard_nav<'a>(
     can_back: bool,
     next_label: &str,
@@ -17051,6 +17096,17 @@ fn wizard_nav<'a>(
     }
 
     r = r.push(Space::new().width(Length::Fill));
+
+    // Red "Cancel" on the confirm/start step → StartOver (see
+    // `wizard_nav_generic` for the M3 placement rationale).
+    if is_start_label(next_label) {
+        r = r.push(
+            button(text(ltbox_core::i18n::tr("btn_cancel")).size(13))
+                .on_press(Message::StartOver)
+                .padding([10, 20])
+                .style(md_error_text_btn_style),
+        );
+    }
 
     let next_btn = button(text(next_label.to_string()).size(13))
         .padding([10, 24])
@@ -17116,6 +17172,26 @@ fn md_text_btn_style(t: &Theme, status: button::Status) -> button::Style {
             None
         },
         text_color: p.primary,
+        border: iced::Border {
+            radius: theme::shape::FULL.into(),
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+/// M3 text button in the error role — red label + error-tinted state layer.
+/// Used for the destructive "Cancel" (start over) action on confirm screens.
+fn md_error_text_btn_style(t: &Theme, status: button::Status) -> button::Style {
+    let p = pal_of(t);
+    let bg_alpha = theme::state_alpha(status);
+    button::Style {
+        background: if bg_alpha > 0.0 {
+            Some(with_alpha(p.error, bg_alpha).into())
+        } else {
+            None
+        },
+        text_color: p.error,
         border: iced::Border {
             radius: theme::shape::FULL.into(),
             ..Default::default()
@@ -18586,6 +18662,18 @@ fn wizard_nav_generic<'a>(
         );
     }
     r = r.push(Space::new().width(Length::Fill));
+    // Red "Cancel" on the confirm/start step → StartOver, returning the menu
+    // to its beginning. M3: the cancel/start decision pair sits at the
+    // trailing edge, navigation (Back) at the leading edge; one filled button
+    // (Start), destructive action in the error color.
+    if is_start_label(next_label) {
+        r = r.push(
+            button(text(ltbox_core::i18n::tr("btn_cancel")).size(13))
+                .on_press(Message::StartOver)
+                .padding([10, 20])
+                .style(md_error_text_btn_style),
+        );
+    }
     let next_btn = button(text(next_label.to_string()).size(13))
         .padding([10, 24])
         .style(md_filled_btn_style);
@@ -18792,6 +18880,47 @@ mod tests {
         let mut buf = vec![0u8; 1024];
         buf[1000] = 0xEF;
         assert!(!efisp_is_empty(&buf));
+    }
+
+    #[test]
+    fn advanced_in_progress_gates_partition_table_on_edl() {
+        let row = || FlashPartRow {
+            lun: 4,
+            label: "boot_a".into(),
+            start_sector: 0,
+            num_sectors: 0,
+            size_bytes: 0,
+            file_path: None,
+            state: FlashRowState::Unchecked,
+        };
+        let mut app = App {
+            advanced_wizard_open: AdvancedWizardOpen::FlashParts,
+            connection: ConnectionStatus::Edl,
+            ..App::default()
+        };
+        // No scanned rows yet → not preserve-worthy.
+        assert!(!app.advanced_in_progress());
+        // GPT table loaded + still in EDL → preserve.
+        app.flash_parts.rows = vec![row()];
+        assert!(app.advanced_in_progress());
+        // Device left EDL → table is stale → reset.
+        app.connection = ConnectionStatus::None;
+        assert!(!app.advanced_in_progress());
+
+        // Physical confirm screen preserves; DumpPhys (no confirm) + the grid
+        // do not.
+        let mut app = App {
+            advanced_wizard_open: AdvancedWizardOpen::FlashPhys,
+            ..App::default()
+        };
+        app.flash_phys.step = FLASH_PHYS_STEPS.len() - 2; // Confirm
+        assert!(app.advanced_in_progress());
+        app.flash_phys.step = 1; // Select
+        assert!(!app.advanced_in_progress());
+        app.advanced_wizard_open = AdvancedWizardOpen::DumpPhys;
+        assert!(!app.advanced_in_progress());
+        app.advanced_wizard_open = AdvancedWizardOpen::None;
+        assert!(!app.advanced_in_progress());
     }
 
     // ---- parse_phase_marker decimal-point guard ----------------------
