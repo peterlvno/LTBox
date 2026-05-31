@@ -664,6 +664,7 @@
   "root_confirm_subtitle": "Проверьте выбор перед продолжением.",
   "root_confirm_title": "Подтверждение",
   "root_family_unsupported_tb320fc": "Не поддерживается на TB320FC",
+  "root_family_unsupported_tb323fu": "Не поддерживается на TB323FU",
   "root_folder_desc": "Файл EDL-загрузчика (.melf)",
   "root_folder_subtitle": "Выберите файл EDL-загрузчика (обычно xbl_s_devprg_ns.melf).",
   "root_folder_title": "Выбор EDL-загрузчика",

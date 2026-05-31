@@ -664,6 +664,7 @@
   "root_confirm_subtitle": "진행 전 선택 사항을 검토하세요.",
   "root_confirm_title": "확인",
   "root_family_unsupported_tb320fc": "TB320FC에서 지원되지 않음",
+  "root_family_unsupported_tb323fu": "TB323FU에서 지원되지 않음",
   "root_folder_desc": "EDL 로더 파일 (.melf)",
   "root_folder_subtitle": "EDL 로더 파일 선택 (보통 xbl_s_devprg_ns.melf)",
   "root_folder_title": "EDL 로더 선택",

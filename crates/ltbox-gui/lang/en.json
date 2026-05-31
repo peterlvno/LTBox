@@ -664,6 +664,7 @@
   "root_confirm_subtitle": "Review selections before proceeding.",
   "root_confirm_title": "Confirm",
   "root_family_unsupported_tb320fc": "Not supported on TB320FC",
+  "root_family_unsupported_tb323fu": "Not supported on TB323FU",
   "root_folder_desc": "EDL loader file (.melf)",
   "root_folder_subtitle": "Pick the EDL loader file (usually xbl_s_devprg_ns.melf).",
   "root_folder_title": "Select EDL Loader",

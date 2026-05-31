@@ -9909,6 +9909,7 @@ impl App {
         // visible — silent skip would have been confusing for users
         // who came in expecting LKM.
         let tb320fc = self.is_tb320fc();
+        let tb323fu = self.is_tb323fu();
         let lkm_card: Element<'_, Message> = if tb320fc {
             icon_option_card_sub_disabled(
                 RootMode::Lkm.icon_disabled(),
@@ -9924,6 +9925,24 @@ impl App {
                 Message::Root(RootMsg::RootMode(RootMode::Lkm)),
             )
         };
+        // TODO(root): LTBox currently only swaps the boot.img Image for
+        // GKI, which corrupts boot on TB323FU. Keep GKI disabled until
+        // vbmeta handling is added.
+        let gki_card: Element<'_, Message> = if tb323fu {
+            icon_option_card_sub_disabled(
+                RootMode::Gki.icon_disabled(),
+                self.t(RootMode::Gki.label_key()),
+                self.t("root_family_unsupported_tb323fu"),
+            )
+        } else {
+            icon_option_card_sub(
+                RootMode::Gki.icon(),
+                self.t(RootMode::Gki.label_key()),
+                self.t(RootMode::Gki.desc_key()),
+                self.root.mode == Some(RootMode::Gki),
+                Message::Root(RootMsg::RootMode(RootMode::Gki)),
+            )
+        };
         let col = column![
             text(title)
                 .size(theme::text_size::WIZARD_STEP_TITLE)
@@ -9932,17 +9951,7 @@ impl App {
                 .size(13)
                 .style(muted_style)
                 .center(),
-            row![
-                lkm_card,
-                icon_option_card_sub(
-                    RootMode::Gki.icon(),
-                    self.t(RootMode::Gki.label_key()),
-                    self.t(RootMode::Gki.desc_key()),
-                    self.root.mode == Some(RootMode::Gki),
-                    Message::Root(RootMsg::RootMode(RootMode::Gki)),
-                ),
-            ]
-            .spacing(12),
+            row![lkm_card, gki_card,].spacing(12),
         ]
         .spacing(14)
         .padding(28)
@@ -16109,6 +16118,12 @@ impl App {
                 if self.is_tb320fc() && m == RootMode::Lkm {
                     return Task::none();
                 }
+                // TODO(root): LTBox currently only swaps the boot.img Image
+                // for GKI, which corrupts boot on TB323FU. Keep it disabled
+                // until vbmeta handling is added.
+                if self.is_tb323fu() && m == RootMode::Gki {
+                    return Task::none();
+                }
                 self.root.mode = Some(m);
                 self.root.file_path = None;
                 self.root.kernel_version = None;
@@ -16393,6 +16408,17 @@ impl App {
                 Task::none()
             }
             RootMsg::RootExecStart => {
+                // TODO(root): LTBox currently only swaps the boot.img Image
+                // for GKI, which corrupts boot on TB323FU. The mode card is
+                // disabled, but stale selections can survive from before the
+                // model was identified; refuse them until vbmeta handling is
+                // added.
+                if self.is_tb323fu() && self.root.is_gki() {
+                    self.root.mode = None;
+                    self.root.step = 1; // Mode step
+                    self.error_msg = Some(self.t("root_family_unsupported_tb323fu").to_string());
+                    return Task::none();
+                }
                 if self
                     .validate_loader_path(&self.root.folder_path.clone())
                     .is_err()

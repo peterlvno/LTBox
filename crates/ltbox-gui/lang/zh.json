@@ -664,6 +664,7 @@
   "root_confirm_subtitle": "继续前请确认选择。",
   "root_confirm_title": "确认",
   "root_family_unsupported_tb320fc": "TB320FC 不支持",
+  "root_family_unsupported_tb323fu": "TB323FU 不支持",
   "root_folder_desc": "EDL 加载器文件 (.melf)",
   "root_folder_subtitle": "选择 EDL 加载器文件（通常是 xbl_s_devprg_ns.melf）。",
   "root_folder_title": "选择 EDL 加载器",
