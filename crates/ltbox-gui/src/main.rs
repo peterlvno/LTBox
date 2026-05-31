@@ -3325,6 +3325,14 @@ fn efisp_asset_suffix(vendor_boot_fp: Option<&str>) -> &'static str {
     }
 }
 
+/// A dumped `efisp` partition counts as empty (un-provisioned) when every byte
+/// is zero — the stock/erased state. A GBL-provisioned `efisp` carries the EFI
+/// payload, so it has non-zero bytes. The TB323FU root gate refuses to proceed
+/// on an empty `efisp`.
+fn efisp_is_empty(data: &[u8]) -> bool {
+    data.iter().all(|&b| b == 0)
+}
+
 /// Route device into EDL (Qualcomm 9008). Shared by Root/Unroot/Flash.
 ///
 /// Already-EDL: no-op. Fastboot live: continue system boot, wait for ADB,
@@ -16667,6 +16675,9 @@ impl App {
                                             let backup_dir = ltbox_core::app_paths::backup_dir_for(
                                                 &format!("backup_{base_name}"),
                                             );
+                                            // Set inside the dump block from the dumped boot/init_boot
+                                            // fingerprint; carried to Phase 5 to skip AVB + vbmeta.
+                                            let is_tb323fu;
                                             {
                                                 let mut session = ltbox_device::edl::EdlSession::open(&loader, false, &mut log)
                                                     .map_err(|e| format!("EDL session: {e}"))?;
@@ -16680,27 +16691,68 @@ impl App {
                                                 // `qdl-rs --phys-part-idx 4 dump-part <name>`.
                                                 session.dump_partition(&boot_primary, &dumped_boot, 0, ROOT_PARTITIONS_LUN, &mut log)
                                                     .map_err(|e| format!("Dump {boot_primary}: {e}"))?;
-                                                session.dump_partition(&vbmeta_primary, &dumped_vbmeta, 0, ROOT_PARTITIONS_LUN, &mut log)
-                                                    .map_err(|e| format!("Dump {vbmeta_primary}: {e}"))?;
+
+                                                // TB323FU GBL-root gate. Read the build fingerprint
+                                                // from the *dumped* boot/init_boot AVB metadata (the
+                                                // image being rooted, not the connected device
+                                                // model). On TB323FU, rooting only works once `efisp`
+                                                // carries the GBL EFI: dump it and abort before any
+                                                // patch/flash if it is still empty. Provisioned efisp
+                                                // → skip the AVB footer + vbmeta entirely (Phase 5).
+                                                is_tb323fu = ltbox_patch::avb::extract_image_avb_info(&dumped_boot)
+                                                    .ok()
+                                                    .and_then(|info| ltbox_patch::avb::build_fingerprint(&info))
+                                                    .map(|fp| fingerprint_token_match(&fp, "TB323FU"))
+                                                    .unwrap_or(false);
+                                                if is_tb323fu {
+                                                    live!(log, "[Root] {}", ltbox_core::i18n::tr("log_root_efisp_check"));
+                                                    let dumped_efisp = work_dir.join("efisp.img");
+                                                    session.dump_partition("efisp", &dumped_efisp, 0, ROOT_PARTITIONS_LUN, &mut log)
+                                                        .map_err(|e| format!("Dump efisp: {e}"))?;
+                                                    let efisp_empty = std::fs::read(&dumped_efisp)
+                                                        .map(|d| efisp_is_empty(&d))
+                                                        .unwrap_or(true);
+                                                    if efisp_empty {
+                                                        return Err(ltbox_core::i18n::tr("root_tb323fu_efisp_required"));
+                                                    }
+                                                    live!(log, "[Root] {}", ltbox_core::i18n::tr("log_root_efisp_ok"));
+                                                }
+
+                                                // vbmeta stays untouched on TB323FU (GBL handles
+                                                // verification) — skip its dump + backup.
+                                                if !is_tb323fu {
+                                                    session.dump_partition(&vbmeta_primary, &dumped_vbmeta, 0, ROOT_PARTITIONS_LUN, &mut log)
+                                                        .map_err(|e| format!("Dump {vbmeta_primary}: {e}"))?;
+                                                }
                                                 // Stock-image safety net for Unroot, captured
                                                 // before the irreversible patch + flash. A copy
-                                                // failure must abort the run: the previous
-                                                // `let _ =` logged success even when the backup
-                                                // never landed, leaving Unroot with no images.
+                                                // failure must abort the run.
                                                 std::fs::create_dir_all(&backup_dir).map_err(|e| {
                                                     format!("Create backup dir {}: {e}", backup_dir.display())
                                                 })?;
                                                 std::fs::copy(&dumped_boot, backup_dir.join(boot_out))
                                                     .map_err(|e| format!("Back up {boot_out}: {e}"))?;
-                                                std::fs::copy(&dumped_vbmeta, backup_dir.join("vbmeta.img"))
-                                                    .map_err(|e| format!("Back up vbmeta.img: {e}"))?;
-                                                live!(
-                                                    log,
-                                                    "[Root] {} {} + vbmeta.img → {}",
-                                                    ll.root_backup_copy_prefix,
-                                                    boot_out,
-                                                    backup_dir.display()
-                                                );
+                                                if !is_tb323fu {
+                                                    std::fs::copy(&dumped_vbmeta, backup_dir.join("vbmeta.img"))
+                                                        .map_err(|e| format!("Back up vbmeta.img: {e}"))?;
+                                                }
+                                                if is_tb323fu {
+                                                    live!(
+                                                        log,
+                                                        "[Root] {} {} → {}",
+                                                        ll.root_backup_copy_prefix,
+                                                        boot_out,
+                                                        backup_dir.display()
+                                                    );
+                                                } else {
+                                                    live!(
+                                                        log,
+                                                        "[Root] {} {} + vbmeta.img → {}",
+                                                        ll.root_backup_copy_prefix,
+                                                        boot_out,
+                                                        backup_dir.display()
+                                                    );
+                                                }
                                                 // Bounce to Sahara — otherwise the second
                                                 // session's sahara_run times out because
                                                 // the device is still in Firehose.
@@ -16730,7 +16782,7 @@ impl App {
                                             // keeps the two phases in lockstep automatically
                                             // if a future field gets added to the struct.
                                             let cfg = manager_cfg.clone();
-                                            let artifacts = build_patched_artifacts(&cfg, &mut log)
+                                            let artifacts = build_patched_artifacts(&cfg, is_tb323fu, &mut log)
                                                 .map_err(|e| format!("Root patch: {e}"))?;
                                             if manager_apk.is_none() {
                                                 manager_apk = artifacts.manager_apk.clone();
@@ -18730,6 +18782,16 @@ mod tests {
             "_row.efi"
         );
         assert_eq!(efisp_asset_suffix(None), "_row.efi");
+    }
+
+    #[test]
+    fn efisp_is_empty_only_for_all_zero() {
+        assert!(efisp_is_empty(&[]));
+        assert!(efisp_is_empty(&[0u8; 4096]));
+        assert!(!efisp_is_empty(&[0, 0, 1, 0]));
+        let mut buf = vec![0u8; 1024];
+        buf[1000] = 0xEF;
+        assert!(!efisp_is_empty(&buf));
     }
 
     // ---- parse_phase_marker decimal-point guard ----------------------

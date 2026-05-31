@@ -406,6 +406,7 @@ pub struct PatchedArtifacts {
 /// images into `cfg.work_dir` (GUI reuses the EDL session for flash).
 pub fn build_patched_artifacts(
     cfg: &RootPipelineConfig,
+    skip_avb: bool,
     log: &mut Vec<String>,
 ) -> Result<PatchedArtifacts> {
     fs::create_dir_all(&cfg.work_dir)?;
@@ -425,7 +426,9 @@ pub fn build_patched_artifacts(
             "work_dir is missing the stock {stock_filename} dump"
         )));
     }
-    if !vbmeta_src.exists() {
+    // TB323FU GBL root flashes the repacked boot as-is — AVB / vbmeta are not
+    // touched — so the stock vbmeta dump isn't required.
+    if !skip_avb && !vbmeta_src.exists() {
         return Err(LtboxError::Patch(
             "work_dir is missing the stock vbmeta.img dump".into(),
         ));
@@ -492,72 +495,6 @@ pub fn build_patched_artifacts(
         final_boot.display()
     );
 
-    // Re-apply AVB footer. Algorithm + rollback index copied from stock to
-    // preserve device's rollback state. Signing key via `KEY_MAP` on stock pubkey.
-    let stock_info = avb::extract_image_avb_info(&stock_boot_src)?;
-    let boot_key = resolve_signing_key(stock_info.public_key_sha1.as_deref(), stock_filename, log)?;
-    // Erase any stale AVB footer before re-applying ours. A missing footer
-    // is the normal case for a freshly built image, so this is best-effort —
-    // but surface a real failure (I/O, corruption) in the log instead of
-    // swallowing it silently, since `add_hash_footer` then runs on this image.
-    if let Err(e) = avb::erase_footer(&final_boot) {
-        ltbox_core::live!(log, "[AVB] erase_footer skipped: {e}");
-    }
-    avb::add_hash_footer(
-        &final_boot,
-        &stock_info,
-        boot_key.as_deref(),
-        Some(stock_info.rollback_index),
-    )?;
-    ltbox_core::live!(
-        log,
-        "[AVB] {} {} ({} rollback={}, key={})",
-        tr("log_avb_refootered"),
-        stock_filename,
-        stock_info.algorithm,
-        stock_info.rollback_index,
-        boot_key.as_deref().unwrap_or("(unsigned)"),
-    );
-
-    // Rebuild vbmeta with fresh hash descriptor. vbmeta pubkey may differ
-    // from boot pubkey — second `KEY_MAP` lookup against the stock vbmeta.
-    let stock_vbmeta_info = avb::extract_image_avb_info(&vbmeta_src)?;
-    let vbmeta_key = resolve_signing_key(
-        stock_vbmeta_info.public_key_sha1.as_deref(),
-        "vbmeta.img",
-        log,
-    )?;
-    let final_vbmeta = cfg.output_dir.join("vbmeta.img");
-    match vbmeta_key.as_deref() {
-        Some(key) => {
-            avb::rebuild_vbmeta_with_chained_images(
-                &final_vbmeta,
-                &vbmeta_src,
-                &[&final_boot],
-                key,
-                None,
-            )?;
-            ltbox_core::live!(
-                log,
-                "[AVB] {} {} at {} (key={key})",
-                tr("log_avb_rebuilt_vbmeta"),
-                stock_filename,
-                final_vbmeta.display(),
-            );
-        }
-        None => {
-            // Unsigned vbmeta: copy stock through. Stale chain hash is fine
-            // since NONE-algorithm bootloaders skip verification.
-            fs::copy(&vbmeta_src, &final_vbmeta)?;
-            ltbox_core::live!(
-                log,
-                "[AVB] {} {}",
-                tr("log_avb_vbmeta_unsigned_copied"),
-                final_vbmeta.display(),
-            );
-        }
-    }
-
     // Slot suffix must be poll-resolved by the caller. Defaulting to
     // `_a` here was a silent footgun: when the device was actually
     // running on `_b`, the patched artifact landed on the wrong slot
@@ -574,11 +511,88 @@ pub fn build_patched_artifacts(
     }
     let suffix = cfg.slot_suffix.clone();
 
+    let (patched_vbmeta, vbmeta_partition) = if skip_avb {
+        // TB323FU GBL root: boot verification is handled by the GBL EFI on
+        // `efisp`, so the stock AVB chain is bypassed entirely. Flash the
+        // repacked image as-is — no re-footer, no vbmeta rebuild, no vbmeta
+        // flash (the caller skips the vbmeta dump too).
+        ltbox_core::live!(log, "[AVB] {}", tr("log_root_skip_avb_tb323fu"));
+        (None, None)
+    } else {
+        // Re-apply AVB footer. Algorithm + rollback index copied from stock to
+        // preserve device's rollback state. Signing key via `KEY_MAP` on stock pubkey.
+        let stock_info = avb::extract_image_avb_info(&stock_boot_src)?;
+        let boot_key =
+            resolve_signing_key(stock_info.public_key_sha1.as_deref(), stock_filename, log)?;
+        // Erase any stale AVB footer before re-applying ours. A missing footer
+        // is the normal case for a freshly built image, so this is best-effort —
+        // but surface a real failure (I/O, corruption) in the log instead of
+        // swallowing it silently, since `add_hash_footer` then runs on this image.
+        if let Err(e) = avb::erase_footer(&final_boot) {
+            ltbox_core::live!(log, "[AVB] erase_footer skipped: {e}");
+        }
+        avb::add_hash_footer(
+            &final_boot,
+            &stock_info,
+            boot_key.as_deref(),
+            Some(stock_info.rollback_index),
+        )?;
+        ltbox_core::live!(
+            log,
+            "[AVB] {} {} ({} rollback={}, key={})",
+            tr("log_avb_refootered"),
+            stock_filename,
+            stock_info.algorithm,
+            stock_info.rollback_index,
+            boot_key.as_deref().unwrap_or("(unsigned)"),
+        );
+
+        // Rebuild vbmeta with fresh hash descriptor. vbmeta pubkey may differ
+        // from boot pubkey — second `KEY_MAP` lookup against the stock vbmeta.
+        let stock_vbmeta_info = avb::extract_image_avb_info(&vbmeta_src)?;
+        let vbmeta_key = resolve_signing_key(
+            stock_vbmeta_info.public_key_sha1.as_deref(),
+            "vbmeta.img",
+            log,
+        )?;
+        let final_vbmeta = cfg.output_dir.join("vbmeta.img");
+        match vbmeta_key.as_deref() {
+            Some(key) => {
+                avb::rebuild_vbmeta_with_chained_images(
+                    &final_vbmeta,
+                    &vbmeta_src,
+                    &[&final_boot],
+                    key,
+                    None,
+                )?;
+                ltbox_core::live!(
+                    log,
+                    "[AVB] {} {} at {} (key={key})",
+                    tr("log_avb_rebuilt_vbmeta"),
+                    stock_filename,
+                    final_vbmeta.display(),
+                );
+            }
+            None => {
+                // Unsigned vbmeta: copy stock through. Stale chain hash is fine
+                // since NONE-algorithm bootloaders skip verification.
+                fs::copy(&vbmeta_src, &final_vbmeta)?;
+                ltbox_core::live!(
+                    log,
+                    "[AVB] {} {}",
+                    tr("log_avb_vbmeta_unsigned_copied"),
+                    final_vbmeta.display(),
+                );
+            }
+        }
+        (Some(final_vbmeta), Some(format!("vbmeta{suffix}")))
+    };
+
     Ok(PatchedArtifacts {
         patched_boot: final_boot,
-        patched_vbmeta: Some(final_vbmeta),
+        patched_vbmeta,
         manager_apk: staged_manager_apk.exists().then_some(staged_manager_apk),
         boot_partition: format!("{base_part}{suffix}"),
-        vbmeta_partition: Some(format!("vbmeta{suffix}")),
+        vbmeta_partition,
     })
 }

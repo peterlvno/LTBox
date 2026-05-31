@@ -19,6 +19,20 @@ pub struct AvbImageInfo {
     pub props: Vec<(String, Vec<u8>)>,
 }
 
+/// The Android build fingerprint embedded in an image's AVB property
+/// descriptors (`com.android.build.<part>.fingerprint`, e.g.
+/// `Lenovo/TB323FU/...:user/release-keys`), if present. Used to identify the
+/// firmware an image belongs to — the TB323FU root gate reads it from the
+/// dumped boot / init_boot.
+pub fn build_fingerprint(info: &AvbImageInfo) -> Option<String> {
+    info.props
+        .iter()
+        .find(|(k, _)| k.ends_with(".fingerprint"))
+        .and_then(|(_, v)| std::str::from_utf8(v).ok())
+        .map(|s| s.trim_end_matches('\0').trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Render `avbtool info_image`-style metadata for one or more images.
 pub fn image_info_report(image_paths: &[PathBuf]) -> Result<String> {
     if image_paths.is_empty() {
@@ -209,6 +223,41 @@ pub fn add_hash_footer(
 mod tests {
     use super::*;
     use crate::{key_map, region};
+
+    #[test]
+    fn build_fingerprint_reads_property_descriptor() {
+        let make = |props: Vec<(String, Vec<u8>)>| AvbImageInfo {
+            partition_size: 0,
+            algorithm: "SHA256_RSA4096".into(),
+            rollback_index: 0,
+            flags: 0,
+            partition_name: Some("init_boot".into()),
+            salt: None,
+            public_key_sha1: None,
+            props,
+        };
+        let mut value = b"Lenovo/TB323FU/TB323FU:16/BQ2A/x:user/release-keys".to_vec();
+        value.push(0); // trailing NUL like the on-disk descriptor
+        let info = make(vec![
+            (
+                "com.android.build.init_boot.os_version".into(),
+                b"16".to_vec(),
+            ),
+            ("com.android.build.init_boot.fingerprint".into(), value),
+        ]);
+        assert_eq!(
+            build_fingerprint(&info).as_deref(),
+            Some("Lenovo/TB323FU/TB323FU:16/BQ2A/x:user/release-keys")
+        );
+        // No fingerprint property → None.
+        assert_eq!(
+            build_fingerprint(&make(vec![(
+                "com.android.build.init_boot.os_version".into(),
+                b"16".to_vec()
+            )])),
+            None
+        );
+    }
 
     #[test]
     fn image_info_report_accepts_non_avb_img() {
