@@ -261,7 +261,6 @@
   "live_arb_tb320fc_edl_dump": "TB320FC: нет сохранённого rollback index — перезагрузка в EDL для чтения boot_a / vbmeta_system_a",
   "live_arb_tb323_indices": "Индексы отката TB323FU — boot: образ {boot_i} / устройство {boot_d}; vbmeta_system: образ {vbs_i} / устройство {vbs_d}.",
   "live_arb_tb323_resigned": "TB323FU: boot/vbmeta_system/recovery/vbmeta переподписаны ключом testkey (индекс boot {boot}, индекс vbmeta_system {vbs}).",
-  "live_arb_tb323_skip_no_gbl": "TB323FU: защита от отката пропущена — цепочке testkey нужна прошивка с wipe + регионом, чтобы установить соответствующий _arb GBL.",
   "live_arb_tb323_skip_uptodate": "TB323FU: образы не ниже устройства — прошивка без изменений (без переподписи).",
   "live_arb_using_key": "Используется ключ: {path}",
   "live_avb_device_index_unavailable": "(нет / загрузчик недоступен)",

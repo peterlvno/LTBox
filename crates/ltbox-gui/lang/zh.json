@@ -261,7 +261,6 @@
   "live_arb_tb320fc_edl_dump": "TB320FC: 无存储的回滚索引 — 重启到 EDL 以检查 boot_a / vbmeta_system_a",
   "live_arb_tb323_indices": "TB323FU 回滚索引 — boot：安装 {boot_i} / 设备 {boot_d}；vbmeta_system：安装 {vbs_i} / 设备 {vbs_d}。",
   "live_arb_tb323_resigned": "TB323FU：已用 testkey 重新签名 boot/vbmeta_system/recovery/vbmeta（boot 索引 {boot}，vbmeta_system 索引 {vbs}）。",
-  "live_arb_tb323_skip_no_gbl": "TB323FU：跳过防回滚 — testkey 链需要在 wipe + 区域刷写时写入与之匹配的 _arb GBL。",
   "live_arb_tb323_skip_uptodate": "TB323FU：安装镜像不低于设备 — 按原样刷入（不重新签名）。",
   "live_arb_using_key": "使用密钥: {path}",
   "live_avb_device_index_unavailable": "(无 / 引导加载程序不可用)",

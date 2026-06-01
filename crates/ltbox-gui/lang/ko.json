@@ -261,7 +261,6 @@
   "live_arb_tb320fc_edl_dump": "TB320FC: 저장된 롤백 인덱스 없음 — EDL로 재부팅하여 boot_a / vbmeta_system_a 확인",
   "live_arb_tb323_indices": "TB323FU 롤백 인덱스 — boot: 설치 {boot_i} / 기기 {boot_d}; vbmeta_system: 설치 {vbs_i} / 기기 {vbs_d}.",
   "live_arb_tb323_resigned": "TB323FU: testkey로 boot/vbmeta_system/recovery/vbmeta 재서명 (boot 인덱스 {boot}, vbmeta_system 인덱스 {vbs}).",
-  "live_arb_tb323_skip_no_gbl": "TB323FU: 롤백 방지를 건너뜁니다 — testkey 체인은 일치하는 _arb GBL을 프로비저닝하기 위해 wipe + 리전 설치가 필요합니다.",
   "live_arb_tb323_skip_uptodate": "TB323FU: 설치 이미지가 기기보다 낮지 않습니다 — 원본 그대로 설치합니다(재서명 없음).",
   "live_arb_using_key": "사용 키: {path}",
   "live_avb_device_index_unavailable": "(없음 / 부트로더 사용 불가)",

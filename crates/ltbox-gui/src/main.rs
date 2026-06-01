@@ -14462,39 +14462,27 @@ impl App {
                                             if rb_mode != ltbox_patch::rollback::RollbackMode::Off
                                                 && target_is_tb323fu
                                             {
-                                                // The testkey ARB chain is only safe when the
-                                                // matching `_arb` GBL is provisioned to efisp —
-                                                // which only happens on a wipe + region flash.
-                                                // Any other mode leaves the stock 8fcb GBL (or
-                                                // none), which would reject a testkey chain and
-                                                // brick. Gate ARB on the exact GBL condition.
-                                                if cfg.modify_region && cfg.wipe {
-                                                    // fastboot never exposes the index — dump it
-                                                    // over EDL, testkey re-sign the four AVB
-                                                    // partitions, stage overlays (or flash stock
-                                                    // when the install isn't a downgrade).
-                                                    let arb_work_dir =
-                                                        ltbox_core::app_paths::work_dir_for("flash_arb");
-                                                    let _ = std::fs::remove_dir_all(&arb_work_dir);
-                                                    std::fs::create_dir_all(&arb_work_dir)
-                                                        .map_err(|e| format!("arb work dir: {e}"))?;
-                                                    let (overlays, need) = build_tb323fu_arb_overlays(
-                                                        &mut session,
-                                                        fw_dir,
-                                                        &arb_work_dir,
-                                                        &mut log,
-                                                    )?;
-                                                    tb323fu_arb_need = need;
-                                                    arb_patched = overlays;
-                                                } else {
-                                                    ltbox_core::live!(
-                                                        log,
-                                                        "[ARB] {}",
-                                                        ltbox_core::i18n::tr(
-                                                            "live_arb_tb323_skip_no_gbl"
-                                                        )
-                                                    );
-                                                }
+                                                // TB323FU stages the testkey chain whenever the
+                                                // install is a downgrade, independent of region /
+                                                // wipe: the matching `_arb` GBL is flashed to efisp
+                                                // below in the exact same `need` cases, so the chain
+                                                // and its root of trust stay paired. fastboot never
+                                                // exposes the index, so dump it over EDL, testkey
+                                                // re-sign the four AVB partitions and stage overlays
+                                                // (or flash stock when not a downgrade).
+                                                let arb_work_dir =
+                                                    ltbox_core::app_paths::work_dir_for("flash_arb");
+                                                let _ = std::fs::remove_dir_all(&arb_work_dir);
+                                                std::fs::create_dir_all(&arb_work_dir)
+                                                    .map_err(|e| format!("arb work dir: {e}"))?;
+                                                let (overlays, need) = build_tb323fu_arb_overlays(
+                                                    &mut session,
+                                                    fw_dir,
+                                                    &arb_work_dir,
+                                                    &mut log,
+                                                )?;
+                                                tb323fu_arb_need = need;
+                                                arb_patched = overlays;
                                             } else if rb_mode != ltbox_patch::rollback::RollbackMode::Off {
                                                 let arb_work_dir =
                                                     ltbox_core::app_paths::work_dir_for("flash_arb");
@@ -14667,9 +14655,13 @@ impl App {
                                             }
 
                                             // Download the efisp GBL now that the ARB dump has
-                                            // decided stock vs `_arb` (testkey-root) — the latter
-                                            // is required when a downgrade re-signed the chain.
-                                            if target_is_tb323fu && cfg.modify_region && cfg.wipe {
+                                            // decided stock vs `_arb` (testkey-root). The `_arb`
+                                            // GBL is fetched whenever a downgrade re-signed the
+                                            // chain (any region/wipe); the normal GBL is fetched
+                                            // for a region-provisioning wipe. Both flash below.
+                                            if target_is_tb323fu
+                                                && (tb323fu_arb_need || (cfg.modify_region && cfg.wipe))
+                                            {
                                                 let suffix = efisp_asset_suffix(
                                                     vendor_boot_fingerprint.as_deref(),
                                                     tb323fu_arb_need,
@@ -14747,6 +14739,91 @@ impl App {
                                                     &mut log,
                                                 ) {
                                                     return Err(format!("ARB flash {label}: {e}"));
+                                                }
+                                            }
+
+                                            // efisp GBL, flashed immediately after the ARB overlays
+                                            // so the testkey chain and its `_arb` root of trust are
+                                            // provisioned together, before the best-effort region /
+                                            // country work that can abort in between. A fetched EFI
+                                            // (Some) is flashed: the `_arb` variant whenever a
+                                            // downgrade re-signed the chain — fatal on failure since
+                                            // that chain can't boot without it — or the normal
+                                            // variant on a region-provisioning wipe (best-effort).
+                                            // With no EFI fetched, a same-region wipe strips efisp;
+                                            // every other mode leaves it untouched.
+                                            if target_is_tb323fu {
+                                                let efisp_lun =
+                                                    ltbox_core::partition_lun::lun_for_partition("efisp")
+                                                        .unwrap_or(4);
+                                                match &efisp_efi {
+                                                    Some(efi) => {
+                                                        ltbox_core::live!(
+                                                            log,
+                                                            "[Flash] {}",
+                                                            ltbox_core::i18n::tr("live_flash_efisp_flash")
+                                                        );
+                                                        if let Err(e) = session.flash_partition(
+                                                            "efisp", efi, 0, efisp_lun, &mut log,
+                                                        ) {
+                                                            ltbox_core::live!(
+                                                                log,
+                                                                "[Flash] {}",
+                                                                ltbox_core::i18n::tr("live_flash_efisp_flash_failed")
+                                                                    .replace("{error}", &e.to_string())
+                                                            );
+                                                            // A staged testkey ARB chain only boots
+                                                            // with this `_arb` GBL. Abort loudly
+                                                            // (device stays in EDL for retry) rather
+                                                            // than resetting into a rollback brick.
+                                                            if tb323fu_arb_need {
+                                                                return Err(format!(
+                                                                    "efisp _arb GBL flash failed after staging the testkey ARB chain — left in EDL to avoid a brick: {e}"
+                                                                ));
+                                                            }
+                                                        } else {
+                                                            ltbox_core::live!(
+                                                                log,
+                                                                "[Flash] {}",
+                                                                ltbox_core::i18n::tr("live_flash_efisp_flashed")
+                                                            );
+                                                        }
+                                                    }
+                                                    None => {
+                                                        // A downgrade always fetches the `_arb` GBL,
+                                                        // so reaching here with `need` set is an
+                                                        // internal inconsistency — fail safe.
+                                                        if tb323fu_arb_need {
+                                                            return Err(
+                                                                "internal: testkey ARB chain staged but no efisp GBL was downloaded".to_string(),
+                                                            );
+                                                        }
+                                                        // Same-region wipe with no downgrade strips
+                                                        // the GBL; other modes leave efisp as-is.
+                                                        if cfg.wipe && !cfg.modify_region {
+                                                            ltbox_core::live!(
+                                                                log,
+                                                                "[Flash] {}",
+                                                                ltbox_core::i18n::tr("live_flash_efisp_erase")
+                                                            );
+                                                            if let Err(e) = session.erase_partition_by_name(
+                                                                "efisp", 0, efisp_lun, &mut log,
+                                                            ) {
+                                                                ltbox_core::live!(
+                                                                    log,
+                                                                    "[Flash] {}",
+                                                                    ltbox_core::i18n::tr("live_flash_efisp_erase_failed")
+                                                                        .replace("{error}", &e.to_string())
+                                                                );
+                                                            } else {
+                                                                ltbox_core::live!(
+                                                                    log,
+                                                                    "[Flash] {}",
+                                                                    ltbox_core::i18n::tr("live_flash_efisp_erased")
+                                                                );
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
 
@@ -15073,82 +15150,10 @@ impl App {
                                                     }
                                                 }
 
-                                            // TB323FU wipe: flash or erase efisp after rawprogram.
-                                            if target_is_tb323fu && cfg.wipe {
-                                                let efisp_lun =
-                                                    ltbox_core::partition_lun::lun_for_partition("efisp")
-                                                        .unwrap_or(4);
-                                                if cfg.modify_region {
-                                                    match &efisp_efi {
-                                                        Some(efi) => {
-                                                            ltbox_core::live!(
-                                                                log,
-                                                                "[Flash] {}",
-                                                                ltbox_core::i18n::tr("live_flash_efisp_flash")
-                                                            );
-                                                            if let Err(e) = session.flash_partition(
-                                                                "efisp", efi, 0, efisp_lun, &mut log,
-                                                            ) {
-                                                                ltbox_core::live!(
-                                                                    log,
-                                                                    "[Flash] {}",
-                                                                    ltbox_core::i18n::tr("live_flash_efisp_flash_failed")
-                                                                        .replace("{error}", &e.to_string())
-                                                                );
-                                                                // A staged testkey ARB chain only
-                                                                // boots with this `_arb` GBL. Abort
-                                                                // loudly (device stays in EDL for
-                                                                // retry) rather than resetting into
-                                                                // a rollback brick.
-                                                                if tb323fu_arb_need {
-                                                                    return Err(format!(
-                                                                        "efisp _arb GBL flash failed after staging the testkey ARB chain — left in EDL to avoid a brick: {e}"
-                                                                    ));
-                                                                }
-                                                            } else {
-                                                                ltbox_core::live!(
-                                                                    log,
-                                                                    "[Flash] {}",
-                                                                    ltbox_core::i18n::tr("live_flash_efisp_flashed")
-                                                                );
-                                                            }
-                                                        }
-                                                        None => {
-                                                            // need implies a download ran (same
-                                                            // gate); a missing EFI here is an
-                                                            // internal inconsistency, not a
-                                                            // user-recoverable state — fail safe.
-                                                            if tb323fu_arb_need {
-                                                                return Err(
-                                                                    "internal: testkey ARB chain staged but no efisp GBL was downloaded".to_string(),
-                                                                );
-                                                            }
-                                                        }
-                                                    }
-                                                } else {
-                                                    ltbox_core::live!(
-                                                        log,
-                                                        "[Flash] {}",
-                                                        ltbox_core::i18n::tr("live_flash_efisp_erase")
-                                                    );
-                                                    if let Err(e) = session.erase_partition_by_name(
-                                                        "efisp", 0, efisp_lun, &mut log,
-                                                    ) {
-                                                        ltbox_core::live!(
-                                                            log,
-                                                            "[Flash] {}",
-                                                            ltbox_core::i18n::tr("live_flash_efisp_erase_failed")
-                                                                .replace("{error}", &e.to_string())
-                                                        );
-                                                    } else {
-                                                        ltbox_core::live!(
-                                                            log,
-                                                            "[Flash] {}",
-                                                            ltbox_core::i18n::tr("live_flash_efisp_erased")
-                                                        );
-                                                    }
-                                                }
-                                            }
+                                            // (efisp GBL is flashed earlier — right after the ARB
+                                            // overlays — so the testkey chain and its `_arb` root of
+                                            // trust are provisioned before the best-effort
+                                            // region/country work that can abort in between.)
 
                                             // Mark `_a` active before reset. Lenovo
                                             // firmware rawprograms only target `_a`, so

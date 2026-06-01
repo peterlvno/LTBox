@@ -261,7 +261,6 @@
   "live_arb_tb320fc_edl_dump": "TB320FC: no stored rollback index — rebooting to EDL to inspect boot_a + vbmeta_system_a",
   "live_arb_tb323_indices": "TB323FU rollback indices — boot: install {boot_i} / device {boot_d}; vbmeta_system: install {vbs_i} / device {vbs_d}.",
   "live_arb_tb323_resigned": "TB323FU: re-signed boot/vbmeta_system/recovery/vbmeta with testkey (boot index {boot}, vbmeta_system index {vbs}).",
-  "live_arb_tb323_skip_no_gbl": "TB323FU: anti-rollback skipped — the testkey chain needs a wipe + region flash to provision its matching _arb GBL.",
   "live_arb_tb323_skip_uptodate": "TB323FU: install images are not behind the device — flashing stock (no re-sign).",
   "live_arb_using_key": "Using key: {path}",
   "live_avb_device_index_unavailable": "(none / bootloader unavailable)",
