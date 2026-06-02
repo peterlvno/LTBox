@@ -17754,6 +17754,7 @@ fn flash_parts_execute(loader_path: String, rows: Vec<FlashPartRow>) -> Vec<Stri
                     img,
                     row.lun,
                     &row.start_sector.to_string(),
+                    row.num_sectors,
                     &mut log,
                 ) {
                     ltbox_core::live!(

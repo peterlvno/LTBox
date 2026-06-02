@@ -644,12 +644,24 @@ impl EdlSession {
         image: &Path,
         lun: u8,
         start_sector: &str,
+        partition_sectors: u64,
         log: &mut Vec<String>,
     ) -> Result<()> {
         let mut file = std::fs::File::open(image)?;
         let file_len = file.metadata()?.len();
         let sector_size = self.dev.fh_config().storage_sector_size as u64;
-        let num_sectors = file_len.div_ceil(sector_size) as usize;
+        let image_sectors = file_len.div_ceil(sector_size);
+        // Refuse to program past the partition — an oversized image would
+        // spill into the next partition and brick the device. The by-name
+        // `flash_partition` resolves the span from the GPT; this explicit-
+        // start variant relies on the caller's prior partition scan, passed
+        // in as `partition_sectors`.
+        if image_sectors > partition_sectors {
+            return Err(EdlError::Session(format!(
+                "Flash {part_name}: image is {image_sectors} sectors but the partition spans only {partition_sectors}"
+            )));
+        }
+        let num_sectors = image_sectors as usize;
         ltbox_core::live!(
             log,
             "[EDL] {} {part_name} ← {} ({file_len} bytes, {num_sectors} sectors, LUN {lun})",
