@@ -12,6 +12,10 @@ pub struct AvbImageInfo {
     pub partition_size: u64,
     pub algorithm: String,
     pub rollback_index: u64,
+    /// AVB rollback-index *slot* this image's index is checked against.
+    /// Preserved when re-adding a hash footer so the bootloader keeps
+    /// reading the device-committed value from the original location.
+    pub rollback_index_location: u32,
     pub flags: u32,
     pub partition_name: Option<String>,
     pub salt: Option<Vec<u8>>,
@@ -93,6 +97,7 @@ pub fn extract_image_avb_info(image_path: &Path) -> Result<AvbImageInfo> {
         partition_size,
         algorithm: info.algorithm_name.clone(),
         rollback_index: info.header.rollback_index,
+        rollback_index_location: info.header.rollback_index_location,
         flags: info.header.flags,
         partition_name,
         salt,
@@ -308,7 +313,7 @@ pub fn add_hash_footer(
         public_key_metadata: None,
         rollback_index: rollback,
         flags: info.flags,
-        rollback_index_location: 0,
+        rollback_index_location: info.rollback_index_location,
         properties,
         kernel_cmdlines: Vec::new(),
         include_descriptors_from_images: Vec::new(),
@@ -336,6 +341,7 @@ mod tests {
             partition_size: 0,
             algorithm: "SHA256_RSA4096".into(),
             rollback_index: 0,
+            rollback_index_location: 0,
             flags: 0,
             partition_name: Some("init_boot".into()),
             salt: None,
