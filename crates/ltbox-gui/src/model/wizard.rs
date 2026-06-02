@@ -733,3 +733,361 @@ impl Wizard for SysUpdateWizard {
         }
     }
 }
+
+/// Tri-state row action — clicking the checkbox cycles through these
+/// in order. Flash requires a `file_path`; Erase wipes the sector range.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum FlashRowState {
+    #[default]
+    Unchecked,
+    Flash,
+    Erase,
+}
+
+impl FlashRowState {
+    pub(crate) fn cycle(self) -> Self {
+        match self {
+            Self::Unchecked => Self::Flash,
+            Self::Flash => Self::Erase,
+            Self::Erase => Self::Unchecked,
+        }
+    }
+}
+
+/// One GPT entry surfaced in the wizard table. `file_path` is populated
+/// when the user double-clicks the row and picks an image file.
+#[derive(Debug, Clone)]
+pub(crate) struct FlashPartRow {
+    pub(crate) lun: u8,
+    pub(crate) label: String,
+    pub(crate) start_sector: u64,
+    pub(crate) num_sectors: u64,
+    pub(crate) size_bytes: u64,
+    pub(crate) file_path: Option<String>,
+    pub(crate) state: FlashRowState,
+}
+
+/// Column the partition table is currently sorted by. Header click
+/// fires `*SortBy(col)`; clicking the active column toggles direction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum PartsSortColumn {
+    #[default]
+    Lun,
+    Label,
+    Start,
+    Size,
+    /// File-path column — only meaningful for FlashParts; DumpParts has
+    /// no file-path column so this variant is never produced from its
+    /// header buttons.
+    File,
+}
+
+#[derive(Default)]
+pub(crate) struct FlashPartsWizard {
+    pub(crate) step: usize, // 0=Loader, 1=Select, 2=Confirm, 3=Exec
+    pub(crate) loader_path: Option<String>,
+    pub(crate) rows: Vec<FlashPartRow>,
+    pub(crate) scanning: bool,
+    pub(crate) scan_error: Option<String>,
+    pub(crate) sort_col: PartsSortColumn,
+    /// `true` → descending. Default `false` (ascending) on first scan
+    /// so initial layout matches the device's GPT order well enough
+    /// for LUN-then-label browsing.
+    pub(crate) sort_desc: bool,
+}
+
+pub(crate) const FLASH_PARTS_STEPS: &[&str] = &[
+    "flash_parts_step_loader",
+    "flash_parts_step_select",
+    "flash_step_confirm",
+    "flash_step_flash",
+];
+
+impl FlashPartsWizard {
+    pub(crate) fn active_rows(&self) -> Vec<FlashPartRow> {
+        self.rows
+            .iter()
+            .filter(|r| match r.state {
+                FlashRowState::Flash => r.file_path.is_some(),
+                FlashRowState::Erase => true,
+                FlashRowState::Unchecked => false,
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Stable-sort `rows` by current `sort_col` / `sort_desc`. Tie-break
+    /// on (lun, label) so identical primary keys land in a deterministic
+    /// order.
+    pub(crate) fn apply_sort(&mut self) {
+        let col = self.sort_col;
+        let desc = self.sort_desc;
+        self.rows.sort_by(|a, b| {
+            let ord = match col {
+                PartsSortColumn::Lun => a.lun.cmp(&b.lun),
+                // ASCII byte order — uppercase (A-Z, 0x41-0x5A) sorts
+                // before lowercase (a-z, 0x61-0x7A) by user request.
+                PartsSortColumn::Label => a.label.cmp(&b.label),
+                PartsSortColumn::Start => a.start_sector.cmp(&b.start_sector),
+                PartsSortColumn::Size => a.size_bytes.cmp(&b.size_bytes),
+                PartsSortColumn::File => a
+                    .file_path
+                    .as_deref()
+                    .unwrap_or("")
+                    .cmp(b.file_path.as_deref().unwrap_or("")),
+            };
+            let ord = ord
+                .then_with(|| a.lun.cmp(&b.lun))
+                .then_with(|| a.label.cmp(&b.label));
+            if desc { ord.reverse() } else { ord }
+        });
+    }
+
+    /// Header click: toggle direction on the active column, otherwise
+    /// switch to the new column ascending.
+    pub(crate) fn toggle_sort(&mut self, col: PartsSortColumn) {
+        if self.sort_col == col {
+            self.sort_desc = !self.sort_desc;
+        } else {
+            self.sort_col = col;
+            self.sort_desc = false;
+        }
+        self.apply_sort();
+    }
+}
+
+impl Wizard for FlashPartsWizard {
+    fn step(&self) -> usize {
+        self.step
+    }
+    fn step_mut(&mut self) -> &mut usize {
+        &mut self.step
+    }
+    fn step_count(&self) -> usize {
+        FLASH_PARTS_STEPS.len()
+    }
+    fn can_next(&self) -> bool {
+        match self.step {
+            0 => self.loader_path.is_some() && !self.scanning,
+            1 => self.rows.iter().any(|r| match r.state {
+                FlashRowState::Flash => r.file_path.is_some(),
+                FlashRowState::Erase => true,
+                FlashRowState::Unchecked => false,
+            }),
+            2 => true,
+            _ => false,
+        }
+    }
+}
+
+/// Scan-phase result carried in a single message. Same shape as the
+/// DumpParts variant but with the Flash row type.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FlashPartsScanResult {
+    pub(crate) logs: Vec<String>,
+    pub(crate) rows: Vec<FlashPartRow>,
+    pub(crate) error: Option<String>,
+}
+
+// =========================================================================
+// Dump Partitions wizard state (Advanced → Dump Partitions)
+// =========================================================================
+
+#[derive(Debug, Clone)]
+pub(crate) struct DumpPartRow {
+    pub(crate) lun: u8,
+    pub(crate) label: String,
+    pub(crate) start_sector: u64,
+    pub(crate) num_sectors: u64,
+    pub(crate) size_bytes: u64,
+    pub(crate) selected: bool,
+}
+
+/// Scan-phase result carried in a single message.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct DumpPartsScanResult {
+    pub(crate) logs: Vec<String>,
+    pub(crate) rows: Vec<DumpPartRow>,
+    pub(crate) error: Option<String>,
+}
+
+#[derive(Default)]
+pub(crate) struct DumpPartsWizard {
+    pub(crate) step: usize, // 0=Loader, 1=Select, 2=Exec
+    pub(crate) loader_path: Option<String>,
+    pub(crate) rows: Vec<DumpPartRow>,
+    pub(crate) output_dir: Option<String>,
+    pub(crate) scanning: bool,
+    pub(crate) scan_error: Option<String>,
+    pub(crate) sort_col: PartsSortColumn,
+    pub(crate) sort_desc: bool,
+}
+
+pub(crate) const DUMP_PARTS_STEPS: &[&str] = &[
+    "dump_parts_step_loader",
+    "dump_parts_step_select",
+    "dump_parts_step_dump",
+];
+
+impl DumpPartsWizard {
+    pub(crate) fn reset(&mut self) {
+        *self = Self::default();
+    }
+    pub(crate) fn back(&mut self) {
+        if self.step > 0 {
+            self.step -= 1;
+        }
+    }
+    pub(crate) fn can_next(&self) -> bool {
+        match self.step {
+            0 => self.loader_path.is_some() && !self.scanning,
+            1 => self.rows.iter().any(|r| r.selected),
+            _ => false,
+        }
+    }
+    pub(crate) fn selected_rows(&self) -> Vec<DumpPartRow> {
+        self.rows.iter().filter(|r| r.selected).cloned().collect()
+    }
+
+    pub(crate) fn apply_sort(&mut self) {
+        let col = self.sort_col;
+        let desc = self.sort_desc;
+        self.rows.sort_by(|a, b| {
+            let ord = match col {
+                PartsSortColumn::Lun => a.lun.cmp(&b.lun),
+                // ASCII byte order — uppercase (A-Z, 0x41-0x5A) sorts
+                // before lowercase (a-z, 0x61-0x7A) by user request.
+                PartsSortColumn::Label => a.label.cmp(&b.label),
+                PartsSortColumn::Start => a.start_sector.cmp(&b.start_sector),
+                PartsSortColumn::Size => a.size_bytes.cmp(&b.size_bytes),
+                // DumpParts has no file column; behave as Lun fallback.
+                PartsSortColumn::File => a.lun.cmp(&b.lun),
+            };
+            let ord = ord
+                .then_with(|| a.lun.cmp(&b.lun))
+                .then_with(|| a.label.cmp(&b.label));
+            if desc { ord.reverse() } else { ord }
+        });
+    }
+
+    pub(crate) fn toggle_sort(&mut self, col: PartsSortColumn) {
+        if self.sort_col == col {
+            self.sort_desc = !self.sort_desc;
+        } else {
+            self.sort_col = col;
+            self.sort_desc = false;
+        }
+        self.apply_sort();
+    }
+}
+
+// =========================================================================
+// Physical Storage wizards (Advanced → Dump/Flash Physical)
+//
+// LUN-level counterparts to the partition wizards. No GPT scan — the
+// user picks which of LUN 0..=5 to hit, and the exec pass reads/writes
+// the whole LUN. Mirrors qdlrs `Dump` (whole-disk variant) and
+// `OverwriteStorage` commands.
+// =========================================================================
+
+pub(crate) const PHYS_LUN_COUNT: usize = 6;
+
+#[derive(Default)]
+pub(crate) struct DumpPhysWizard {
+    pub(crate) step: usize, // 0=Loader, 1=Select, 2=Exec
+    pub(crate) loader_path: Option<String>,
+    pub(crate) selected: [bool; PHYS_LUN_COUNT],
+    pub(crate) output_dir: Option<String>,
+    pub(crate) loader_error: Option<String>,
+}
+
+pub(crate) const DUMP_PHYS_STEPS: &[&str] = &[
+    "dump_parts_step_loader",
+    "phys_step_select",
+    "dump_parts_step_dump",
+];
+
+impl DumpPhysWizard {
+    pub(crate) fn reset(&mut self) {
+        *self = Self::default();
+    }
+    pub(crate) fn back(&mut self) {
+        if self.step > 0 {
+            self.step -= 1;
+        }
+    }
+    pub(crate) fn can_next(&self) -> bool {
+        match self.step {
+            0 => self.loader_path.is_some(),
+            1 => self.selected.iter().any(|&s| s),
+            _ => false,
+        }
+    }
+    pub(crate) fn selected_luns(&self) -> Vec<u8> {
+        self.selected
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &s)| if s { Some(i as u8) } else { None })
+            .collect()
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct FlashPhysWizard {
+    pub(crate) step: usize, // 0=Loader, 1=Select, 2=Confirm, 3=Exec
+    pub(crate) loader_path: Option<String>,
+    pub(crate) selected: [bool; PHYS_LUN_COUNT],
+    pub(crate) file_paths: [Option<String>; PHYS_LUN_COUNT],
+    pub(crate) loader_error: Option<String>,
+}
+
+pub(crate) const FLASH_PHYS_STEPS: &[&str] = &[
+    "flash_parts_step_loader",
+    "phys_step_select",
+    "flash_step_confirm",
+    "flash_step_flash",
+];
+
+impl FlashPhysWizard {
+    /// (LUN, file_path) pairs for every selected, file-bound row.
+    pub(crate) fn active_pairs(&self) -> Vec<(u8, String)> {
+        (0..PHYS_LUN_COUNT)
+            .filter_map(|i| {
+                if self.selected[i] {
+                    self.file_paths[i].clone().map(|p| (i as u8, p))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+impl Wizard for FlashPhysWizard {
+    fn step(&self) -> usize {
+        self.step
+    }
+    fn step_mut(&mut self) -> &mut usize {
+        &mut self.step
+    }
+    fn step_count(&self) -> usize {
+        FLASH_PHYS_STEPS.len()
+    }
+    fn can_next(&self) -> bool {
+        match self.step {
+            0 => self.loader_path.is_some(),
+            // At least one row selected AND every selected row has a file.
+            1 => {
+                let any = self.selected.iter().any(|&s| s);
+                let all_have_file = self
+                    .selected
+                    .iter()
+                    .zip(self.file_paths.iter())
+                    .all(|(&s, f)| !s || f.is_some());
+                any && all_have_file
+            }
+            2 => true,
+            _ => false,
+        }
+    }
+}
