@@ -2196,6 +2196,41 @@ fn wait_and_install_root_manager_apk(
     }
 }
 
+/// After the manager APK fails to auto-install, copy it onto the device at
+/// `/sdcard/manager.apk` so the user can install it there by hand.
+///
+/// Returns the path to surface in the manual-install reminder plus whether
+/// the local staging copy must be kept:
+/// - `(/sdcard/manager.apk, false)` — the push succeeded, so the on-device
+///   copy is enough and the staging dir can be cleaned up.
+/// - `(local apk path, true)` — the push also failed, so the user needs the
+///   local file and the caller must keep the staging dir.
+///
+/// A fresh [`AdbManager`] is used so a transport dropped by the failed
+/// install is re-claimed cleanly.
+fn stage_manager_apk_for_manual_install(
+    apk: &std::path::Path,
+    log: &mut Vec<String>,
+) -> (std::path::PathBuf, bool) {
+    const REMOTE: &str = "/sdcard/manager.apk";
+    let mut adb = ltbox_device::adb::AdbManager::new();
+    if adb.check_device().unwrap_or(false) && adb.push_file(apk, REMOTE).is_ok() {
+        live!(
+            log,
+            "[Root] {}",
+            tr_args!("log_root_manager_apk_pushed", path = REMOTE)
+        );
+        (std::path::PathBuf::from(REMOTE), false)
+    } else {
+        live!(
+            log,
+            "[Root] {}",
+            ltbox_core::i18n::tr("log_root_manager_apk_push_failed")
+        );
+        (apk.to_path_buf(), true)
+    }
+}
+
 /// `Task<Message>` wrapping `rfd::AsyncFileDialog::pick_folder` for
 /// direct `return` from an update handler.
 ///

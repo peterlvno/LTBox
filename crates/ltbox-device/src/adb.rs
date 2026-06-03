@@ -501,6 +501,23 @@ impl AdbManager {
             Err(AdbError::CommandFailed(output))
         }
     }
+
+    /// Copy a local file to an arbitrary on-device path (e.g.
+    /// `/sdcard/manager.apk`). Unlike [`install`], this only transfers the
+    /// file — no `pm install` — so a caller whose auto-install failed can
+    /// drop the APK somewhere the user can reach and install it by hand.
+    pub fn push_file(&mut self, local: &Path, remote: &str) -> Result<()> {
+        let mut file = std::fs::File::open(local)
+            .map_err(|e| AdbError::CommandFailed(format!("open {}: {e}", local.display())))?;
+        let dev = self.connect_device()?;
+        if let Err(e) = dev.push(&mut file, &remote) {
+            // Mirror `install`: a failed push can leave the USB handle
+            // half-drained, so drop it for a clean re-claim next call.
+            self.drop_device();
+            return Err(AdbError::CommandFailed(e.to_string()));
+        }
+        Ok(())
+    }
 }
 
 /// Heuristic: did the most recent ADB transaction fail because adbd

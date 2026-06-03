@@ -5,7 +5,7 @@
 use crate::{
     ConnectionStatus, Family, LiveLabels, Provider, RootMode, VerChoice, efisp_asset_suffix,
     efisp_is_empty, fingerprint_token_match, install_root_manager_apk, phase_marker,
-    transition_to_edl, wait_and_install_root_manager_apk,
+    stage_manager_apk_for_manual_install, transition_to_edl, wait_and_install_root_manager_apk,
 };
 use ltbox_core::{live, tr_args};
 
@@ -210,9 +210,13 @@ pub(crate) fn root_worker(
     let mut manager_apk =
         stage_root_manager_apk(&manager_cfg, &mut log).map_err(|e| format!("Manager APK: {e}"))?;
     stage_root_payload(&manager_cfg, &mut log).map_err(|e| format!("Root payload: {e}"))?;
-    // Manager install is non-fatal; keep the APK path
-    // for the post-run manual-install reminder.
+    // Manager install is non-fatal; keep the path to surface in the
+    // post-run manual-install reminder (the on-device /sdcard copy when
+    // the push fallback worked, otherwise the local staged file).
+    // `keep_staging` forces the work dir to survive cleanup only in the
+    // latter case, where the local file is the user's last resort.
     let mut manager_install_failed_path: Option<std::path::PathBuf> = None;
+    let mut keep_staging = false;
     let manager_installed_pre_edl = if adb_ready_at_start {
         if let Some(path) = manager_apk.as_ref() {
             match install_root_manager_apk(path, &mut log) {
@@ -221,13 +225,11 @@ pub(crate) fn root_worker(
                     live!(
                         log,
                         "[Root] {}",
-                        tr_args!(
-                            "log_root_manager_apk_install_failed_manual",
-                            error = e,
-                            path = path.display().to_string()
-                        )
+                        tr_args!("log_root_manager_apk_install_failed_manual", error = e)
                     );
-                    manager_install_failed_path = Some(path.clone());
+                    let (reminder, keep) = stage_manager_apk_for_manual_install(path, &mut log);
+                    manager_install_failed_path = Some(reminder);
+                    keep_staging |= keep;
                     false
                 }
             }
@@ -533,13 +535,11 @@ pub(crate) fn root_worker(
                 live!(
                     log,
                     "[Root] {}",
-                    tr_args!(
-                        "log_root_manager_apk_install_failed_manual",
-                        error = e,
-                        path = path.display().to_string()
-                    )
+                    tr_args!("log_root_manager_apk_install_failed_manual", error = e)
                 );
-                manager_install_failed_path = Some(path.clone());
+                let (reminder, keep) = stage_manager_apk_for_manual_install(path, &mut log);
+                manager_install_failed_path = Some(reminder);
+                keep_staging |= keep;
             }
             if let Some(path) = manager_install_failed_path.as_ref() {
                 live!(
@@ -556,8 +556,14 @@ pub(crate) fn root_worker(
         })();
     match device_phase_result {
         Ok(()) => {
-            // Keep staging files only on error for debugging.
-            let _ = std::fs::remove_dir_all(&base);
+            // Keep staging files on error for debugging, and also when the
+            // manager APK could not be auto-installed *and* the on-device
+            // push fallback failed — the local staged APK is then the only
+            // copy the user can reach, so the reminder points at it and the
+            // work dir must survive.
+            if !keep_staging {
+                let _ = std::fs::remove_dir_all(&base);
+            }
             Ok(log)
         }
         Err(e) => {
