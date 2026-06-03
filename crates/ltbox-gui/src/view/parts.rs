@@ -54,9 +54,21 @@ impl App {
             .into()
     }
 
-    pub(crate) fn flash_parts_loader_step(&self) -> Element<'_, Message> {
-        let selected = self.flash_parts.loader_path.is_some();
-        let status = match (&self.flash_parts.loader_path, &self.flash_parts.scan_error) {
+    /// Shared loader-picker card for the EDL parts / physical-storage
+    /// wizards: a Browse-loader button, the resolved-path / error status
+    /// line, and the recent-loader chips. Only the wizard's loader fields
+    /// and the two Message variants differ between callers, so they are
+    /// threaded in as params; the title / placeholder / accepted
+    /// extensions / colors are identical across all four wizards.
+    fn loader_picker_card<'a>(
+        &'a self,
+        loader_path: &'a Option<String>,
+        loader_error: &'a Option<String>,
+        on_select: Message,
+        on_chosen: impl Fn(String) -> Message,
+    ) -> Element<'a, Message> {
+        let selected = loader_path.is_some();
+        let status = match (loader_path, loader_error) {
             (_, Some(e)) => format!("⚠ {e}"),
             (Some(p), None) => p.clone(),
             _ => self.t("dump_parts_loader_placeholder").to_string(),
@@ -80,21 +92,17 @@ impl App {
             .width(280)
             .style(move |t: &Theme| sel_card_style(t, selected)),
         )
-        .on_press(Message::FlashParts(FlashPartsMsg::FlashPartsSelectLoader))
+        .on_press(on_select)
         .padding(0)
         .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
-        let status_color = if self.flash_parts.scan_error.is_some() {
+        let status_color = if loader_error.is_some() {
             iced::Color::from_rgb(0.9, 0.2, 0.2)
         } else if selected {
             GREEN
         } else {
             LABEL
         };
-        let chips = self.recent_file_chips(
-            &["melf", "xml", "x"],
-            |p| Message::FlashParts(FlashPartsMsg::FlashPartsLoaderChosen(Some(p))),
-            "picker_recents",
-        );
+        let chips = self.recent_file_chips(&["melf", "xml", "x"], on_chosen, "picker_recents");
         let col = column![
             text(self.t("dump_parts_loader_title").to_string())
                 .size(theme::text_size::WIZARD_STEP_TITLE)
@@ -118,6 +126,15 @@ impl App {
             .center_x(Length::Fill)
             .center_y(Length::Fill)
             .into()
+    }
+
+    pub(crate) fn flash_parts_loader_step(&self) -> Element<'_, Message> {
+        self.loader_picker_card(
+            &self.flash_parts.loader_path,
+            &self.flash_parts.scan_error,
+            Message::FlashParts(FlashPartsMsg::FlashPartsSelectLoader),
+            |p| Message::FlashParts(FlashPartsMsg::FlashPartsLoaderChosen(Some(p))),
+        )
     }
 
     pub(crate) fn flash_parts_select_step(&self) -> Element<'_, Message> {
@@ -420,69 +437,12 @@ impl App {
     }
 
     pub(crate) fn dump_parts_loader_step(&self) -> Element<'_, Message> {
-        let selected = self.dump_parts.loader_path.is_some();
-        let status = match (&self.dump_parts.loader_path, &self.dump_parts.scan_error) {
-            (_, Some(e)) => format!("⚠ {e}"),
-            (Some(p), None) => p.clone(),
-            _ => self.t("dump_parts_loader_placeholder").to_string(),
-        };
-        let btn = button(
-            container(
-                column![
-                    text(self.t("btn_browse_loader").to_string())
-                        .size(14)
-                        .center(),
-                    text(self.loader_picker_desc())
-                        .size(11)
-                        .style(muted_style)
-                        .center(),
-                ]
-                .spacing(6)
-                .width(Length::Fill)
-                .align_x(iced::Alignment::Center),
-            )
-            .padding([20, 24])
-            .width(280)
-            .style(move |t: &Theme| sel_card_style(t, selected)),
-        )
-        .on_press(Message::DumpParts(DumpPartsMsg::DumpPartsSelectLoader))
-        .padding(0)
-        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
-        let status_color = if self.dump_parts.scan_error.is_some() {
-            iced::Color::from_rgb(0.9, 0.2, 0.2)
-        } else if selected {
-            GREEN
-        } else {
-            LABEL
-        };
-        let chips = self.recent_file_chips(
-            &["melf", "xml", "x"],
+        self.loader_picker_card(
+            &self.dump_parts.loader_path,
+            &self.dump_parts.scan_error,
+            Message::DumpParts(DumpPartsMsg::DumpPartsSelectLoader),
             |p| Message::DumpParts(DumpPartsMsg::DumpPartsLoaderChosen(Some(p))),
-            "picker_recents",
-        );
-        let col = column![
-            text(self.t("dump_parts_loader_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            btn,
-            text(status)
-                .size(12)
-                .width(Length::Fill)
-                .color(status_color)
-                .center()
-                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
-            chips,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        )
     }
 
     pub(crate) fn dump_parts_select_step(&self) -> Element<'_, Message> {
@@ -640,69 +600,12 @@ impl App {
     }
 
     pub(crate) fn dump_phys_loader_step(&self) -> Element<'_, Message> {
-        let selected = self.dump_phys.loader_path.is_some();
-        let status = match (&self.dump_phys.loader_path, &self.dump_phys.loader_error) {
-            (_, Some(e)) => format!("⚠ {e}"),
-            (Some(p), None) => p.clone(),
-            _ => self.t("dump_parts_loader_placeholder").to_string(),
-        };
-        let btn = button(
-            container(
-                column![
-                    text(self.t("btn_browse_loader").to_string())
-                        .size(14)
-                        .center(),
-                    text(self.loader_picker_desc())
-                        .size(11)
-                        .style(muted_style)
-                        .center(),
-                ]
-                .spacing(6)
-                .width(Length::Fill)
-                .align_x(iced::Alignment::Center),
-            )
-            .padding([20, 24])
-            .width(280)
-            .style(move |t: &Theme| sel_card_style(t, selected)),
-        )
-        .on_press(Message::DumpPhys(DumpPhysMsg::DumpPhysSelectLoader))
-        .padding(0)
-        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
-        let status_color = if self.dump_phys.loader_error.is_some() {
-            iced::Color::from_rgb(0.9, 0.2, 0.2)
-        } else if selected {
-            GREEN
-        } else {
-            LABEL
-        };
-        let chips = self.recent_file_chips(
-            &["melf", "xml", "x"],
+        self.loader_picker_card(
+            &self.dump_phys.loader_path,
+            &self.dump_phys.loader_error,
+            Message::DumpPhys(DumpPhysMsg::DumpPhysSelectLoader),
             |p| Message::DumpPhys(DumpPhysMsg::DumpPhysLoaderChosen(Some(p))),
-            "picker_recents",
-        );
-        let col = column![
-            text(self.t("dump_parts_loader_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            btn,
-            text(status)
-                .size(12)
-                .width(Length::Fill)
-                .color(status_color)
-                .center()
-                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
-            chips,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        )
     }
 
     pub(crate) fn dump_phys_select_step(&self) -> Element<'_, Message> {
@@ -804,69 +707,12 @@ impl App {
     }
 
     pub(crate) fn flash_phys_loader_step(&self) -> Element<'_, Message> {
-        let selected = self.flash_phys.loader_path.is_some();
-        let status = match (&self.flash_phys.loader_path, &self.flash_phys.loader_error) {
-            (_, Some(e)) => format!("⚠ {e}"),
-            (Some(p), None) => p.clone(),
-            _ => self.t("dump_parts_loader_placeholder").to_string(),
-        };
-        let btn = button(
-            container(
-                column![
-                    text(self.t("btn_browse_loader").to_string())
-                        .size(14)
-                        .center(),
-                    text(self.loader_picker_desc())
-                        .size(11)
-                        .style(muted_style)
-                        .center(),
-                ]
-                .spacing(6)
-                .width(Length::Fill)
-                .align_x(iced::Alignment::Center),
-            )
-            .padding([20, 24])
-            .width(280)
-            .style(move |t: &Theme| sel_card_style(t, selected)),
-        )
-        .on_press(Message::FlashPhys(FlashPhysMsg::FlashPhysSelectLoader))
-        .padding(0)
-        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
-        let status_color = if self.flash_phys.loader_error.is_some() {
-            iced::Color::from_rgb(0.9, 0.2, 0.2)
-        } else if selected {
-            GREEN
-        } else {
-            LABEL
-        };
-        let chips = self.recent_file_chips(
-            &["melf", "xml", "x"],
+        self.loader_picker_card(
+            &self.flash_phys.loader_path,
+            &self.flash_phys.loader_error,
+            Message::FlashPhys(FlashPhysMsg::FlashPhysSelectLoader),
             |p| Message::FlashPhys(FlashPhysMsg::FlashPhysLoaderChosen(Some(p))),
-            "picker_recents",
-        );
-        let col = column![
-            text(self.t("dump_parts_loader_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            btn,
-            text(status)
-                .size(12)
-                .width(Length::Fill)
-                .color(status_color)
-                .center()
-                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
-            chips,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        )
     }
 
     pub(crate) fn flash_phys_select_step(&self) -> Element<'_, Message> {

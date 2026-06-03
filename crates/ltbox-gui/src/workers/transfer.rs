@@ -8,57 +8,84 @@ use crate::{
 };
 use ltbox_core::tr_args;
 
-/// Advanced → Flash Partitions end-to-end. Routes to EDL, opens an
-/// `EdlSession`, flashes each selected image, resets.
-/// Scan phase mirror of `dump_parts_scan`. Transitions to EDL, opens
-/// Sahara, reads GPTs on LUN 0..=5, then bounces back to EDL so the
+/// Shared scan phase for the Flash/Dump Partitions wizards: route to EDL,
+/// open Sahara, read GPTs on LUN 0..=5. On success returns the scanned
+/// partitions plus the still-open session so the caller can map its rows
+/// and then bounce the device back to EDL. On failure it logs (and, for a
+/// scan error, resets) and returns the error string. `tag` is the log
+/// channel prefix; `open_failed_key` / `scan_failed_key` are the i18n keys
+/// for the two failure messages (the only per-wizard text difference).
+fn scan_lun_partitions(
+    conn: ConnectionStatus,
+    loader_path: &str,
+    tag: &str,
+    open_failed_key: &str,
+    scan_failed_key: &str,
+    log: &mut Vec<String>,
+) -> Result<
+    (
+        Vec<ltbox_device::edl::GptPartitionInfo>,
+        ltbox_device::edl::EdlSession,
+    ),
+    String,
+> {
+    if ensure_edl(conn, tag, log).is_err() {
+        return Err("Could not transition device to EDL".to_string());
+    }
+
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    let loader = std::path::PathBuf::from(loader_path);
+    let mut session = match ltbox_device::edl::EdlSession::open(&loader, true, log) {
+        Ok(s) => s,
+        Err(e) => {
+            ltbox_core::live!(
+                log,
+                "[{}] {}",
+                tag,
+                ltbox_core::i18n::tr(open_failed_key).replace("{error}", &e.to_string())
+            );
+            return Err(format!("EDL session open failed: {e}"));
+        }
+    };
+
+    match session.scan_partitions(0..=5, log) {
+        Ok(parts) => Ok((parts, session)),
+        Err(e) => {
+            ltbox_core::live!(
+                log,
+                "[{}] {}",
+                tag,
+                ltbox_core::i18n::tr(scan_failed_key).replace("{error}", &e.to_string())
+            );
+            let _ = session.reset_to_edl(log);
+            Err(format!("scan failed: {e}"))
+        }
+    }
+}
+
+/// Flash Partitions scan phase. Mirror of `dump_parts_scan`: shares the
+/// transition + open + GPT scan via `scan_lun_partitions`, then maps the
+/// partitions into checkable flash rows and bounces back to EDL so the
 /// exec pass can reopen without a power-cycle.
 pub(crate) fn flash_parts_scan(
     conn: ConnectionStatus,
     loader_path: String,
 ) -> FlashPartsScanResult {
     let mut log = Vec::new();
-    if ensure_edl(conn, "FlashParts", &mut log).is_err() {
-        return FlashPartsScanResult {
-            logs: log,
-            rows: Vec::new(),
-            error: Some("Could not transition device to EDL".to_string()),
-        };
-    }
-
-    std::thread::sleep(std::time::Duration::from_secs(2));
-    let loader = std::path::PathBuf::from(&loader_path);
-    let mut session = match ltbox_device::edl::EdlSession::open(&loader, true, &mut log) {
-        Ok(s) => s,
-        Err(e) => {
-            ltbox_core::live!(
-                log,
-                "[FlashParts] {}",
-                ltbox_core::i18n::tr("live_flashparts_edl_open_failed")
-                    .replace("{error}", &e.to_string())
-            );
+    let (parts, mut session) = match scan_lun_partitions(
+        conn,
+        &loader_path,
+        "FlashParts",
+        "live_flashparts_edl_open_failed",
+        "live_flashparts_scan_failed",
+        &mut log,
+    ) {
+        Ok(v) => v,
+        Err(error) => {
             return FlashPartsScanResult {
                 logs: log,
                 rows: Vec::new(),
-                error: Some(format!("EDL session open failed: {e}")),
-            };
-        }
-    };
-
-    let parts = match session.scan_partitions(0..=5, &mut log) {
-        Ok(p) => p,
-        Err(e) => {
-            ltbox_core::live!(
-                log,
-                "[FlashParts] {}",
-                ltbox_core::i18n::tr("live_flashparts_scan_failed")
-                    .replace("{error}", &e.to_string())
-            );
-            let _ = session.reset_to_edl(&mut log);
-            return FlashPartsScanResult {
-                logs: log,
-                rows: Vec::new(),
-                error: Some(format!("scan failed: {e}")),
+                error: Some(error),
             };
         }
     };
@@ -229,47 +256,20 @@ pub(crate) fn flash_parts_execute(
 /// Sahara without a power-cycle.
 pub(crate) fn dump_parts_scan(conn: ConnectionStatus, loader_path: String) -> DumpPartsScanResult {
     let mut log = Vec::new();
-    if ensure_edl(conn, "DumpParts", &mut log).is_err() {
-        return DumpPartsScanResult {
-            logs: log,
-            rows: Vec::new(),
-            error: Some("Could not transition device to EDL".to_string()),
-        };
-    }
-
-    std::thread::sleep(std::time::Duration::from_secs(2));
-    let loader = std::path::PathBuf::from(&loader_path);
-    let mut session = match ltbox_device::edl::EdlSession::open(&loader, true, &mut log) {
-        Ok(s) => s,
-        Err(e) => {
-            ltbox_core::live!(
-                log,
-                "[DumpParts] {}",
-                ltbox_core::i18n::tr("live_dumpparts_edl_open_failed")
-                    .replace("{error}", &e.to_string())
-            );
+    let (parts, mut session) = match scan_lun_partitions(
+        conn,
+        &loader_path,
+        "DumpParts",
+        "live_dumpparts_edl_open_failed",
+        "live_dumpparts_scan_failed",
+        &mut log,
+    ) {
+        Ok(v) => v,
+        Err(error) => {
             return DumpPartsScanResult {
                 logs: log,
                 rows: Vec::new(),
-                error: Some(format!("EDL session open failed: {e}")),
-            };
-        }
-    };
-
-    let parts = match session.scan_partitions(0..=5, &mut log) {
-        Ok(p) => p,
-        Err(e) => {
-            ltbox_core::live!(
-                log,
-                "[DumpParts] {}",
-                ltbox_core::i18n::tr("live_dumpparts_scan_failed")
-                    .replace("{error}", &e.to_string())
-            );
-            let _ = session.reset_to_edl(&mut log);
-            return DumpPartsScanResult {
-                logs: log,
-                rows: Vec::new(),
-                error: Some(format!("scan failed: {e}")),
+                error: Some(error),
             };
         }
     };
