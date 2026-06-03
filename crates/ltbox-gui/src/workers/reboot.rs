@@ -83,7 +83,11 @@ pub(crate) fn reboot_edl_with_loader_worker(
         .map_err(|e| format!("EDL session open: {e}"))?;
     match target {
         RebootTarget::System => {
-            session.reset_tolerant(&mut log);
+            // Reboot-to-system is the user's intent here; the inner EDL
+            // reset log lines duplicate the surrounding `[Reboot]` start +
+            // `command sent` lines, so swallow them into a scratch log.
+            let mut quiet = Vec::new();
+            session.reset_tolerant(&mut quiet);
         }
         RebootTarget::Edl => {
             session

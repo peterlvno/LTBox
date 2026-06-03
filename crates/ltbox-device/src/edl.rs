@@ -908,7 +908,7 @@ impl EdlSession {
     /// remaining action is booting the device back to system.
     pub fn reset_tolerant(&mut self, log: &mut Vec<String>) {
         if let Err(e) = self.reset(log) {
-            ltbox_core::live!(log, "[EDL] Reset command returned after handoff: {e}");
+            ltbox_core::live!(log, "[EDL] Reboot command returned after handoff: {e}");
         }
     }
 

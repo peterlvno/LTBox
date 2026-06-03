@@ -293,7 +293,21 @@ impl App {
                 RollbackSetting::Off => "flash_confirm_rb_off",
             })
             .to_string();
+        // Destructive-op callout, hoisted above the summary so the hazard
+        // reads before the device details. Amber `warning` colour — not an
+        // error/failure. Wipe vs keep-data show different cautions.
+        let warning_key = if self.wf_config.wipe {
+            "flash_confirm_warning_wipe"
+        } else {
+            "flash_confirm_warning"
+        };
         let mut rows = vec![
+            text(self.t(warning_key).to_string())
+                .size(13)
+                .style(warning_style)
+                .center()
+                .into(),
+            widget::rule::horizontal(1).into(),
             info_kv_center(self.t("flash_confirm_region"), &region),
             info_kv_center(self.t("flash_confirm_target"), &target),
             info_kv_center(self.t("flash_confirm_data"), &data),
@@ -321,24 +335,6 @@ impl App {
             self.t("flash_confirm_folder"),
             &folder_owned,
         ));
-
-        // Destructive-op callout — parity with v2 `_confirm_full_flash_overwrite`.
-        // The wizard's Next button is the trigger, so surface the hazard
-        // inline instead of trusting the summary alone. Uses the palette's
-        // `warning` colour (amber) so it doesn't read as an error/failure.
-        let warning_key = if self.wf_config.wipe {
-            "flash_confirm_warning_wipe"
-        } else {
-            "flash_confirm_warning"
-        };
-        rows.push(widget::rule::horizontal(1).into());
-        rows.push(
-            text(self.t(warning_key).to_string())
-                .size(13)
-                .style(warning_style)
-                .center()
-                .into(),
-        );
 
         self.confirm_view(
             "flash_confirm_title",

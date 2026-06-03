@@ -86,14 +86,30 @@ impl App {
                 let device_model = self.device_model.clone();
                 let fw_folder = self.flash.firmware_folder.clone().unwrap_or_default();
                 let rollback_label = self.t(cfg.modify_rollback.label_key()).to_string();
+                // Split the old single "Starting: modify_region=… rollback=…
+                // wipe=…" line into three labelled, translated lines — the
+                // raw variable dump read like debug output.
+                let region_yn = self
+                    .t(if cfg.modify_region {
+                        "common_yes"
+                    } else {
+                        "common_no"
+                    })
+                    .to_string();
+                let wipe_yn = self
+                    .t(if cfg.wipe { "common_yes" } else { "common_no" })
+                    .to_string();
                 self.log_push(format!(
                     "[Flash] {}",
-                    tr_args!(
-                        "live_flash_starting",
-                        modify_region = cfg.modify_region.to_string(),
-                        rollback = rollback_label,
-                        wipe = cfg.wipe.to_string()
-                    )
+                    tr_args!("live_flash_region_convert", value = region_yn)
+                ));
+                self.log_push(format!(
+                    "[Flash] {}",
+                    tr_args!("live_flash_rollback_bypass", value = rollback_label)
+                ));
+                self.log_push(format!(
+                    "[Flash] {}",
+                    tr_args!("live_flash_data_wipe", value = wipe_yn)
                 ));
                 let rb_mode = cfg.modify_rollback.to_mode();
                 // NOTE: the EDL-start ARB downgrade (On/Auto → Off when the

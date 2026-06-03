@@ -198,7 +198,7 @@ pub(crate) fn flash_worker(
                             ltbox_core::live!(
                                 log,
                                 "[Flash] {}",
-                                tr_args!("live_rescue_model_check_ok", fingerprint = fingerprint)
+                                ltbox_core::i18n::tr("live_rescue_model_check_ok")
                             );
                             vendor_boot_fingerprint = Some(fingerprint);
                         }
@@ -467,25 +467,12 @@ pub(crate) fn flash_worker(
                 ltbox_core::i18n::tr("live_region_missing_skip")
             );
         }
-    } else {
-        ltbox_core::live!(log, "[Region] {}", ltbox_core::i18n::tr("live_region_off"));
     }
 
-    // 5. ARB detection
-    // Re-derive the label from the EFFECTIVE rb_mode so
-    // the EDL-start and TB323FU overrides (both force
-    // Off) are reflected in the log instead of the
-    // original user selection.
-    let rb_label_for_log = ltbox_core::i18n::tr(match rb_mode {
-        ltbox_patch::rollback::RollbackMode::On => "rollback_on",
-        ltbox_patch::rollback::RollbackMode::Auto => "rollback_auto",
-        ltbox_patch::rollback::RollbackMode::Off => "rollback_off",
-    });
-    ltbox_core::live!(
-        log,
-        "[ARB] {}",
-        tr_args!("live_arb_modify", value = rb_label_for_log)
-    );
+    // 5. ARB detection. The effective rollback mode is already surfaced by
+    // the `[Flash] Bypass rollback protection: …` summary line, so it is not
+    // repeated here; this block reports the measured indices + the final
+    // bypass decision.
     let device_idx_str = device_rollback_index
         .map(|v| v.to_string())
         .unwrap_or_else(|| ltbox_core::i18n::tr("live_arb_device_index_none"));
@@ -503,16 +490,28 @@ pub(crate) fn flash_worker(
             device_rollback_index,
             rb_mode,
         ) {
-            Ok(info) => ltbox_core::live!(
-                log,
-                "[ARB] {}",
-                tr_args!(
-                    "live_arb_boot_index_result",
-                    index = info.image_index.to_string(),
-                    needs = info.needs_patch.to_string(),
-                    mode = format!("{:?}", rb_mode)
-                )
-            ),
+            Ok(info) => {
+                ltbox_core::live!(
+                    log,
+                    "[ARB] {}",
+                    tr_args!(
+                        "live_arb_boot_index_result",
+                        index = info.image_index.to_string()
+                    )
+                );
+                ltbox_core::live!(
+                    log,
+                    "[ARB] {}",
+                    tr_args!(
+                        "live_arb_rollback_bypass",
+                        value = ltbox_core::i18n::tr(if info.needs_patch {
+                            "common_yes"
+                        } else {
+                            "common_no"
+                        })
+                    )
+                );
+            }
             Err(e) => ltbox_core::live!(
                 log,
                 "[ARB] {}",
@@ -529,11 +528,6 @@ pub(crate) fn flash_worker(
     // scan below picks it up and the EDL flash can
     // still resolve image paths via `xml_dir.join`.
     if x_count > 0 {
-        ltbox_core::live!(
-            log,
-            "[XML] {}",
-            tr_args!("live_xml_decrypt_pending", count = x_count.to_string())
-        );
         let x_entries: Vec<std::path::PathBuf> = std::fs::read_dir(fw_dir)
             .map_err(|e| format!("read_dir {}: {e}", fw_dir.display()))?
             .filter_map(|r| r.ok().map(|e| e.path()))
@@ -588,12 +582,6 @@ pub(crate) fn flash_worker(
                 ltbox_core::i18n::tr("live_flash_country_skip")
             );
         }
-    } else {
-        ltbox_core::live!(
-            log,
-            "[Flash] {}",
-            ltbox_core::i18n::tr("live_flash_data_mode_keep")
-        );
     }
 
     // 8. EDL flash
