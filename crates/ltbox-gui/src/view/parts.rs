@@ -137,6 +137,38 @@ impl App {
         )
     }
 
+    /// Shared frame for the partition / physical-storage select tables:
+    /// centered title, muted subtitle, a divider, and the scrollable row
+    /// list. Only the i18n keys and the pre-built `list` column (header +
+    /// data rows, which differ per wizard) vary between callers.
+    fn select_step_frame<'a>(
+        &'a self,
+        title_key: &str,
+        subtitle_key: &str,
+        list: iced::widget::Column<'a, Message>,
+    ) -> Element<'a, Message> {
+        let scrolled = scrollable(list).height(Length::Fill).width(Length::Fill);
+        let col = column![
+            text(self.t(title_key).to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            text(self.t(subtitle_key).to_string())
+                .size(13)
+                .style(muted_style)
+                .center(),
+            widget::rule::horizontal(1),
+            scrolled,
+        ]
+        .spacing(10)
+        .padding(20)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
     pub(crate) fn flash_parts_select_step(&self) -> Element<'_, Message> {
         let active = self.flash_parts.sort_col;
         let desc = self.flash_parts.sort_desc;
@@ -269,27 +301,11 @@ impl App {
             list = list.push(clickable);
         }
 
-        let scrolled = scrollable(list).height(Length::Fill).width(Length::Fill);
-
-        let col = column![
-            text(self.t("flash_parts_select_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("flash_parts_select_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            widget::rule::horizontal(1),
-            scrolled,
-        ]
-        .spacing(10)
-        .padding(20)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        self.select_step_frame(
+            "flash_parts_select_title",
+            "flash_parts_select_subtitle",
+            list,
+        )
     }
 
     pub(crate) fn flash_parts_confirm_step(&self) -> Element<'_, Message> {
@@ -530,27 +546,11 @@ impl App {
             list = list.push(tinted);
         }
 
-        let scrolled = scrollable(list).height(Length::Fill).width(Length::Fill);
-
-        let col = column![
-            text(self.t("dump_parts_select_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("dump_parts_select_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            widget::rule::horizontal(1),
-            scrolled,
-        ]
-        .spacing(10)
-        .padding(20)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        self.select_step_frame(
+            "dump_parts_select_title",
+            "dump_parts_select_subtitle",
+            list,
+        )
     }
 
     pub(crate) fn view_dump_phys_wizard(&self) -> Element<'_, Message> {
@@ -635,27 +635,7 @@ impl App {
             list = list.push(data_row);
         }
 
-        let scrolled = scrollable(list).height(Length::Fill).width(Length::Fill);
-
-        let col = column![
-            text(self.t("phys_select_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("phys_select_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            widget::rule::horizontal(1),
-            scrolled,
-        ]
-        .spacing(10)
-        .padding(20)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        self.select_step_frame("phys_select_title", "phys_select_subtitle", list)
     }
 
     pub(crate) fn view_flash_phys_wizard(&self) -> Element<'_, Message> {
@@ -763,27 +743,7 @@ impl App {
             list = list.push(clickable);
         }
 
-        let scrolled = scrollable(list).height(Length::Fill).width(Length::Fill);
-
-        let col = column![
-            text(self.t("phys_select_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("flash_phys_select_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            widget::rule::horizontal(1),
-            scrolled,
-        ]
-        .spacing(10)
-        .padding(20)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        self.select_step_frame("phys_select_title", "flash_phys_select_subtitle", list)
     }
 
     pub(crate) fn flash_phys_confirm_step(&self) -> Element<'_, Message> {
