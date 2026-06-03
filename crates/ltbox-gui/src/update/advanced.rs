@@ -74,9 +74,11 @@ impl App {
                     let luns = self.dump_phys.selected_luns();
                     self.log_push(format!(
                         "[DumpPhys] {}",
-                        self.t("live_dump_phys_batch_start")
-                            .replace("{count}", &luns.len().to_string())
-                            .replace("{path}", &folder)
+                        tr_args!(
+                            "live_dump_phys_batch_start",
+                            count = luns.len().to_string(),
+                            path = folder
+                        )
                     ));
                     return task_heavy(
                         move || dump_physical_execute(conn, loader, folder, luns),
@@ -809,9 +811,7 @@ impl App {
                     .iter()
                     .map(std::path::PathBuf::from)
                     .collect();
-                let scanning = self
-                    .t("adv_image_info_scanning")
-                    .replace("{count}", &paths.len().to_string());
+                let scanning = tr_args!("adv_image_info_scanning", count = paths.len().to_string());
                 self.set_image_info_log(scanning);
                 self.begin_silent_op(View::Advanced);
                 return Task::perform(

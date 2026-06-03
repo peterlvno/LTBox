@@ -3,6 +3,7 @@
 //! from the update_sys handler.
 
 use crate::{ConnectionStatus, LiveLabels, RescueRegion, SysUpdateAction, transition_to_edl};
+use ltbox_core::tr_args;
 
 pub(crate) fn sysupdate_worker(
     action: SysUpdateAction,
@@ -52,12 +53,13 @@ pub(crate) fn sysupdate_worker(
         if !adb.check_device().unwrap_or(false) {
             if matches!(conn, ConnectionStatus::Fastboot) {
                 if let Err(e) = adb.wait_for_device() {
-                    return Err(ltbox_core::i18n::tr("err_sysupdate_no_adb")
-                        .replace("{error}", &e.to_string()));
+                    return Err(tr_args!("err_sysupdate_no_adb", error = e.to_string()));
                 }
             } else {
-                return Err(ltbox_core::i18n::tr("err_sysupdate_no_adb")
-                    .replace("{error}", "device not in ADB"));
+                return Err(tr_args!(
+                    "err_sysupdate_no_adb",
+                    error = "device not in ADB"
+                ));
             }
         }
         ltbox_core::live!(
@@ -88,7 +90,7 @@ pub(crate) fn sysupdate_worker(
                     Ok(out) if out.contains("Success") => ltbox_core::live!(
                         log,
                         "[ADB] {}",
-                        ltbox_core::i18n::tr("live_adb_uninstalled").replace("{package}", pkg)
+                        tr_args!("live_adb_uninstalled", package = pkg)
                     ),
                     Ok(out) => ltbox_core::live!(log, "[ADB] {pkg}: {out}"),
                     Err(e) => ltbox_core::live!(log, "[ADB] {pkg}: {e}"),
@@ -111,7 +113,7 @@ pub(crate) fn sysupdate_worker(
                     Ok(out) if out.to_lowercase().contains("installed") => ltbox_core::live!(
                         log,
                         "[ADB] {}",
-                        ltbox_core::i18n::tr("live_adb_reinstalled").replace("{package}", pkg)
+                        tr_args!("live_adb_reinstalled", package = pkg)
                     ),
                     Ok(out) => ltbox_core::live!(log, "[ADB] {pkg}: {out}"),
                     Err(e) => ltbox_core::live!(log, "[ADB] {pkg}: {e}"),
@@ -166,15 +168,14 @@ pub(crate) fn sysupdate_worker(
             ltbox_core::live!(
                 log,
                 "[Rescue] {}",
-                ltbox_core::i18n::tr("live_rescue_loader")
-                    .replace("{path}", &loader.display().to_string())
+                tr_args!("live_rescue_loader", path = loader.display().to_string())
             );
             ltbox_core::live!(
                 log,
                 "[Rescue] {}",
-                ltbox_core::i18n::tr("live_rescue_target_region").replace(
-                    "{target}",
-                    match region {
+                tr_args!(
+                    "live_rescue_target_region",
+                    target = match region {
                         RescueRegion::Prc => "PRC",
                         RescueRegion::Row => "ROW",
                     }
@@ -197,8 +198,10 @@ pub(crate) fn sysupdate_worker(
             ltbox_core::live!(
                 log,
                 "[Rescue] {}",
-                ltbox_core::i18n::tr("live_rescue_work_dir")
-                    .replace("{path}", &work_dir.display().to_string())
+                tr_args!(
+                    "live_rescue_work_dir",
+                    path = work_dir.display().to_string()
+                )
             );
 
             ltbox_core::live!(
@@ -238,7 +241,7 @@ pub(crate) fn sysupdate_worker(
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_dumping").replace("{name}", &part_name)
+                        tr_args!("live_rescue_dumping", name = part_name)
                     );
                     if let Err(e) =
                         session.dump_partition(&part_name, &out, 0, RESCUE_PARTITIONS_LUN, &mut log)
@@ -246,9 +249,11 @@ pub(crate) fn sysupdate_worker(
                         ltbox_core::live!(
                             log,
                             "[Rescue] {}",
-                            ltbox_core::i18n::tr("live_rescue_skip_dump")
-                                .replace("{name}", &part_name)
-                                .replace("{error}", &e.to_string())
+                            tr_args!(
+                                "live_rescue_skip_dump",
+                                name = part_name,
+                                error = e.to_string()
+                            )
                         );
                         continue;
                     }
@@ -284,8 +289,10 @@ pub(crate) fn sysupdate_worker(
                                 ltbox_core::live!(
                                     log,
                                     "[Rescue] {}",
-                                    ltbox_core::i18n::tr("live_rescue_model_check_ok")
-                                        .replace("{fingerprint}", &fingerprint)
+                                    tr_args!(
+                                        "live_rescue_model_check_ok",
+                                        fingerprint = fingerprint
+                                    )
                                 );
                             }
                             ModelValidation::Missing => {
@@ -302,9 +309,11 @@ pub(crate) fn sysupdate_worker(
                                 ltbox_core::live!(
                                     log,
                                     "[Rescue] {}",
-                                    ltbox_core::i18n::tr("live_rescue_model_mismatch_abort")
-                                        .replace("{device}", &device_model)
-                                        .replace("{fingerprint}", &fingerprint)
+                                    tr_args!(
+                                        "live_rescue_model_mismatch_abort",
+                                        device = device_model,
+                                        fingerprint = fingerprint
+                                    )
                                 );
                                 session.reset_tolerant(&mut log);
                                 return Err("Boot Recovery: firmware/device model mismatch".into());
@@ -315,8 +324,7 @@ pub(crate) fn sysupdate_worker(
                         ltbox_core::live!(
                             log,
                             "[Rescue] {}",
-                            ltbox_core::i18n::tr("live_rescue_avb_inspect_skip")
-                                .replace("{error}", &e.to_string())
+                            tr_args!("live_rescue_avb_inspect_skip", error = e.to_string())
                         );
                     }
                 }
@@ -348,8 +356,7 @@ pub(crate) fn sysupdate_worker(
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_slot_missing_dump")
-                            .replace("{slot}", slot)
+                        tr_args!("live_rescue_slot_missing_dump", slot = slot)
                     );
                     continue;
                 };
@@ -358,15 +365,14 @@ pub(crate) fn sysupdate_worker(
                 ltbox_core::live!(
                     log,
                     "[Rescue] {}",
-                    ltbox_core::i18n::tr("live_rescue_patching_vendor_boot")
-                        .replace("{slot}", slot)
-                        .replace(
-                            "{target}",
-                            match region {
-                                RescueRegion::Prc => "PRC",
-                                RescueRegion::Row => "ROW",
-                            }
-                        )
+                    tr_args!(
+                        "live_rescue_patching_vendor_boot",
+                        slot = slot,
+                        target = match region {
+                            RescueRegion::Prc => "PRC",
+                            RescueRegion::Row => "ROW",
+                        }
+                    )
                 );
                 let n = match ltbox_patch::region::patch_vendor_boot(
                     &vb_src.2,
@@ -380,9 +386,11 @@ pub(crate) fn sysupdate_worker(
                         ltbox_core::live!(
                             log,
                             "[Rescue] {}",
-                            ltbox_core::i18n::tr("live_rescue_region_patch_failed")
-                                .replace("{slot}", slot)
-                                .replace("{error}", &e.to_string())
+                            tr_args!(
+                                "live_rescue_region_patch_failed",
+                                slot = slot,
+                                error = e.to_string()
+                            )
                         );
                         continue;
                     }
@@ -391,16 +399,17 @@ pub(crate) fn sysupdate_worker(
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_no_region_bytes_changed")
-                            .replace("{slot}", slot)
+                        tr_args!("live_rescue_no_region_bytes_changed", slot = slot)
                     );
                 } else {
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_occurrences_patched")
-                            .replace("{slot}", slot)
-                            .replace("{count}", &n.to_string())
+                        tr_args!(
+                            "live_rescue_occurrences_patched",
+                            slot = slot,
+                            count = n.to_string()
+                        )
                     );
                 }
 
@@ -413,9 +422,11 @@ pub(crate) fn sysupdate_worker(
                         ltbox_core::live!(
                             log,
                             "[Rescue] {}",
-                            ltbox_core::i18n::tr("live_rescue_vendor_boot_avb_failed")
-                                .replace("{slot}", slot)
-                                .replace("{error}", &e.to_string())
+                            tr_args!(
+                                "live_rescue_vendor_boot_avb_failed",
+                                slot = slot,
+                                error = e.to_string()
+                            )
                         );
                         continue;
                     }
@@ -430,9 +441,11 @@ pub(crate) fn sysupdate_worker(
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_add_hash_footer_failed")
-                            .replace("{slot}", slot)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_rescue_add_hash_footer_failed",
+                            slot = slot,
+                            error = e.to_string()
+                        )
                     );
                     continue;
                 }
@@ -447,9 +460,11 @@ pub(crate) fn sysupdate_worker(
                         ltbox_core::live!(
                             log,
                             "[Rescue] {}",
-                            ltbox_core::i18n::tr("live_rescue_vbmeta_inspect_failed")
-                                .replace("{slot}", slot)
-                                .replace("{error}", &e.to_string())
+                            tr_args!(
+                                "live_rescue_vbmeta_inspect_failed",
+                                slot = slot,
+                                error = e.to_string()
+                            )
                         );
                         continue;
                     }
@@ -460,9 +475,11 @@ pub(crate) fn sysupdate_worker(
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_no_testkey")
-                            .replace("{slot}", slot)
-                            .replace("{path}", &loader_dir.display().to_string())
+                        tr_args!(
+                            "live_rescue_no_testkey",
+                            slot = slot,
+                            path = loader_dir.display().to_string()
+                        )
                     );
                     continue;
                 };
@@ -478,9 +495,11 @@ pub(crate) fn sysupdate_worker(
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_rebuild_vbmeta_failed")
-                            .replace("{slot}", slot)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_rescue_rebuild_vbmeta_failed",
+                            slot = slot,
+                            error = e.to_string()
+                        )
                     );
                     continue;
                 }
@@ -496,8 +515,10 @@ pub(crate) fn sysupdate_worker(
             ltbox_core::live!(
                 log,
                 "[Rescue] {}",
-                ltbox_core::i18n::tr("live_rescue_flashing_targets")
-                    .replace("{count}", &flash_plan.len().to_string())
+                tr_args!(
+                    "live_rescue_flashing_targets",
+                    count = flash_plan.len().to_string()
+                )
             );
             for (part_name, image) in &flash_plan {
                 if let Err(e) =
@@ -506,9 +527,11 @@ pub(crate) fn sysupdate_worker(
                     ltbox_core::live!(
                         log,
                         "[Rescue] {}",
-                        ltbox_core::i18n::tr("live_rescue_flash_failed")
-                            .replace("{name}", part_name)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_rescue_flash_failed",
+                            name = part_name,
+                            error = e.to_string()
+                        )
                     );
                     // Abort before the reset — a failed recovery
                     // write must not be followed by a reboot into

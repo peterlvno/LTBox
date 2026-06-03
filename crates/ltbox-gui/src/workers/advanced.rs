@@ -3,6 +3,7 @@
 //! image and writes patched output. Extracted from the update_adv handler.
 
 use crate::{AdvAction, DeviceRegion};
+use ltbox_core::tr_args;
 
 pub(crate) fn advanced_file_worker(
     input_path: String,
@@ -23,8 +24,10 @@ pub(crate) fn advanced_file_worker(
         ltbox_core::live!(
             log,
             "[Advanced] {}",
-            ltbox_core::i18n::tr("live_advanced_output_folder")
-                .replace("{path}", &output_dir.display().to_string())
+            tr_args!(
+                "live_advanced_output_folder",
+                path = output_dir.display().to_string()
+            )
         );
     }
     match action {
@@ -59,8 +62,7 @@ pub(crate) fn advanced_file_worker(
                     Ok(size) => ltbox_core::live!(
                         log,
                         "[Crypto] {}",
-                        ltbox_core::i18n::tr("live_crypto_decrypted")
-                            .replace("{bytes}", &size.to_string())
+                        tr_args!("live_crypto_decrypted", bytes = size.to_string())
                     ),
                     Err(e) => return Err(format!("Decryption failed: {e}")),
                 }
@@ -124,22 +126,28 @@ pub(crate) fn advanced_file_worker(
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_source_target")
-                            .replace("{source}", &format!("{:?}", output.source_region))
-                            .replace("{target}", &format!("{:?}", output.target))
+                        tr_args!(
+                            "live_region_source_target",
+                            source = format!("{:?}", output.source_region),
+                            target = format!("{:?}", output.target)
+                        )
                     );
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_patched")
-                            .replace("{count}", &output.replacement_count.to_string())
-                            .replace("{path}", &output.vendor_boot.display().to_string())
+                        tr_args!(
+                            "live_region_patched",
+                            count = output.replacement_count.to_string(),
+                            path = output.vendor_boot.display().to_string()
+                        )
                     );
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_final_vbmeta_written")
-                            .replace("{path}", &output.vbmeta.display().to_string())
+                        tr_args!(
+                            "live_region_final_vbmeta_written",
+                            path = output.vbmeta.display().to_string()
+                        )
                     );
                 }
                 Ok(ltbox_patch::region::RegionBootChainBuild::Skipped {
@@ -149,9 +157,11 @@ pub(crate) fn advanced_file_worker(
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_source_target")
-                            .replace("{source}", &format!("{:?}", source_region))
-                            .replace("{target}", &format!("{:?}", target))
+                        tr_args!(
+                            "live_region_source_target",
+                            source = format!("{:?}", source_region),
+                            target = format!("{:?}", target)
+                        )
                     );
                     ltbox_core::live!(
                         log,
@@ -187,7 +197,7 @@ pub(crate) fn advanced_file_worker(
                     ltbox_core::live!(
                         log,
                         "[Country] {}",
-                        ltbox_core::i18n::tr("live_country_name_missing").replace("{name}", name)
+                        tr_args!("live_country_name_missing", name = name)
                     );
                     continue;
                 }
@@ -195,8 +205,7 @@ pub(crate) fn advanced_file_worker(
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_processing")
-                        .replace("{path}", &src.display().to_string())
+                    tr_args!("live_country_processing", path = src.display().to_string())
                 );
                 let detected = ltbox_patch::region::detect_country_code(&src, KNOWN)
                     .map_err(|e| format!("Country detect failed on {name}: {e}"))?;
@@ -204,17 +213,14 @@ pub(crate) fn advanced_file_worker(
                     ltbox_core::live!(
                         log,
                         "[Country] {}",
-                        ltbox_core::i18n::tr("live_country_no_code_detected")
-                            .replace("{name}", name)
+                        tr_args!("live_country_no_code_detected", name = name)
                     );
                     continue;
                 };
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_detected")
-                        .replace("{name}", name)
-                        .replace("{old_code}", &old_code)
+                    tr_args!("live_country_detected", name = name, old_code = old_code)
                 );
                 let stem = std::path::Path::new(name)
                     .file_stem()
@@ -229,19 +235,20 @@ pub(crate) fn advanced_file_worker(
                         ltbox_core::live!(
                             log,
                             "[Country] {}",
-                            ltbox_core::i18n::tr("live_country_written")
-                                .replace("{name}", name)
-                                .replace("{old_code}", &old_code)
-                                .replace("{new_code}", new_code)
-                                .replace("{path}", &output.display().to_string())
+                            tr_args!(
+                                "live_country_written",
+                                name = name,
+                                old_code = old_code,
+                                new_code = new_code,
+                                path = output.display().to_string()
+                            )
                         );
                         any_written = true;
                     }
                     Ok(false) => ltbox_core::live!(
                         log,
                         "[Country] {}",
-                        ltbox_core::i18n::tr("live_country_no_replacements")
-                            .replace("{name}", name)
+                        tr_args!("live_country_no_replacements", name = name)
                     ),
                     Err(e) => return Err(format!("Country patch failed on {name}: {e}")),
                 }
@@ -313,32 +320,40 @@ pub(crate) fn advanced_file_worker(
             ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_patch_arb_signing_key")
-                    .replace("{name}", "boot.img")
-                    .replace("{key}", boot_key)
+                tr_args!(
+                    "live_patch_arb_signing_key",
+                    name = "boot.img",
+                    key = boot_key
+                )
             );
             ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_patch_arb_signing_key")
-                    .replace("{name}", "vbmeta_system.img")
-                    .replace("{key}", vbmeta_key)
+                tr_args!(
+                    "live_patch_arb_signing_key",
+                    name = "vbmeta_system.img",
+                    key = vbmeta_key
+                )
             );
             ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_patch_arb_rollback_change")
-                    .replace("{name}", "boot.img")
-                    .replace("{old}", &boot_info.rollback_index.to_string())
-                    .replace("{new}", &target.to_string())
+                tr_args!(
+                    "live_patch_arb_rollback_change",
+                    name = "boot.img",
+                    old = boot_info.rollback_index.to_string(),
+                    new = target.to_string()
+                )
             );
             ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_patch_arb_rollback_change")
-                    .replace("{name}", "vbmeta_system.img")
-                    .replace("{old}", &vbmeta_info.rollback_index.to_string())
-                    .replace("{new}", &target.to_string())
+                tr_args!(
+                    "live_patch_arb_rollback_change",
+                    name = "vbmeta_system.img",
+                    old = vbmeta_info.rollback_index.to_string(),
+                    new = target.to_string()
+                )
             );
             let boot_out = output_dir.join("boot.img");
             let vbmeta_out = output_dir.join("vbmeta_system.img");
@@ -374,8 +389,10 @@ pub(crate) fn advanced_file_worker(
             ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_advanced_output_folder")
-                    .replace("{path}", &output_dir.display().to_string())
+                tr_args!(
+                    "live_advanced_output_folder",
+                    path = output_dir.display().to_string()
+                )
             );
         }
         AdvAction::RebuildVbmeta => {
@@ -467,16 +484,20 @@ pub(crate) fn advanced_file_worker(
                 ltbox_core::live!(
                     log,
                     "[AVB] {}",
-                    ltbox_core::i18n::tr("live_avb_rebuild_chained")
-                        .replace("{count}", &chained.len().to_string())
-                        .replace("{names}", &chained_names)
+                    tr_args!(
+                        "live_avb_rebuild_chained",
+                        count = chained.len().to_string(),
+                        names = chained_names
+                    )
                 );
                 ltbox_core::live!(
                     log,
                     "[AVB] {}",
-                    ltbox_core::i18n::tr("live_avb_rebuild_key_alg")
-                        .replace("{key}", key_spec)
-                        .replace("{alg}", alg.unwrap_or("(from original vbmeta)"))
+                    tr_args!(
+                        "live_avb_rebuild_key_alg",
+                        key = key_spec,
+                        alg = alg.unwrap_or("(from original vbmeta)")
+                    )
                 );
                 if let Err(e) = ltbox_patch::avb::rebuild_vbmeta_with_chained_images(
                     &output,
@@ -490,8 +511,10 @@ pub(crate) fn advanced_file_worker(
                 ltbox_core::live!(
                     log,
                     "[AVB] {}",
-                    ltbox_core::i18n::tr("live_avb_rebuilt_written")
-                        .replace("{path}", &output.display().to_string())
+                    tr_args!(
+                        "live_avb_rebuilt_written",
+                        path = output.display().to_string()
+                    )
                 );
             }
         }
@@ -499,7 +522,7 @@ pub(crate) fn advanced_file_worker(
     ltbox_core::live!(
         log,
         "[Advanced] {}",
-        ltbox_core::i18n::tr("live_advanced_completed").replace("{action}", &action_label)
+        tr_args!("live_advanced_completed", action = action_label)
     );
     Ok(log)
 }

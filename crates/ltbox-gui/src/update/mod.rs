@@ -782,8 +782,7 @@ impl App {
                                     ltbox_core::live!(
                                         log,
                                         "[Driver] {}",
-                                        ltbox_core::i18n::tr("live_driver_failed")
-                                            .replace("{error}", &e.to_string())
+                                        tr_args!("live_driver_failed", error = e.to_string())
                                     );
                                     Err(format!("{e}"))
                                 }

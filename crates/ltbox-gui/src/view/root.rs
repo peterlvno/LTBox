@@ -510,9 +510,10 @@ impl App {
             grid.into()
         };
 
-        let title = self
-            .t("root_provider_title_tmpl")
-            .replace("{family}", self.t(family.label_key()));
+        let title = tr_args!(
+            "root_provider_title_tmpl",
+            family = self.t(family.label_key())
+        );
         // KSU list claims full height; other grids stay Shrink so the
         // outer container vertical-centres them like other wizard steps.
         let col = column![
@@ -702,9 +703,7 @@ impl App {
             .family
             .map(|f| self.t(f.label_key()))
             .unwrap_or("?");
-        let title = self
-            .t("root_mode_title_tmpl")
-            .replace("{family}", fam_label);
+        let title = tr_args!("root_mode_title_tmpl", family = fam_label);
         // TODO(root): TB320FC has no init_boot for the current KernelSU
         // LKM path; replace it with a vendor_boot patch once real-device
         // verification is available. Keep the card disabled for now, but
@@ -937,8 +936,10 @@ impl App {
             let kpm_summary = if self.root.kpm_paths.is_empty() {
                 self.t("root_kpm_none").to_string()
             } else {
-                self.t("root_kpm_count_tmpl")
-                    .replace("{n}", &self.root.kpm_paths.len().to_string())
+                tr_args!(
+                    "root_kpm_count_tmpl",
+                    n = self.root.kpm_paths.len().to_string()
+                )
             };
             rows.push(info_kv_center(self.t("root_step_kpm"), &kpm_summary));
         }

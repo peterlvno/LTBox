@@ -31,7 +31,7 @@ pub(crate) fn unroot_worker(
     live!(
         log,
         "[Unroot] {}",
-        ltbox_core::i18n::tr("live_unroot_backup_pair").replace("{boot}", boot_name)
+        tr_args!("live_unroot_backup_pair", boot = boot_name)
     );
 
     // Slot resolution must succeed —
@@ -62,8 +62,10 @@ pub(crate) fn unroot_worker(
     live!(
         log,
         "[Unroot] {}",
-        ltbox_core::i18n::tr("live_unroot_loader_path")
-            .replace("{path}", &loader.display().to_string())
+        tr_args!(
+            "live_unroot_loader_path",
+            path = loader.display().to_string()
+        )
     );
 
     // Boot + vbmeta resolve through the
@@ -101,7 +103,7 @@ pub(crate) fn unroot_worker(
         log,
         "[Unroot] {} ({})",
         phase_marker(2, 3, &ll.op_unroot_phase[1]),
-        ltbox_core::i18n::tr("live_unroot_backup_pair").replace("{boot}", boot_name)
+        tr_args!("live_unroot_backup_pair", boot = boot_name)
     );
     let mut session = ltbox_device::edl::EdlSession::open(&loader, true, &mut log)
         .map_err(|e| format!("EDL session error: {e}"))?;

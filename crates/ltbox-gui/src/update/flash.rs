@@ -88,10 +88,12 @@ impl App {
                 let rollback_label = self.t(cfg.modify_rollback.label_key()).to_string();
                 self.log_push(format!(
                     "[Flash] {}",
-                    self.t("live_flash_starting")
-                        .replace("{modify_region}", &cfg.modify_region.to_string())
-                        .replace("{rollback}", &rollback_label)
-                        .replace("{wipe}", &cfg.wipe.to_string())
+                    tr_args!(
+                        "live_flash_starting",
+                        modify_region = cfg.modify_region.to_string(),
+                        rollback = rollback_label,
+                        wipe = cfg.wipe.to_string()
+                    )
                 ));
                 let rb_mode = cfg.modify_rollback.to_mode();
                 // NOTE: the EDL-start ARB downgrade (On/Auto → Off when the

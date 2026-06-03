@@ -971,10 +971,12 @@ struct OpStep {
 /// Localized phase marker text that still includes a stable `N/M` token
 /// for progress parsing.
 pub(crate) fn phase_marker<S: AsRef<str>>(phase: usize, total: usize, label: S) -> String {
-    ltbox_core::i18n::tr("live_phase_marker")
-        .replace("{phase}", &phase.to_string())
-        .replace("{total}", &total.to_string())
-        .replace("{label}", label.as_ref())
+    tr_args!(
+        "live_phase_marker",
+        phase = phase.to_string(),
+        total = total.to_string(),
+        label = label.as_ref()
+    )
 }
 
 /// Match a SKU token (e.g. `"TB323FU"`) inside an arbitrary string with
@@ -2018,11 +2020,13 @@ pub(crate) fn build_tb323fu_arb_overlays(
     ltbox_core::live!(
         log,
         "[ARB] {}",
-        ltbox_core::i18n::tr("live_arb_tb323_indices")
-            .replace("{boot_i}", &inst_boot_idx.to_string())
-            .replace("{boot_d}", &dev_boot_idx.to_string())
-            .replace("{vbs_i}", &inst_vbs_idx.to_string())
-            .replace("{vbs_d}", &dev_vbs_idx.to_string())
+        tr_args!(
+            "live_arb_tb323_indices",
+            boot_i = inst_boot_idx.to_string(),
+            boot_d = dev_boot_idx.to_string(),
+            vbs_i = inst_vbs_idx.to_string(),
+            vbs_d = dev_vbs_idx.to_string()
+        )
     );
 
     // 3. need = any dumped partition is behind the device-committed index.
@@ -2075,9 +2079,11 @@ pub(crate) fn build_tb323fu_arb_overlays(
     ltbox_core::live!(
         log,
         "[ARB] {}",
-        ltbox_core::i18n::tr("live_arb_tb323_resigned")
-            .replace("{boot}", &boot_target.to_string())
-            .replace("{vbs}", &vbs_target.to_string())
+        tr_args!(
+            "live_arb_tb323_resigned",
+            boot = boot_target.to_string(),
+            vbs = vbs_target.to_string()
+        )
     );
 
     // 5. Overlays: (GPT label, LUN, patched path). Flashed after rawprogram.
@@ -2148,8 +2154,10 @@ fn install_root_manager_apk(
     live!(
         log,
         "[Root] {}",
-        ltbox_core::i18n::tr("log_root_installing_manager_apk")
-            .replace("{path}", &manager_apk.display().to_string())
+        tr_args!(
+            "log_root_installing_manager_apk",
+            path = manager_apk.display().to_string()
+        )
     );
     adb.install(&path)
         .map_err(|e| format!("Manager APK install failed: {e}"))?;
@@ -2170,8 +2178,10 @@ fn wait_and_install_root_manager_apk(
     live!(
         log,
         "[Root] {}",
-        ltbox_core::i18n::tr("live_root_wait_adb_for_apk")
-            .replace("{seconds}", &timeout.as_secs().to_string())
+        tr_args!(
+            "live_root_wait_adb_for_apk",
+            seconds = timeout.as_secs().to_string()
+        )
     );
     loop {
         match install_root_manager_apk(manager_apk, log) {
@@ -4295,15 +4305,29 @@ mod tests {
     }
 
     fn assert_template_call_replaces(source: &str, key: &str, placeholders: &[&str]) {
+        // Whitespace-strip the whole source so rustfmt line-wrapping (which can
+        // split a tr_args! call across lines) doesn't hide it. Accept either
+        // substitution form: the manual tr(key) followed by a replace chain, or
+        // the tr_args! macro (which expands to the same chain). Both guarantee
+        // the placeholder is filled rather than shipped literally.
+        let compact: String = source.chars().filter(|c| !c.is_whitespace()).collect();
+        let tr_args_needle = format!("tr_args!(\"{key}\"");
+        if let Some(pos) = compact.find(&tr_args_needle) {
+            let window = &compact[pos..(pos + 2_000).min(compact.len())];
+            for placeholder in placeholders {
+                assert!(
+                    window.contains(&format!("{placeholder}=")),
+                    "{key} (tr_args!) must pass {placeholder}"
+                );
+            }
+            return;
+        }
         let needle = format!("tr(\"{key}\")");
-        let pos = source.find(&needle).expect("template key must be used");
-        let end = (pos + 2_000).min(source.len());
-        let window = &source[pos..end];
-        let compact_window: String = window.chars().filter(|c| !c.is_whitespace()).collect();
+        let pos = compact.find(&needle).expect("template key must be used");
+        let window = &compact[pos..(pos + 2_000).min(compact.len())];
         for placeholder in placeholders {
-            let replacement = format!(".replace(\"{{{placeholder}}}\"");
             assert!(
-                compact_window.contains(&replacement),
+                window.contains(&format!(".replace(\"{{{placeholder}}}\"")),
                 "{key} must replace {{{placeholder}}} near its log call"
             );
         }

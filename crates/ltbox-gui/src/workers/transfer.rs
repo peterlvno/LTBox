@@ -42,7 +42,7 @@ fn scan_lun_partitions(
                 log,
                 "[{}] {}",
                 tag,
-                ltbox_core::i18n::tr(open_failed_key).replace("{error}", &e.to_string())
+                tr_args!(open_failed_key, error = e.to_string())
             );
             return Err(format!("EDL session open failed: {e}"));
         }
@@ -55,7 +55,7 @@ fn scan_lun_partitions(
                 log,
                 "[{}] {}",
                 tag,
-                ltbox_core::i18n::tr(scan_failed_key).replace("{error}", &e.to_string())
+                tr_args!(scan_failed_key, error = e.to_string())
             );
             let _ = session.reset_to_edl(log);
             Err(format!("scan failed: {e}"))
@@ -114,8 +114,10 @@ pub(crate) fn flash_parts_scan(
     ltbox_core::live!(
         log,
         "[FlashParts] {}",
-        ltbox_core::i18n::tr("live_dumpparts_scan_complete")
-            .replace("{count}", &rows.len().to_string())
+        tr_args!(
+            "live_dumpparts_scan_complete",
+            count = rows.len().to_string()
+        )
     );
     FlashPartsScanResult {
         logs: log,
@@ -139,8 +141,7 @@ pub(crate) fn flash_parts_execute(
             ltbox_core::live!(
                 log,
                 "[FlashParts] {}",
-                ltbox_core::i18n::tr("live_flashparts_edl_open_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_flashparts_edl_open_failed", error = e.to_string())
             );
             return Err(format!("Flash Partitions: EDL open failed: {e}"));
         }
@@ -153,8 +154,7 @@ pub(crate) fn flash_parts_execute(
                     ltbox_core::live!(
                         log,
                         "[FlashParts] {}",
-                        ltbox_core::i18n::tr("live_flashparts_skipping")
-                            .replace("{label}", &row.label)
+                        tr_args!("live_flashparts_skipping", label = row.label)
                     );
                     continue;
                 };
@@ -163,9 +163,11 @@ pub(crate) fn flash_parts_execute(
                     ltbox_core::live!(
                         log,
                         "[FlashParts] {}",
-                        ltbox_core::i18n::tr("live_flashparts_skipping_missing")
-                            .replace("{label}", &row.label)
-                            .replace("{path}", path)
+                        tr_args!(
+                            "live_flashparts_skipping_missing",
+                            label = row.label,
+                            path = path
+                        )
                     );
                     continue;
                 }
@@ -176,10 +178,12 @@ pub(crate) fn flash_parts_execute(
                 ltbox_core::live!(
                     log,
                     "[FlashParts] {}",
-                    ltbox_core::i18n::tr("live_flashparts_flashing")
-                        .replace("{label}", &row.label)
-                        .replace("{file}", &file_name)
-                        .replace("{lun}", &row.lun.to_string())
+                    tr_args!(
+                        "live_flashparts_flashing",
+                        label = row.label,
+                        file = file_name,
+                        lun = row.lun.to_string()
+                    )
                 );
                 if let Err(e) = session.flash_partition_at(
                     &row.label,
@@ -192,9 +196,11 @@ pub(crate) fn flash_parts_execute(
                     ltbox_core::live!(
                         log,
                         "[FlashParts] {}",
-                        ltbox_core::i18n::tr("live_flashparts_part_failed")
-                            .replace("{label}", &row.label)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_flashparts_part_failed",
+                            label = row.label,
+                            error = e.to_string()
+                        )
                     );
                     // Abort the remaining writes — a failed write can mean a
                     // dropped link, and the device is left in EDL for retry.
@@ -208,10 +214,12 @@ pub(crate) fn flash_parts_execute(
                 ltbox_core::live!(
                     log,
                     "[FlashParts] {}",
-                    ltbox_core::i18n::tr("live_flashparts_erasing")
-                        .replace("{label}", &row.label)
-                        .replace("{lun}", &row.lun.to_string())
-                        .replace("{sectors}", &row.num_sectors.to_string())
+                    tr_args!(
+                        "live_flashparts_erasing",
+                        label = row.label,
+                        lun = row.lun.to_string(),
+                        sectors = row.num_sectors.to_string()
+                    )
                 );
                 if let Err(e) = session.erase_partition_at(
                     &row.label,
@@ -223,9 +231,11 @@ pub(crate) fn flash_parts_execute(
                     ltbox_core::live!(
                         log,
                         "[FlashParts] {}",
-                        ltbox_core::i18n::tr("live_flashparts_erase_failed")
-                            .replace("{label}", &row.label)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_flashparts_erase_failed",
+                            label = row.label,
+                            error = e.to_string()
+                        )
                     );
                     return Err(format!(
                         "Flash Partitions: erasing {} failed: {e}",
@@ -299,8 +309,10 @@ pub(crate) fn dump_parts_scan(conn: ConnectionStatus, loader_path: String) -> Du
     ltbox_core::live!(
         log,
         "[DumpParts] {}",
-        ltbox_core::i18n::tr("live_dumpparts_scan_complete")
-            .replace("{count}", &rows.len().to_string())
+        tr_args!(
+            "live_dumpparts_scan_complete",
+            count = rows.len().to_string()
+        )
     );
     DumpPartsScanResult {
         logs: log,
@@ -411,8 +423,7 @@ pub(crate) fn dump_parts_execute(
         ltbox_core::live!(
             log,
             "[DumpParts] {}",
-            ltbox_core::i18n::tr("live_dumpparts_create_output_failed")
-                .replace("{error}", &e.to_string())
+            tr_args!("live_dumpparts_create_output_failed", error = e.to_string())
         );
         return log;
     }
@@ -425,8 +436,7 @@ pub(crate) fn dump_parts_execute(
             ltbox_core::live!(
                 log,
                 "[DumpParts] {}",
-                ltbox_core::i18n::tr("live_dumpparts_edl_open_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_dumpparts_edl_open_failed", error = e.to_string())
             );
             return log;
         }
@@ -444,9 +454,11 @@ pub(crate) fn dump_parts_execute(
                     ltbox_core::live!(
                         log,
                         "[DumpParts] {}",
-                        ltbox_core::i18n::tr("live_dumpparts_part_failed")
-                            .replace("{label}", &row.label)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_dumpparts_part_failed",
+                            label = row.label,
+                            error = e.to_string()
+                        )
                     );
                     if is_critical_dump_label(&row.label) {
                         critical_failures.push(row.label.clone());
@@ -457,11 +469,13 @@ pub(crate) fn dump_parts_execute(
         ltbox_core::live!(
             log,
             "[DumpParts] {}",
-            ltbox_core::i18n::tr("live_dumpparts_dumping")
-                .replace("{label}", &row.label)
-                .replace("{path}", &out_path.display().to_string())
-                .replace("{lun}", &row.lun.to_string())
-                .replace("{bytes}", &row.size_bytes.to_string())
+            tr_args!(
+                "live_dumpparts_dumping",
+                label = row.label,
+                path = out_path.display().to_string(),
+                lun = row.lun.to_string(),
+                bytes = row.size_bytes.to_string()
+            )
         );
         // GPT sector values are u64; Firehose takes a u32 start + usize
         // count. Reject out-of-range rather than silently truncating
@@ -483,9 +497,7 @@ pub(crate) fn dump_parts_execute(
             ltbox_core::live!(
                 log,
                 "[DumpParts] {}",
-                ltbox_core::i18n::tr("live_dumpparts_part_failed")
-                    .replace("{label}", &row.label)
-                    .replace("{error}", &e)
+                tr_args!("live_dumpparts_part_failed", label = row.label, error = e)
             );
             if is_critical_dump_label(&row.label) {
                 critical_failures.push(row.label.clone());
@@ -496,8 +508,10 @@ pub(crate) fn dump_parts_execute(
     ltbox_core::live!(
         log,
         "[DumpParts] {}",
-        ltbox_core::i18n::tr("live_dumpparts_stabilizing")
-            .replace("{seconds}", &EDL_POST_DUMP_STABILIZE.as_secs().to_string())
+        tr_args!(
+            "live_dumpparts_stabilizing",
+            seconds = EDL_POST_DUMP_STABILIZE.as_secs().to_string()
+        )
     );
     std::thread::sleep(EDL_POST_DUMP_STABILIZE);
     ltbox_core::live!(
@@ -513,8 +527,10 @@ pub(crate) fn dump_parts_execute(
         ltbox_core::live!(
             log,
             "[DumpParts] {}",
-            ltbox_core::i18n::tr("live_dumpparts_critical_failure")
-                .replace("{labels}", &critical_failures.join(", "))
+            tr_args!(
+                "live_dumpparts_critical_failure",
+                labels = critical_failures.join(", ")
+            )
         );
     }
     ltbox_core::live!(
@@ -546,8 +562,7 @@ pub(crate) fn dump_physical_execute(
         ltbox_core::live!(
             log,
             "[DumpPhys] {}",
-            ltbox_core::i18n::tr("live_dump_phys_create_output_failed")
-                .replace("{error}", &e.to_string())
+            tr_args!("live_dump_phys_create_output_failed", error = e.to_string())
         );
         flush_worker_logs(&mut log);
         return Vec::new();
@@ -561,8 +576,7 @@ pub(crate) fn dump_physical_execute(
             ltbox_core::live!(
                 log,
                 "[DumpPhys] {}",
-                ltbox_core::i18n::tr("live_dump_phys_edl_open_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_dump_phys_edl_open_failed", error = e.to_string())
             );
             flush_worker_logs(&mut log);
             return Vec::new();
@@ -575,18 +589,22 @@ pub(crate) fn dump_physical_execute(
         ltbox_core::live!(
             log,
             "[DumpPhys] {}",
-            ltbox_core::i18n::tr("live_dump_phys_dumping_lun")
-                .replace("{lun}", &lun.to_string())
-                .replace("{path}", &out_path.display().to_string())
+            tr_args!(
+                "live_dump_phys_dumping_lun",
+                lun = lun.to_string(),
+                path = out_path.display().to_string()
+            )
         );
         flush_worker_logs(&mut log);
         if let Err(e) = session.dump_physical_storage(*lun, &out_path, &mut log) {
             ltbox_core::live!(
                 log,
                 "[DumpPhys] {}",
-                ltbox_core::i18n::tr("live_dump_phys_lun_failed")
-                    .replace("{lun}", &lun.to_string())
-                    .replace("{error}", &e.to_string())
+                tr_args!(
+                    "live_dump_phys_lun_failed",
+                    lun = lun.to_string(),
+                    error = e.to_string()
+                )
             );
         }
         flush_worker_logs(&mut log);
@@ -595,8 +613,10 @@ pub(crate) fn dump_physical_execute(
     ltbox_core::live!(
         log,
         "[DumpPhys] {}",
-        ltbox_core::i18n::tr("live_dump_phys_stabilizing_usb")
-            .replace("{seconds}", &EDL_POST_DUMP_STABILIZE.as_secs().to_string())
+        tr_args!(
+            "live_dump_phys_stabilizing_usb",
+            seconds = EDL_POST_DUMP_STABILIZE.as_secs().to_string()
+        )
     );
     flush_worker_logs(&mut log);
     std::thread::sleep(EDL_POST_DUMP_STABILIZE);
@@ -635,8 +655,7 @@ pub(crate) fn flash_physical_execute(
             ltbox_core::live!(
                 log,
                 "[FlashPhys] {}",
-                ltbox_core::i18n::tr("live_flashphys_edl_open_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_flashphys_edl_open_failed", error = e.to_string())
             );
             return Err(format!("Flash Physical: EDL open failed: {e}"));
         }
@@ -648,9 +667,11 @@ pub(crate) fn flash_physical_execute(
             ltbox_core::live!(
                 log,
                 "[FlashPhys] {}",
-                ltbox_core::i18n::tr("live_flashphys_skipping_missing")
-                    .replace("{lun}", &lun.to_string())
-                    .replace("{path}", path)
+                tr_args!(
+                    "live_flashphys_skipping_missing",
+                    lun = lun.to_string(),
+                    path = path
+                )
             );
             continue;
         }
@@ -661,17 +682,21 @@ pub(crate) fn flash_physical_execute(
         ltbox_core::live!(
             log,
             "[FlashPhys] {}",
-            ltbox_core::i18n::tr("live_flashphys_flashing")
-                .replace("{lun}", &lun.to_string())
-                .replace("{file}", &file_name)
+            tr_args!(
+                "live_flashphys_flashing",
+                lun = lun.to_string(),
+                file = file_name
+            )
         );
         if let Err(e) = session.flash_physical_storage(*lun, img, &mut log) {
             ltbox_core::live!(
                 log,
                 "[FlashPhys] {}",
-                ltbox_core::i18n::tr("live_flashphys_lun_failed")
-                    .replace("{lun}", &lun.to_string())
-                    .replace("{error}", &e.to_string())
+                tr_args!(
+                    "live_flashphys_lun_failed",
+                    lun = lun.to_string(),
+                    error = e.to_string()
+                )
             );
             // Abort remaining LUN writes; device stays in EDL for retry.
             return Err(format!("Flash Physical: writing LUN {lun} failed: {e}"));

@@ -639,10 +639,9 @@ impl App {
 
     pub(crate) fn busy_progress_dialog(&self) -> Element<'_, Message> {
         let op_name = self.busy_operation_label();
-        let body = self.busy_body_override().unwrap_or_else(|| {
-            self.t("progress_dialog_body")
-                .replace("{operation}", &op_name)
-        });
+        let body = self
+            .busy_body_override()
+            .unwrap_or_else(|| tr_args!("progress_dialog_body", operation = op_name));
 
         let spinner: Element<'_, Message> = Spinner::new()
             .width(Length::Fixed(42.0))

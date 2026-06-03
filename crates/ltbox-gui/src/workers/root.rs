@@ -7,7 +7,7 @@ use crate::{
     fingerprint_token_match, install_root_manager_apk, phase_marker, transition_to_edl,
     wait_and_install_root_manager_apk,
 };
-use ltbox_core::live;
+use ltbox_core::{live, tr_args};
 
 // The 13 params are the closure's captured locals, threaded through verbatim
 // from the update_root handler; bundling them into a struct would only move the
@@ -108,7 +108,7 @@ pub(crate) fn root_worker(
     ltbox_core::live!(
         log,
         "[Root] {}",
-        ltbox_core::i18n::tr("log_root_loader").replace("{path}", &loader.display().to_string())
+        tr_args!("log_root_loader", path = loader.display().to_string())
     );
 
     let base = ltbox_core::app_paths::work_dir_for("root");
@@ -150,8 +150,10 @@ pub(crate) fn root_worker(
                 live!(
                     log,
                     "[ADB] {}",
-                    ltbox_core::i18n::tr("live_adb_kernel_version")
-                        .replace("{version}", normalized.as_deref().unwrap_or(&kv),)
+                    tr_args!(
+                        "live_adb_kernel_version",
+                        version = normalized.as_deref().unwrap_or(&kv)
+                    )
                 );
                 if let Some(kv) = normalized {
                     kernel_version = Some(kv);
@@ -219,9 +221,11 @@ pub(crate) fn root_worker(
                     live!(
                         log,
                         "[Root] {}",
-                        ltbox_core::i18n::tr("log_root_manager_apk_install_failed_manual")
-                            .replace("{error}", &e)
-                            .replace("{path}", &path.display().to_string(),)
+                        tr_args!(
+                            "log_root_manager_apk_install_failed_manual",
+                            error = e,
+                            path = path.display().to_string()
+                        )
                     );
                     manager_install_failed_path = Some(path.clone());
                     false
@@ -464,9 +468,11 @@ pub(crate) fn root_worker(
                 live!(
                     log,
                     "[Root] {}",
-                    ltbox_core::i18n::tr("log_root_manager_apk_install_failed_manual")
-                        .replace("{error}", &e)
-                        .replace("{path}", &path.display().to_string())
+                    tr_args!(
+                        "log_root_manager_apk_install_failed_manual",
+                        error = e,
+                        path = path.display().to_string()
+                    )
                 );
                 manager_install_failed_path = Some(path.clone());
             }
@@ -474,8 +480,10 @@ pub(crate) fn root_worker(
                 live!(
                     log,
                     "[Root] {}",
-                    ltbox_core::i18n::tr("log_root_manager_apk_manual_reminder")
-                        .replace("{path}", &path.display().to_string())
+                    tr_args!(
+                        "log_root_manager_apk_manual_reminder",
+                        path = path.display().to_string()
+                    )
                 );
             }
             live!(log, "[Root] {}", ll.root_completed);

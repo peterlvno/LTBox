@@ -29,7 +29,7 @@ pub(crate) fn flash_worker(
     live!(
         log,
         "[Flash] {}",
-        ltbox_core::i18n::tr("live_flash_firmware_folder").replace("{path}", &fw_folder)
+        tr_args!("live_flash_firmware_folder", path = fw_folder)
     );
 
     // 2. Device detection
@@ -130,8 +130,7 @@ pub(crate) fn flash_worker(
                     ltbox_core::live!(
                         log,
                         "[ADB] {}",
-                        ltbox_core::i18n::tr("live_adb_reboot_failed")
-                            .replace("{error}", &e.to_string())
+                        tr_args!("live_adb_reboot_failed", error = e.to_string())
                     );
                 }
             }
@@ -199,8 +198,7 @@ pub(crate) fn flash_worker(
                             ltbox_core::live!(
                                 log,
                                 "[Flash] {}",
-                                ltbox_core::i18n::tr("live_rescue_model_check_ok")
-                                    .replace("{fingerprint}", &fingerprint)
+                                tr_args!("live_rescue_model_check_ok", fingerprint = fingerprint)
                             );
                             vendor_boot_fingerprint = Some(fingerprint);
                         }
@@ -219,9 +217,11 @@ pub(crate) fn flash_worker(
                             ltbox_core::live!(
                                 log,
                                 "[Flash] {}",
-                                ltbox_core::i18n::tr("live_rescue_model_mismatch_abort")
-                                    .replace("{device}", &device_model)
-                                    .replace("{fingerprint}", &fingerprint)
+                                tr_args!(
+                                    "live_rescue_model_mismatch_abort",
+                                    device = device_model,
+                                    fingerprint = fingerprint
+                                )
                             );
                             return Err(
                                 "Flash: firmware/device model mismatch — aborting before EDL"
@@ -235,8 +235,7 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[Flash] {}",
-                    ltbox_core::i18n::tr("live_rescue_avb_inspect_skip")
-                        .replace("{error}", &e.to_string())
+                    tr_args!("live_rescue_avb_inspect_skip", error = e.to_string())
                 );
             }
         }
@@ -310,8 +309,7 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[ADB] {}",
-                    ltbox_core::i18n::tr("live_adb_reboot_failed")
-                        .replace("{error}", &e.to_string())
+                    tr_args!("live_adb_reboot_failed", error = e.to_string())
                 );
             } else {
                 ltbox_core::live!(
@@ -374,9 +372,11 @@ pub(crate) fn flash_worker(
     ltbox_core::live!(
         log,
         "[Flash] {}",
-        ltbox_core::i18n::tr("live_flash_files_count")
-            .replace("{x_count}", &x_count.to_string())
-            .replace("{xml_count}", &xml_count.to_string())
+        tr_args!(
+            "live_flash_files_count",
+            x_count = x_count.to_string(),
+            xml_count = xml_count.to_string()
+        )
     );
 
     // 4. Region conversion
@@ -399,8 +399,10 @@ pub(crate) fn flash_worker(
             ltbox_core::live!(
                 log,
                 "[Region] {}",
-                ltbox_core::i18n::tr("live_region_building_pair")
-                    .replace("{region}", &format!("{:?}", device_region))
+                tr_args!(
+                    "live_region_building_pair",
+                    region = format!("{:?}", device_region)
+                )
             );
             match ltbox_patch::region::build_region_converted_boot_chain(
                 fw_dir,
@@ -412,22 +414,28 @@ pub(crate) fn flash_worker(
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_source_target")
-                            .replace("{source}", &format!("{:?}", output.source_region))
-                            .replace("{target}", &format!("{:?}", output.target))
+                        tr_args!(
+                            "live_region_source_target",
+                            source = format!("{:?}", output.source_region),
+                            target = format!("{:?}", output.target)
+                        )
                     );
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_patched")
-                            .replace("{count}", &output.replacement_count.to_string())
-                            .replace("{path}", &output.vendor_boot.display().to_string())
+                        tr_args!(
+                            "live_region_patched",
+                            count = output.replacement_count.to_string(),
+                            path = output.vendor_boot.display().to_string()
+                        )
                     );
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_pair_rebuilt")
-                            .replace("{path}", &output.vbmeta.display().to_string())
+                        tr_args!(
+                            "live_region_pair_rebuilt",
+                            path = output.vbmeta.display().to_string()
+                        )
                     );
                     region_pair = Some(output);
                 }
@@ -438,9 +446,11 @@ pub(crate) fn flash_worker(
                     ltbox_core::live!(
                         log,
                         "[Region] {}",
-                        ltbox_core::i18n::tr("live_region_source_target")
-                            .replace("{source}", &format!("{:?}", source_region))
-                            .replace("{target}", &format!("{:?}", target))
+                        tr_args!(
+                            "live_region_source_target",
+                            source = format!("{:?}", source_region),
+                            target = format!("{:?}", target)
+                        )
                     );
                     ltbox_core::live!(
                         log,
@@ -482,7 +492,7 @@ pub(crate) fn flash_worker(
     ltbox_core::live!(
         log,
         "[ARB] {}",
-        ltbox_core::i18n::tr("live_arb_device_index").replace("{index}", &device_idx_str)
+        tr_args!("live_arb_device_index", index = device_idx_str)
     );
     if has_boot {
         // Pre-result "Analyzing …" line dropped — analysis is
@@ -496,16 +506,17 @@ pub(crate) fn flash_worker(
             Ok(info) => ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_arb_boot_index_result")
-                    .replace("{index}", &info.image_index.to_string())
-                    .replace("{needs}", &info.needs_patch.to_string())
-                    .replace("{mode}", &format!("{:?}", rb_mode))
+                tr_args!(
+                    "live_arb_boot_index_result",
+                    index = info.image_index.to_string(),
+                    needs = info.needs_patch.to_string(),
+                    mode = format!("{:?}", rb_mode)
+                )
             ),
             Err(e) => ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_arb_boot_analysis_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_arb_boot_analysis_failed", error = e.to_string())
             ),
         }
     }
@@ -521,8 +532,7 @@ pub(crate) fn flash_worker(
         ltbox_core::live!(
             log,
             "[XML] {}",
-            ltbox_core::i18n::tr("live_xml_decrypt_pending")
-                .replace("{count}", &x_count.to_string())
+            tr_args!("live_xml_decrypt_pending", count = x_count.to_string())
         );
         let x_entries: Vec<std::path::PathBuf> = std::fs::read_dir(fw_dir)
             .map_err(|e| format!("read_dir {}: {e}", fw_dir.display()))?
@@ -547,8 +557,7 @@ pub(crate) fn flash_worker(
         ltbox_core::live!(
             log,
             "[XML] {}",
-            ltbox_core::i18n::tr("live_xml_decrypt_done")
-                .replace("{count}", &decrypted.to_string())
+            tr_args!("live_xml_decrypt_done", count = decrypted.to_string())
         );
     }
     if !cfg.wipe && xml_count > 0 {
@@ -570,7 +579,7 @@ pub(crate) fn flash_worker(
             ltbox_core::live!(
                 log,
                 "[Flash] {}",
-                ltbox_core::i18n::tr("live_flash_country_devinfo").replace("{code}", cc)
+                tr_args!("live_flash_country_devinfo", code = cc)
             );
         } else if cfg.country_action.is_skipped() {
             ltbox_core::live!(
@@ -647,7 +656,7 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[ARB] {}",
-                    ltbox_core::i18n::tr("live_arb_skip_no_lun").replace("{name}", log_name)
+                    tr_args!("live_arb_skip_no_lun", name = log_name)
                 );
                 continue;
             };
@@ -656,9 +665,11 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[ARB] {}",
-                    ltbox_core::i18n::tr("live_arb_skip_image_missing")
-                        .replace("{name}", log_name)
-                        .replace("{file}", &source.display().to_string())
+                    tr_args!(
+                        "live_arb_skip_image_missing",
+                        name = log_name,
+                        file = source.display().to_string()
+                    )
                 );
                 continue;
             }
@@ -674,9 +685,11 @@ pub(crate) fn flash_worker(
                     ltbox_core::live!(
                         log,
                         "[ARB] {}",
-                        ltbox_core::i18n::tr("live_arb_analyze_failed")
-                            .replace("{name}", log_name)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_arb_analyze_failed",
+                            name = log_name,
+                            error = e.to_string()
+                        )
                     );
                     continue;
                 }
@@ -684,11 +697,13 @@ pub(crate) fn flash_worker(
             ltbox_core::live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_arb_image_status")
-                    .replace("{name}", log_name)
-                    .replace("{image}", &analysis.image_index.to_string())
-                    .replace("{needs}", &analysis.needs_patch.to_string())
-                    .replace("{mode}", &format!("{:?}", rb_mode))
+                tr_args!(
+                    "live_arb_image_status",
+                    name = log_name,
+                    image = analysis.image_index.to_string(),
+                    needs = analysis.needs_patch.to_string(),
+                    mode = format!("{:?}", rb_mode)
+                )
             );
             if !analysis.needs_patch {
                 continue;
@@ -697,8 +712,7 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[ARB] {}",
-                    ltbox_core::i18n::tr("live_arb_skip_unknown_device")
-                        .replace("{name}", log_name)
+                    tr_args!("live_arb_skip_unknown_device", name = log_name)
                 );
                 continue;
             };
@@ -730,12 +744,11 @@ pub(crate) fn flash_worker(
                         ltbox_core::live!(
                             log,
                             "[ARB] {}",
-                            ltbox_core::i18n::tr("live_arb_skip_unknown_pubkey")
-                                .replace("{name}", log_name)
-                                .replace(
-                                    "{key}",
-                                    &format!("{:?}", analysis.image_info.public_key_sha1)
-                                )
+                            tr_args!(
+                                "live_arb_skip_unknown_pubkey",
+                                name = log_name,
+                                key = format!("{:?}", analysis.image_info.public_key_sha1)
+                            )
                         );
                         continue;
                     }
@@ -765,12 +778,11 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[ARB] {}",
-                    ltbox_core::i18n::tr("live_arb_no_signing_key")
-                        .replace("{name}", log_name)
-                        .replace(
-                            "{key}",
-                            &format!("{:?}", analysis.image_info.public_key_sha1),
-                        )
+                    tr_args!(
+                        "live_arb_no_signing_key",
+                        name = log_name,
+                        key = format!("{:?}", analysis.image_info.public_key_sha1)
+                    )
                 );
                 continue;
             };
@@ -778,9 +790,11 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[ARB] {}",
-                    ltbox_core::i18n::tr("live_arb_patch_failed")
-                        .replace("{name}", log_name)
-                        .replace("{error}", &e.to_string())
+                    tr_args!(
+                        "live_arb_patch_failed",
+                        name = log_name,
+                        error = e.to_string()
+                    )
                 );
                 continue;
             }
@@ -788,10 +802,12 @@ pub(crate) fn flash_worker(
             live!(
                 log,
                 "[ARB] {}",
-                ltbox_core::i18n::tr("live_arb_prepared_patch")
-                    .replace("{name}", log_name)
-                    .replace("{path}", &patched.display().to_string())
-                    .replace("{target}", &target.to_string())
+                tr_args!(
+                    "live_arb_prepared_patch",
+                    name = log_name,
+                    path = patched.display().to_string(),
+                    target = target.to_string()
+                )
             );
             arb_patched.push((slot_label.to_string(), lun, patched));
         }
@@ -807,7 +823,7 @@ pub(crate) fn flash_worker(
         ltbox_core::live!(
             log,
             "[Flash] {}",
-            ltbox_core::i18n::tr("live_flash_efisp_fetch").replace("{variant}", suffix)
+            tr_args!("live_flash_efisp_fetch", variant = suffix)
         );
         let gh = ltbox_core::github::GitHubClient::from_url("github.com/miner7222/gbl_root_canoe")
             .map_err(|e| format!("efisp EFI: GitHub client: {e}"))?;
@@ -825,7 +841,7 @@ pub(crate) fn flash_worker(
         ltbox_core::live!(
             log,
             "[Flash] {}",
-            ltbox_core::i18n::tr("live_flash_efisp_fetched").replace("{name}", &asset_name)
+            tr_args!("live_flash_efisp_fetched", name = asset_name)
         );
         efisp_efi = Some(efi_path);
     }
@@ -834,9 +850,11 @@ pub(crate) fn flash_worker(
         log,
         "[Flash] {} ({})",
         phase_marker(3, 4, &ll.op_flash_phase[2]),
-        ltbox_core::i18n::tr("live_flash_phase3_xml_counts")
-            .replace("{raw}", &raw_xmls.len().to_string())
-            .replace("{patch}", &patch_xmls.len().to_string())
+        tr_args!(
+            "live_flash_phase3_xml_counts",
+            raw = raw_xmls.len().to_string(),
+            patch = patch_xmls.len().to_string()
+        )
     );
     session
         .flash_rawprogram_with_wipe(&raw_xmls, &patch_xmls, cfg.wipe, &mut log)
@@ -847,7 +865,7 @@ pub(crate) fn flash_worker(
         live!(
             log,
             "[ARB] {}",
-            ltbox_core::i18n::tr("live_arb_flash_patched").replace("{label}", label)
+            tr_args!("live_arb_flash_patched", label = label)
         );
         if let Err(e) = session.flash_partition(label, patched, 0, *lun, &mut log) {
             return Err(format!("ARB flash {label}: {e}"));
@@ -877,8 +895,7 @@ pub(crate) fn flash_worker(
                     ltbox_core::live!(
                         log,
                         "[Flash] {}",
-                        ltbox_core::i18n::tr("live_flash_efisp_flash_failed")
-                            .replace("{error}", &e.to_string())
+                        tr_args!("live_flash_efisp_flash_failed", error = e.to_string())
                     );
                     // A staged testkey ARB chain only boots
                     // with this `_arb` GBL. Abort loudly
@@ -920,8 +937,7 @@ pub(crate) fn flash_worker(
                         ltbox_core::live!(
                             log,
                             "[Flash] {}",
-                            ltbox_core::i18n::tr("live_flash_efisp_erase_failed")
-                                .replace("{error}", &e.to_string())
+                            tr_args!("live_flash_efisp_erase_failed", error = e.to_string())
                         );
                     } else {
                         ltbox_core::live!(
@@ -952,9 +968,11 @@ pub(crate) fn flash_worker(
             live!(
                 log,
                 "[Region] {}",
-                ltbox_core::i18n::tr("live_region_flashing_final")
-                    .replace("{label}", label)
-                    .replace("{path}", &image.display().to_string())
+                tr_args!(
+                    "live_region_flashing_final",
+                    label = label,
+                    path = image.display().to_string()
+                )
             );
             if let Err(e) = session.flash_partition(label, image, 0, lun, &mut log) {
                 return Err(format!("Region flash {label}: {e}"));
@@ -970,8 +988,7 @@ pub(crate) fn flash_worker(
         live!(
             log,
             "[Flash] {}",
-            ltbox_core::i18n::tr("live_flash_country_patch_target")
-                .replace("{target}", target_code)
+            tr_args!("live_flash_country_patch_target", target = target_code)
         );
         let work_dir = ltbox_core::app_paths::work_dir_for("flash_country");
         let _ = std::fs::remove_dir_all(&work_dir);
@@ -1026,9 +1043,11 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_partition_status")
-                        .replace("{label}", label)
-                        .replace("{reason}", reason)
+                    tr_args!(
+                        "live_country_partition_status",
+                        label = label,
+                        reason = reason
+                    )
                 );
                 country_progress.mark_failed(label, reason);
                 continue;
@@ -1037,20 +1056,24 @@ pub(crate) fn flash_worker(
             live!(
                 log,
                 "[Country] {}",
-                ltbox_core::i18n::tr("live_country_dump_partition")
-                    .replace("{label}", label)
-                    .replace("{lun}", &lun.to_string())
-                    .replace("{start}", "?")
-                    .replace("{sectors}", "?")
+                tr_args!(
+                    "live_country_dump_partition",
+                    label = label,
+                    lun = lun.to_string(),
+                    start = "?",
+                    sectors = "?"
+                )
             );
             if let Err(e) = session.dump_partition(label, &dump_path, 0, lun, &mut log) {
                 let reason = format!("dump failed: {e}");
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_partition_status")
-                        .replace("{label}", label)
-                        .replace("{reason}", &reason)
+                    tr_args!(
+                        "live_country_partition_status",
+                        label = label,
+                        reason = reason
+                    )
                 );
                 country_progress.mark_failed(label, reason);
                 continue;
@@ -1062,9 +1085,11 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_partition_status")
-                        .replace("{label}", label)
-                        .replace("{reason}", &reason)
+                    tr_args!(
+                        "live_country_partition_status",
+                        label = label,
+                        reason = reason
+                    )
                 );
                 country_progress.mark_failed(label, reason);
                 continue;
@@ -1086,9 +1111,11 @@ pub(crate) fn flash_worker(
                     ltbox_core::live!(
                         log,
                         "[Country] {}",
-                        ltbox_core::i18n::tr("live_country_partition_status")
-                            .replace("{label}", label)
-                            .replace("{reason}", &reason)
+                        tr_args!(
+                            "live_country_partition_status",
+                            label = label,
+                            reason = reason
+                        )
                     );
                     country_progress.mark_failed(label, reason);
                     None
@@ -1105,10 +1132,12 @@ pub(crate) fn flash_worker(
                     live!(
                         log,
                         "[Country] {}",
-                        ltbox_core::i18n::tr("live_country_patch_transition")
-                            .replace("{label}", label)
-                            .replace("{from}", old_code)
-                            .replace("{to}", target_code)
+                        tr_args!(
+                            "live_country_patch_transition",
+                            label = label,
+                            from = old_code,
+                            to = target_code
+                        )
                     );
                     match ltbox_patch::region::patch_country_code(
                         &dump_path,
@@ -1123,9 +1152,11 @@ pub(crate) fn flash_worker(
                             ltbox_core::live!(
                                 log,
                                 "[Country] {}",
-                                ltbox_core::i18n::tr("live_country_partition_status")
-                                    .replace("{label}", label)
-                                    .replace("{reason}", &reason)
+                                tr_args!(
+                                    "live_country_partition_status",
+                                    label = label,
+                                    reason = reason
+                                )
                             );
                             country_progress.mark_failed(label, reason);
                             continue;
@@ -1138,9 +1169,11 @@ pub(crate) fn flash_worker(
                         ltbox_core::live!(
                             log,
                             "[Country] {}",
-                            ltbox_core::i18n::tr("live_country_partition_status")
-                                .replace("{label}", label)
-                                .replace("{reason}", reason)
+                            tr_args!(
+                                "live_country_partition_status",
+                                label = label,
+                                reason = reason
+                            )
                         );
                         country_progress.mark_failed(label, reason);
                         continue;
@@ -1157,17 +1190,18 @@ pub(crate) fn flash_worker(
                     ltbox_core::live!(
                         log,
                         "[Country] {}",
-                        ltbox_core::i18n::tr("live_country_flash_failed")
-                            .replace("{label}", label)
-                            .replace("{error}", &e.to_string())
+                        tr_args!(
+                            "live_country_flash_failed",
+                            label = label,
+                            error = e.to_string()
+                        )
                     );
                     country_progress.mark_failed(label, format!("flash failed: {e}"));
                 } else {
                     live!(
                         log,
                         "[Country] {}",
-                        ltbox_core::i18n::tr("live_country_patched_flashed")
-                            .replace("{label}", label)
+                        tr_args!("live_country_patched_flashed", label = label)
                     );
                     country_progress.mark_flashed(label);
                 }
@@ -1175,9 +1209,11 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_partition_already")
-                        .replace("{label}", label)
-                        .replace("{target}", target_code)
+                    tr_args!(
+                        "live_country_partition_already",
+                        label = label,
+                        target = target_code
+                    )
                 );
                 country_progress.mark_flashed(label);
             } else if label == "persist" {
@@ -1190,9 +1226,11 @@ pub(crate) fn flash_worker(
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_partition_status")
-                        .replace("{label}", label)
-                        .replace("{reason}", reason)
+                    tr_args!(
+                        "live_country_partition_status",
+                        label = label,
+                        reason = reason
+                    )
                 );
                 country_progress.mark_failed(label, reason);
             }
@@ -1206,7 +1244,7 @@ pub(crate) fn flash_worker(
             ltbox_core::live!(
                 log,
                 "[Country] {}",
-                ltbox_core::i18n::tr("live_country_warning").replace("{error}", &e)
+                tr_args!("live_country_warning", error = e)
             );
         }
         // Surface the backup location once

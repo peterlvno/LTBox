@@ -345,10 +345,11 @@ impl App {
             } else {
                 "exec_step_eyebrow_done"
             };
-            let eyebrow = self
-                .t(eyebrow_key)
-                .replace("{n}", &(idx + 1).to_string())
-                .replace("{total}", &total.to_string());
+            let eyebrow = tr_args!(
+                eyebrow_key,
+                n = (idx + 1).to_string(),
+                total = total.to_string()
+            );
             (eyebrow, step.label.clone())
         };
 

@@ -60,8 +60,7 @@ pub(crate) fn reboot_adb_to_edl(
             ltbox_core::live!(
                 log,
                 "[{tag}] {}",
-                ltbox_core::i18n::tr("live_adb_state_probe_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_adb_state_probe_failed", error = e.to_string())
             );
             return wait_for_manual_edl(tag, log);
         }
@@ -91,8 +90,7 @@ pub(crate) fn reboot_adb_to_edl(
             ltbox_core::live!(
                 log,
                 "[{tag}] {}",
-                ltbox_core::i18n::tr("live_adb_reboot_edl_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_adb_reboot_edl_failed", error = e.to_string())
             );
             wait_for_manual_edl(tag, log)
         }
@@ -109,8 +107,7 @@ pub(crate) fn fastboot_reboot_then_adb_edl(tag: &str, log: &mut Vec<String>) -> 
                 ltbox_core::live!(
                     log,
                     "[{tag}] {}",
-                    ltbox_core::i18n::tr("live_fastboot_reboot_failed")
-                        .replace("{error}", &e.to_string())
+                    tr_args!("live_fastboot_reboot_failed", error = e.to_string())
                 );
                 return wait_for_manual_edl(tag, log);
             }
@@ -119,8 +116,7 @@ pub(crate) fn fastboot_reboot_then_adb_edl(tag: &str, log: &mut Vec<String>) -> 
             ltbox_core::live!(
                 log,
                 "[{tag}] {}",
-                ltbox_core::i18n::tr("live_fastboot_open_failed")
-                    .replace("{error}", &e.to_string())
+                tr_args!("live_fastboot_open_failed", error = e.to_string())
             );
             return wait_for_manual_edl(tag, log);
         }
@@ -136,8 +132,7 @@ pub(crate) fn fastboot_reboot_then_adb_edl(tag: &str, log: &mut Vec<String>) -> 
         ltbox_core::live!(
             log,
             "[{tag}] {}",
-            ltbox_core::i18n::tr("live_adb_wait_after_fastboot_failed")
-                .replace("{error}", &e.to_string())
+            tr_args!("live_adb_wait_after_fastboot_failed", error = e.to_string())
         );
         return wait_for_manual_edl(tag, log);
     }

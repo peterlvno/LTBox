@@ -81,8 +81,7 @@ impl App {
                 self.error_msg = None;
                 self.log_push(format!(
                     "[Unroot] {}",
-                    self.t("log_op_starting")
-                        .replace("{what}", self.t(unroot_type.label_key()))
+                    tr_args!("log_op_starting", what = self.t(unroot_type.label_key()))
                 ));
                 let ll = self.live_labels();
                 return Task::perform(

@@ -147,8 +147,10 @@ impl App {
             self.adv_wizard.file_path.is_some()
         };
         let status = if self.adv_wizard.is_image_info() && selected {
-            self.t("adv_image_info_selected_count")
-                .replace("{count}", &self.adv_wizard.file_paths.len().to_string())
+            tr_args!(
+                "adv_image_info_selected_count",
+                count = self.adv_wizard.file_paths.len().to_string()
+            )
         } else {
             self.adv_wizard
                 .file_path

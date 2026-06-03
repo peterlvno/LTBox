@@ -50,9 +50,11 @@ impl App {
                 self.error_msg = None;
                 self.log_push(format!(
                     "[Reboot] {}",
-                    self.t("log_reboot_target_from")
-                        .replace("{target}", self.t(target.label_key()))
-                        .replace("{source}", &format!("{conn:?}")),
+                    tr_args!(
+                        "log_reboot_target_from",
+                        target = self.t(target.label_key()),
+                        source = format!("{conn:?}")
+                    ),
                 ));
                 let reboot_cmd_sent = self.t("log_reboot_command_sent").to_string();
                 return Task::perform(
@@ -95,9 +97,11 @@ impl App {
                 self.error_msg = None;
                 self.log_push(format!(
                     "[Reboot] {}",
-                    self.t("log_reboot_target_from_edl")
-                        .replace("{target}", self.t(target.label_key()))
-                        .replace("{loader}", &loader.display().to_string()),
+                    tr_args!(
+                        "log_reboot_target_from_edl",
+                        target = self.t(target.label_key()),
+                        loader = loader.display().to_string()
+                    ),
                 ));
                 let reboot_cmd_sent = self.t("log_reboot_command_sent").to_string();
                 return Task::perform(
