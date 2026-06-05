@@ -56,8 +56,10 @@ fn resolve_signing_key(
             );
             Ok(None)
         }
-        Err(sha) => Err(LtboxError::Avb(format!(
-            "{image_name}: signing key pubkey {sha} is not in bundled KEY_MAP; aborting before flashing."
+        Err(sha) => Err(LtboxError::Avb(tr_args!(
+            "err_avb_signing_key_unknown",
+            image = image_name,
+            key = sha
         ))),
     }
 }

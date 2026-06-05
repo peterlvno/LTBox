@@ -130,16 +130,16 @@ pub(crate) fn sysupdate_worker(
             // Precondition: loader file + region
             // picked in the wizard.
             let Some(loader_path) = rescue_folder else {
-                return Err("Boot Recovery: EDL loader not selected".into());
+                return Err(ltbox_core::i18n::tr("err_rescue_loader_not_selected"));
             };
             let Some(region) = rescue_region else {
-                return Err("Boot Recovery: target region (PRC/ROW) not selected".into());
+                return Err(ltbox_core::i18n::tr("err_rescue_region_not_selected"));
             };
             let loader = std::path::PathBuf::from(&loader_path);
             if !loader.is_file() {
-                return Err(format!(
-                    "Boot Recovery: loader does not exist: {}",
-                    loader.display()
+                return Err(tr_args!(
+                    "err_rescue_loader_missing",
+                    path = loader.display().to_string()
                 ));
             }
             // Extension-only check — accept `.melf` /
@@ -156,9 +156,9 @@ pub(crate) fn sysupdate_worker(
                 })
                 || ltbox_core::sahara_xml::is_encrypted_manifest_filename(&loader);
             if !ext_ok {
-                return Err(format!(
-                    "Boot Recovery: loader must be .melf / .mbn / .elf / .xml / .x, got: {}",
-                    loader.display()
+                return Err(tr_args!(
+                    "err_rescue_loader_invalid",
+                    path = loader.display().to_string()
                 ));
             }
             let loader_dir = loader
@@ -193,7 +193,10 @@ pub(crate) fn sysupdate_worker(
                 .unwrap_or(0);
             let work_dir = loader_dir.join(format!("rescue_{ts}"));
             if let Err(e) = std::fs::create_dir_all(&work_dir) {
-                return Err(format!("create work dir: {e}"));
+                return Err(tr_args!(
+                    "err_rescue_work_dir_failed",
+                    error = e.to_string()
+                ));
             }
             ltbox_core::live!(
                 log,
@@ -225,7 +228,7 @@ pub(crate) fn sysupdate_worker(
             transition_to_edl(conn, &ll, &mut log)?;
 
             let mut session = ltbox_device::edl::EdlSession::open(&loader, true, &mut log)
-                .map_err(|e| format!("EDL open: {e}"))?;
+                .map_err(|e| tr_args!("err_edl_session_open_failed", error = e.to_string()))?;
 
             // vendor_boot + vbmeta land on LUN 0
             // for supported models. GPT-by-name
@@ -269,9 +272,7 @@ pub(crate) fn sysupdate_worker(
             // assumes (e.g. TB323FU keeps them on LUN 4).
             // Abort before any write — nothing was flashed.
             if dumped.is_empty() {
-                return Err(
-                                                            "Boot Recovery: no vendor_boot/vbmeta found on LUN 0 — unsupported device layout (e.g. TB323FU); aborted before any write".into(),
-                                                        );
+                return Err(ltbox_core::i18n::tr("err_rescue_unsupported_layout"));
             }
 
             // Cross-check firmware against device
@@ -316,7 +317,7 @@ pub(crate) fn sysupdate_worker(
                                     )
                                 );
                                 session.reset_tolerant(&mut log);
-                                return Err("Boot Recovery: firmware/device model mismatch".into());
+                                return Err(ltbox_core::i18n::tr("err_rescue_model_mismatch"));
                             }
                         }
                     }
@@ -431,7 +432,7 @@ pub(crate) fn sysupdate_worker(
                         continue;
                     }
                 };
-                // Only the two stock testkeys embedded in
+                // Only the two stock test keys embedded in
                 // avbtool-rs are supported.
                 let vb_key_spec =
                     ltbox_patch::key_map::key_spec_for_pubkey(vb_info.public_key_sha1.as_deref());
@@ -509,7 +510,7 @@ pub(crate) fn sysupdate_worker(
             }
 
             if flash_plan.is_empty() {
-                return Err("Boot Recovery: nothing to flash after patch/resign".into());
+                return Err(ltbox_core::i18n::tr("err_rescue_nothing_to_flash"));
             }
 
             ltbox_core::live!(
@@ -536,7 +537,11 @@ pub(crate) fn sysupdate_worker(
                     // Abort before the reset — a failed recovery
                     // write must not be followed by a reboot into
                     // a half-written chain. Stay in EDL for retry.
-                    return Err(format!("Boot Recovery: flashing {part_name} failed: {e}"));
+                    return Err(tr_args!(
+                        "err_rescue_flash_failed",
+                        name = part_name,
+                        error = e.to_string()
+                    ));
                 }
             }
 

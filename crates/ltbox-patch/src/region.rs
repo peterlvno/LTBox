@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::avb::AvbImageInfo;
 use crate::{avb, key_map};
-use ltbox_core::{LtboxError, Result};
+use ltbox_core::{LtboxError, Result, tr_args};
 use tracing::info;
 
 /// AVB property key that carries the vendor_boot fingerprint — stock
@@ -230,10 +230,11 @@ pub fn build_region_converted_boot_chain(
             fs::copy(&vbmeta_src, &vbmeta_out)?;
             info!("vbmeta is unsigned; copied stock blob");
         }
-        Err(_) => {
-            return Err(LtboxError::Avb(format!(
-                "vbmeta signing key not recognized (pubkey {:?}); only bundled Lenovo testkeys are supported",
-                vbmeta_info.public_key_sha1
+        Err(key) => {
+            return Err(LtboxError::Avb(tr_args!(
+                "err_avb_signing_key_unknown",
+                image = "vbmeta.img",
+                key = key
             )));
         }
     }

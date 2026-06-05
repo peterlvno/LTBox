@@ -32,7 +32,7 @@ pub(crate) fn advanced_file_worker(
     }
     match action {
         AdvAction::ImageInfo => {
-            return Err("Image Info uses a dedicated multi-file flow".to_string());
+            return Err(ltbox_core::i18n::tr("err_advanced_image_info_dedicated"));
         }
         AdvAction::ConvertXml => {
             // `input` is now the folder holding the encrypted
@@ -41,7 +41,13 @@ pub(crate) fn advanced_file_worker(
             // file). Iterate every `*.x`, decrypt to `*.xml`
             // in `output_dir`.
             let mut entries: Vec<std::path::PathBuf> = std::fs::read_dir(input)
-                .map_err(|e| format!("read_dir {}: {e}", input.display()))?
+                .map_err(|e| {
+                    tr_args!(
+                        "err_read_dir_failed",
+                        path = input.display().to_string(),
+                        error = e.to_string()
+                    )
+                })?
                 .filter_map(|r| r.ok().map(|e| e.path()))
                 .filter(|p| {
                     p.is_file()
@@ -53,7 +59,10 @@ pub(crate) fn advanced_file_worker(
                 .collect();
             entries.sort();
             if entries.is_empty() {
-                return Err(format!("No *.x files found under {}", input.display()));
+                return Err(tr_args!(
+                    "err_xml_no_x_files",
+                    path = input.display().to_string()
+                ));
             }
             for src in entries {
                 let stem = src.file_stem().unwrap_or_default();
@@ -64,7 +73,13 @@ pub(crate) fn advanced_file_worker(
                         "[Crypto] {}",
                         tr_args!("live_crypto_decrypted", bytes = size.to_string())
                     ),
-                    Err(e) => return Err(format!("Decryption failed: {e}")),
+                    Err(e) => {
+                        return Err(tr_args!(
+                            "err_decrypt_file_failed",
+                            path = src.display().to_string(),
+                            error = e.to_string()
+                        ));
+                    }
                 }
             }
         }
@@ -75,9 +90,7 @@ pub(crate) fn advanced_file_worker(
             // this arm means a stale code path triggered
             // it; surface a clear error instead of a
             // silent no-op.
-            return Err(
-                "DetectArb uses a dedicated worker — file pipeline should not run".to_string(),
-            );
+            return Err(ltbox_core::i18n::tr("err_advanced_detect_arb_dedicated"));
         }
         AdvAction::FlashPartitions
         | AdvAction::DumpPartitions
@@ -91,10 +104,7 @@ pub(crate) fn advanced_file_worker(
         }
         AdvAction::RegionConvert => {
             let Some(target_region) = adv_region_target else {
-                return Err(
-                    "No target region selected — pick PRC or ROW in the popup before starting"
-                        .into(),
-                );
+                return Err(ltbox_core::i18n::tr("err_region_target_missing"));
             };
             if input
                 .file_name()
@@ -102,17 +112,14 @@ pub(crate) fn advanced_file_worker(
                 .map(|s| !s.eq_ignore_ascii_case("vendor_boot.img"))
                 .unwrap_or(true)
             {
-                return Err(
-                                                                "Region Convert expects vendor_boot.img; select the firmware folder's vendor_boot.img"
-                                                                    .to_string(),
-                                                            );
+                return Err(ltbox_core::i18n::tr("err_region_vendor_boot_expected"));
             }
             let firmware_dir = parent;
             let sibling_vbmeta = firmware_dir.join("vbmeta.img");
             if !sibling_vbmeta.is_file() {
-                return Err(format!(
-                    "Region Convert requires vbmeta.img beside vendor_boot.img; missing {}",
-                    sibling_vbmeta.display()
+                return Err(tr_args!(
+                    "err_region_vbmeta_missing",
+                    path = sibling_vbmeta.display().to_string()
                 ));
             }
             let target = target_region.to_region_target();
@@ -169,7 +176,12 @@ pub(crate) fn advanced_file_worker(
                         ltbox_core::i18n::tr("live_region_source_matches_target")
                     );
                 }
-                Err(e) => return Err(format!("Region conversion failed: {e}")),
+                Err(e) => {
+                    return Err(tr_args!(
+                        "err_region_conversion_failed",
+                        error = e.to_string()
+                    ));
+                }
             }
         }
         AdvAction::PatchDevinfo => {
@@ -178,15 +190,12 @@ pub(crate) fn advanced_file_worker(
             // least one must exist.
             use ltbox_patch::region::{EU_COUNTRY_CODES as EU, KNOWN_COUNTRY_CODES as KNOWN};
             let Some(new_code) = adv_country.as_deref() else {
-                return Err(
-                    "No target country code selected — pick one in the popup before starting"
-                        .into(),
-                );
+                return Err(ltbox_core::i18n::tr("err_country_target_missing"));
             };
             if !input.is_dir() {
-                return Err(format!(
-                    "PatchDevinfo expects a folder containing devinfo.img + persist.img, got {}",
-                    input.display()
+                return Err(tr_args!(
+                    "err_country_folder_expected",
+                    path = input.display().to_string()
                 ));
             }
             let mut any_written = false;
@@ -207,8 +216,14 @@ pub(crate) fn advanced_file_worker(
                     "[Country] {}",
                     tr_args!("live_country_processing", path = src.display().to_string())
                 );
-                let detected = ltbox_patch::region::detect_country_code(&src, KNOWN)
-                    .map_err(|e| format!("Country detect failed on {name}: {e}"))?;
+                let detected =
+                    ltbox_patch::region::detect_country_code(&src, KNOWN).map_err(|e| {
+                        tr_args!(
+                            "err_country_detect_failed",
+                            name = name,
+                            error = e.to_string()
+                        )
+                    })?;
                 let Some(old_code) = detected else {
                     ltbox_core::live!(
                         log,
@@ -250,13 +265,19 @@ pub(crate) fn advanced_file_worker(
                         "[Country] {}",
                         tr_args!("live_country_no_replacements", name = name)
                     ),
-                    Err(e) => return Err(format!("Country patch failed on {name}: {e}")),
+                    Err(e) => {
+                        return Err(tr_args!(
+                            "err_country_patch_failed",
+                            name = name,
+                            error = e.to_string()
+                        ));
+                    }
                 }
             }
             if !any_found {
-                return Err(format!(
-                    "Neither devinfo.img nor persist.img found in {}",
-                    input.display()
+                return Err(tr_args!(
+                    "err_country_images_missing",
+                    path = input.display().to_string()
                 ));
             }
             if !any_written {
@@ -271,49 +292,68 @@ pub(crate) fn advanced_file_worker(
             // `input` is the firmware folder; user-picked
             // target rollback index lives on the wizard.
             let target = adv_arb_index
-                .ok_or_else(|| "Patch Rollback Index: missing target index".to_string())?;
+                .ok_or_else(|| ltbox_core::i18n::tr("err_patch_arb_target_missing"))?;
             let boot = input.join("boot.img");
             let vbmeta = input.join("vbmeta_system.img");
             if !boot.is_file() {
-                return Err(format!("Missing boot.img in {}", input.display()));
+                return Err(tr_args!(
+                    "err_patch_arb_missing_image",
+                    image = "boot.img",
+                    path = input.display().to_string()
+                ));
             }
             if !vbmeta.is_file() {
-                return Err(format!("Missing vbmeta_system.img in {}", input.display()));
+                return Err(tr_args!(
+                    "err_patch_arb_missing_image",
+                    image = "vbmeta_system.img",
+                    path = input.display().to_string()
+                ));
             }
             // Read AVB info first so the abort guards (rollback
             // == 0 / 1) trip before any signing-key work runs.
-            let boot_info = ltbox_patch::avb::extract_image_avb_info(&boot)
-                .map_err(|e| format!("boot.img inspect failed: {e}"))?;
-            let vbmeta_info = ltbox_patch::avb::extract_image_avb_info(&vbmeta)
-                .map_err(|e| format!("vbmeta_system.img inspect failed: {e}"))?;
+            let boot_info = ltbox_patch::avb::extract_image_avb_info(&boot).map_err(|e| {
+                tr_args!(
+                    "err_patch_arb_inspect_failed",
+                    image = "boot.img",
+                    error = e.to_string()
+                )
+            })?;
+            let vbmeta_info = ltbox_patch::avb::extract_image_avb_info(&vbmeta).map_err(|e| {
+                tr_args!(
+                    "err_patch_arb_inspect_failed",
+                    image = "vbmeta_system.img",
+                    error = e.to_string()
+                )
+            })?;
             if boot_info.rollback_index <= 1 {
-                return Err(format!(
-                    "boot.img rollback index is {} — refusing to patch",
-                    boot_info.rollback_index
+                return Err(tr_args!(
+                    "err_patch_arb_rollback_refuse",
+                    image = "boot.img",
+                    index = boot_info.rollback_index.to_string()
                 ));
             }
             if vbmeta_info.rollback_index <= 1 {
-                return Err(format!(
-                    "vbmeta_system.img rollback index is {} — refusing to patch",
-                    vbmeta_info.rollback_index
+                return Err(tr_args!(
+                    "err_patch_arb_rollback_refuse",
+                    image = "vbmeta_system.img",
+                    index = vbmeta_info.rollback_index.to_string()
                 ));
             }
             // Signing key resolution: only the two stock
-            // testkeys embedded in avbtool-rs are supported.
+            // test keys embedded in avbtool-rs are supported.
             // Anything else aborts — user-supplied PEMs are
             // intentionally not consulted.
             let resolve_key = |info: &ltbox_patch::avb::AvbImageInfo,
                                label: &str|
              -> std::result::Result<&'static str, String> {
-                ltbox_patch::key_map::key_spec_for_pubkey(
-                                                                info.public_key_sha1.as_deref(),
-                                                            )
-                                                            .ok_or_else(|| {
-                                                                format!(
-                                                                    "{label}: signing key not recognized (pubkey {:?}); only testkey_rsa2048 / testkey_rsa4096 are supported",
-                                                                    info.public_key_sha1
-                                                                )
-                                                            })
+                ltbox_patch::key_map::key_spec_for_pubkey(info.public_key_sha1.as_deref())
+                    .ok_or_else(|| {
+                        tr_args!(
+                            "err_avb_signing_key_unknown",
+                            image = label,
+                            key = format!("{:?}", info.public_key_sha1)
+                        )
+                    })
             };
             let boot_key = resolve_key(&boot_info, "boot.img")?;
             let vbmeta_key = resolve_key(&vbmeta_info, "vbmeta_system.img")?;
@@ -358,7 +398,13 @@ pub(crate) fn advanced_file_worker(
             let boot_out = output_dir.join("boot.img");
             let vbmeta_out = output_dir.join("vbmeta_system.img");
             // boot.img: NONE → add_hash_footer; signed → resign.
-            std::fs::copy(&boot, &boot_out).map_err(|e| format!("copy boot.img: {e}"))?;
+            std::fs::copy(&boot, &boot_out).map_err(|e| {
+                tr_args!(
+                    "err_patch_arb_copy_failed",
+                    image = "boot.img",
+                    error = e.to_string()
+                )
+            })?;
             if boot_info.algorithm == "NONE" {
                 ltbox_patch::avb::add_hash_footer(
                     &boot_out,
@@ -366,7 +412,13 @@ pub(crate) fn advanced_file_worker(
                     Some(boot_key),
                     Some(target),
                 )
-                .map_err(|e| format!("boot ARB add_hash_footer failed: {e}"))?;
+                .map_err(|e| {
+                    tr_args!(
+                        "err_patch_arb_footer_failed",
+                        image = "boot.img",
+                        error = e.to_string()
+                    )
+                })?;
             } else {
                 ltbox_patch::avb::resign_image(
                     &boot_out,
@@ -374,18 +426,35 @@ pub(crate) fn advanced_file_worker(
                     &boot_info.algorithm,
                     Some(target),
                 )
-                .map_err(|e| format!("boot ARB resign failed: {e}"))?;
+                .map_err(|e| {
+                    tr_args!(
+                        "err_patch_arb_resign_failed",
+                        image = "boot.img",
+                        error = e.to_string()
+                    )
+                })?;
             }
             // vbmeta_system.img: always resign (chains require sig).
-            std::fs::copy(&vbmeta, &vbmeta_out)
-                .map_err(|e| format!("copy vbmeta_system.img: {e}"))?;
+            std::fs::copy(&vbmeta, &vbmeta_out).map_err(|e| {
+                tr_args!(
+                    "err_patch_arb_copy_failed",
+                    image = "vbmeta_system.img",
+                    error = e.to_string()
+                )
+            })?;
             ltbox_patch::avb::resign_image(
                 &vbmeta_out,
                 vbmeta_key,
                 &vbmeta_info.algorithm,
                 Some(target),
             )
-            .map_err(|e| format!("vbmeta_system ARB resign failed: {e}"))?;
+            .map_err(|e| {
+                tr_args!(
+                    "err_patch_arb_resign_failed",
+                    image = "vbmeta_system.img",
+                    error = e.to_string()
+                )
+            })?;
             ltbox_core::live!(
                 log,
                 "[ARB] {}",
@@ -400,18 +469,18 @@ pub(crate) fn advanced_file_worker(
             // hashes go stale once dtbo / init_boot /
             // vendor_boot move.
             let info = ltbox_patch::avb::extract_image_avb_info(input)
-                .map_err(|e| format!("VBMeta inspect failed: {e}"))?;
-            // Only the two stock testkeys embedded in
+                .map_err(|e| tr_args!("err_vbmeta_inspect_failed", error = e.to_string()))?;
+            // Only the two stock test keys embedded in
             // avbtool-rs are supported.
-            let key_spec = ltbox_patch::key_map::key_spec_for_pubkey(
-                                                            info.public_key_sha1.as_deref(),
-                                                        )
-                                                        .ok_or_else(|| {
-                                                            format!(
-                                                                "Rebuild vbmeta: signing key not recognized (pubkey {:?}); only testkey_rsa2048 / testkey_rsa4096 are supported",
-                                                                info.public_key_sha1
-                                                            )
-                                                        })?;
+            let key_spec =
+                ltbox_patch::key_map::key_spec_for_pubkey(info.public_key_sha1.as_deref())
+                    .ok_or_else(|| {
+                        tr_args!(
+                            "err_avb_signing_key_unknown",
+                            image = "vbmeta.img",
+                            key = format!("{:?}", info.public_key_sha1)
+                        )
+                    })?;
             let alg: Option<&str> = if info.algorithm == "NONE" {
                 // NONE → infer from the resolved key spec.
                 Some(if key_spec.contains("2048") {
@@ -458,7 +527,10 @@ pub(crate) fn advanced_file_worker(
                     alg.unwrap_or("SHA256_RSA4096"),
                     Some(info.rollback_index),
                 ) {
-                    return Err(format!("Rebuild vbmeta fallback resign failed: {e}"));
+                    return Err(tr_args!(
+                        "err_vbmeta_rebuild_fallback_failed",
+                        error = e.to_string()
+                    ));
                 }
             } else {
                 if chained.iter().any(|p| {
@@ -506,7 +578,7 @@ pub(crate) fn advanced_file_worker(
                     key_spec,
                     alg,
                 ) {
-                    return Err(format!("Rebuild vbmeta failed: {e}"));
+                    return Err(tr_args!("err_vbmeta_rebuild_failed", error = e.to_string()));
                 }
                 ltbox_core::live!(
                     log,

@@ -567,26 +567,40 @@ impl App {
                         let boot = dir.join("boot.img");
                         let vbmeta = dir.join("vbmeta_system.img");
                         if !boot.is_file() {
-                            self.error_msg = Some(format!("Missing boot.img in {}", dir.display()));
+                            self.error_msg = Some(tr_args!(
+                                "err_patch_arb_missing_image",
+                                image = "boot.img",
+                                path = dir.display().to_string()
+                            ));
                             return Task::none();
                         }
                         if !vbmeta.is_file() {
-                            self.error_msg =
-                                Some(format!("Missing vbmeta_system.img in {}", dir.display()));
+                            self.error_msg = Some(tr_args!(
+                                "err_patch_arb_missing_image",
+                                image = "vbmeta_system.img",
+                                path = dir.display().to_string()
+                            ));
                             return Task::none();
                         }
                         let boot_info = match ltbox_patch::avb::extract_image_avb_info(&boot) {
                             Ok(i) => i,
                             Err(e) => {
-                                self.error_msg = Some(format!("boot.img inspect failed: {e}"));
+                                self.error_msg = Some(tr_args!(
+                                    "err_patch_arb_inspect_failed",
+                                    image = "boot.img",
+                                    error = e.to_string()
+                                ));
                                 return Task::none();
                             }
                         };
                         let vbmeta_info = match ltbox_patch::avb::extract_image_avb_info(&vbmeta) {
                             Ok(i) => i,
                             Err(e) => {
-                                self.error_msg =
-                                    Some(format!("vbmeta_system.img inspect failed: {e}"));
+                                self.error_msg = Some(tr_args!(
+                                    "err_patch_arb_inspect_failed",
+                                    image = "vbmeta_system.img",
+                                    error = e.to_string()
+                                ));
                                 return Task::none();
                             }
                         };

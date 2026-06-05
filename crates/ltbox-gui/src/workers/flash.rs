@@ -9,22 +9,31 @@ use crate::{
 };
 use ltbox_core::{live, tr_args};
 
-fn reboot_fastboot_to_system_after_pre_edl_abort(log: &mut Vec<String>, reason: &str) {
+fn reboot_fastboot_to_system_after_pre_edl_abort(log: &mut Vec<String>) {
     if !ltbox_device::fastboot::FastbootDevice::check_device() {
         return;
     }
     ltbox_core::live!(
         log,
-        "[Fastboot] Abort before EDL; rebooting device to system: {reason}"
+        "[Fastboot] {}",
+        ltbox_core::i18n::tr("live_fastboot_rebooting_system")
     );
     match ltbox_device::fastboot::FastbootDevice::open() {
         Ok(mut dev) => {
             if let Err(e) = dev.reboot() {
-                ltbox_core::live!(log, "[Fastboot] Reboot to system failed: {e}");
+                ltbox_core::live!(
+                    log,
+                    "[Fastboot] {}",
+                    tr_args!("live_fastboot_reboot_failed", error = e.to_string())
+                );
             }
         }
         Err(e) => {
-            ltbox_core::live!(log, "[Fastboot] Reboot skipped: open failed: {e}");
+            ltbox_core::live!(
+                log,
+                "[Fastboot] {}",
+                tr_args!("live_fastboot_open_failed", error = e.to_string())
+            );
         }
     }
 }
@@ -44,7 +53,10 @@ pub(crate) fn flash_worker(
     // 1. Validate firmware folder
     live!(log, "[Flash] {}", phase_marker(1, 4, &ll.op_flash_phase[0]));
     if !fw_dir.exists() {
-        return Err(format!("Firmware folder not found: {fw_folder}"));
+        return Err(tr_args!(
+            "err_flash_firmware_folder_missing",
+            path = fw_folder
+        ));
     }
     live!(
         log,
@@ -243,9 +255,8 @@ pub(crate) fn flash_worker(
                                     fingerprint = fingerprint
                                 )
                             );
-                            let err = "Flash: firmware/device model mismatch - aborting before EDL"
-                                .to_string();
-                            reboot_fastboot_to_system_after_pre_edl_abort(&mut log, &err);
+                            let err = ltbox_core::i18n::tr("err_flash_model_mismatch_pre_edl");
+                            reboot_fastboot_to_system_after_pre_edl_abort(&mut log);
                             return Err(err);
                         }
                     }
@@ -410,9 +421,8 @@ pub(crate) fn flash_worker(
                 ltbox_core::i18n::tr("live_region_ready")
             );
             let Some(device_region) = cfg.device_region else {
-                let err =
-                    "Region conversion requested but no device region was selected".to_string();
-                reboot_fastboot_to_system_after_pre_edl_abort(&mut log, &err);
+                let err = ltbox_core::i18n::tr("err_region_missing_device_region");
+                reboot_fastboot_to_system_after_pre_edl_abort(&mut log);
                 return Err(err);
             };
             let target = device_region.to_region_target();
@@ -480,8 +490,8 @@ pub(crate) fn flash_worker(
                     );
                 }
                 Err(e) => {
-                    let err = format!("Region conversion failed: {e}");
-                    reboot_fastboot_to_system_after_pre_edl_abort(&mut log, &err);
+                    let err = tr_args!("err_region_conversion_failed", error = e.to_string());
+                    reboot_fastboot_to_system_after_pre_edl_abort(&mut log);
                     return Err(err);
                 }
             }
@@ -554,7 +564,13 @@ pub(crate) fn flash_worker(
     // still resolve image paths via `xml_dir.join`.
     if x_count > 0 {
         let x_entries: Vec<std::path::PathBuf> = std::fs::read_dir(fw_dir)
-            .map_err(|e| format!("read_dir {}: {e}", fw_dir.display()))?
+            .map_err(|e| {
+                tr_args!(
+                    "err_read_dir_failed",
+                    path = fw_dir.display().to_string(),
+                    error = e.to_string()
+                )
+            })?
             .filter_map(|r| r.ok().map(|e| e.path()))
             .filter(|p| {
                 p.is_file()
@@ -569,8 +585,13 @@ pub(crate) fn flash_worker(
         for src in &x_entries {
             let stem = src.file_stem().unwrap_or_default();
             let output = fw_dir.join(stem).with_extension("xml");
-            ltbox_core::crypto::decrypt_file(src, &output)
-                .map_err(|e| format!("Decrypt failed for {}: {e}", src.display()))?;
+            ltbox_core::crypto::decrypt_file(src, &output).map_err(|e| {
+                tr_args!(
+                    "err_decrypt_file_failed",
+                    path = src.display().to_string(),
+                    error = e.to_string()
+                )
+            })?;
             decrypted += 1;
         }
         ltbox_core::live!(
@@ -627,14 +648,14 @@ pub(crate) fn flash_worker(
     transition_to_edl(conn, &ll, &mut log)?;
 
     let mut session = ltbox_device::edl::EdlSession::open(&loader, true, &mut log)
-        .map_err(|e| format!("EDL session: {e}"))?;
+        .map_err(|e| tr_args!("err_edl_session_open_failed", error = e.to_string()))?;
 
     // Full-firmware flash: rawprogram + patch XMLs
     // drive every program node (no slot guessing).
     let (raw_xmls, patch_xmls) = ltbox_device::edl::collect_firmware_xmls_for_flash(fw_dir, false)
-        .map_err(|e| format!("Firmware XML selection failed: {e}"))?;
+        .map_err(|e| tr_args!("err_flash_xml_selection_failed", error = e.to_string()))?;
     if raw_xmls.is_empty() {
-        return Err(format!("No flashable rawprogram*.xml found in {fw_folder}"));
+        return Err(tr_args!("err_flash_no_rawprogram_xml", path = fw_folder));
     }
     // Stage ARB copies; flash them after rawprogram.
     let mut arb_patched: Vec<(String, u8, std::path::PathBuf)> = Vec::new();
@@ -737,9 +758,7 @@ pub(crate) fn flash_worker(
             ) {
                 Ok(spec) => spec,
                 Err(sha) => {
-                    let err = format!(
-                        "{log_name}: signing key pubkey {sha} is not in bundled KEY_MAP; aborting before firmware writes."
-                    );
+                    let err = tr_args!("err_avb_signing_key_unknown", image = log_name, key = sha);
                     ltbox_core::live!(log, "[ARB] {err}");
                     session.reset_tolerant(&mut log);
                     return Err(err);
@@ -763,7 +782,11 @@ pub(crate) fn flash_worker(
                         .map_err(|e| format!("resign {log_name}: {e}"))
                     }
                     None => {
-                        ltbox_core::live!(log, "[ARB] {log_name}: unsigned image; skipping resign");
+                        ltbox_core::live!(
+                            log,
+                            "[ARB] {}",
+                            tr_args!("live_arb_unsigned_skip_resign", name = log_name)
+                        );
                         continue;
                     }
                 }
@@ -786,7 +809,11 @@ pub(crate) fn flash_worker(
                 )
                 .map_err(|e| format!("resign {log_name}: {e}"))
             } else {
-                ltbox_core::live!(log, "[ARB] {log_name}: unsigned image; skipping resign");
+                ltbox_core::live!(
+                    log,
+                    "[ARB] {}",
+                    tr_args!("live_arb_unsigned_skip_resign", name = log_name)
+                );
                 continue;
             };
             if let Err(e) = patch_result {
@@ -864,7 +891,7 @@ pub(crate) fn flash_worker(
     );
     session
         .flash_rawprogram_with_wipe(&raw_xmls, &patch_xmls, cfg.wipe, &mut log)
-        .map_err(|e| format!("Firmware flash failed: {e}"))?;
+        .map_err(|e| tr_args!("err_flash_firmware_failed", error = e.to_string()))?;
 
     // Overlay ARB-patched boot/vbmeta_system by GPT name.
     for (label, lun, patched) in &arb_patched {
@@ -874,7 +901,11 @@ pub(crate) fn flash_worker(
             tr_args!("live_arb_flash_patched", label = label)
         );
         if let Err(e) = session.flash_partition(label, patched, 0, *lun, &mut log) {
-            return Err(format!("ARB flash {label}: {e}"));
+            return Err(tr_args!(
+                "err_flash_arb_partition_failed",
+                label = label,
+                error = e.to_string()
+            ));
         }
     }
 
@@ -908,8 +939,9 @@ pub(crate) fn flash_worker(
                     // (device stays in EDL for retry) rather
                     // than resetting into a rollback brick.
                     if tb323fu_arb_need {
-                        return Err(format!(
-                            "efisp _arb GBL flash failed after staging the testkey ARB chain — left in EDL to avoid a brick: {e}"
+                        return Err(tr_args!(
+                            "err_flash_efisp_arb_failed",
+                            error = e.to_string()
                         ));
                     }
                 } else {
@@ -925,10 +957,7 @@ pub(crate) fn flash_worker(
                 // so reaching here with `need` set is an
                 // internal inconsistency — fail safe.
                 if tb323fu_arb_need {
-                    return Err(
-                        "internal: testkey ARB chain staged but no efisp GBL was downloaded"
-                            .to_string(),
-                    );
+                    return Err(ltbox_core::i18n::tr("err_flash_efisp_arb_missing"));
                 }
                 // Same-region wipe with no downgrade strips
                 // the GBL; other modes leave efisp as-is.
@@ -969,7 +998,7 @@ pub(crate) fn flash_worker(
         ];
         for (label, image) in overlays {
             let Some(lun) = ltbox_core::partition_lun::lun_for_partition(label) else {
-                return Err(format!("Region flash {label}: no hardcoded LUN"));
+                return Err(tr_args!("err_region_flash_no_lun", label = label));
             };
             live!(
                 log,
@@ -981,7 +1010,11 @@ pub(crate) fn flash_worker(
                 )
             );
             if let Err(e) = session.flash_partition(label, image, 0, lun, &mut log) {
-                return Err(format!("Region flash {label}: {e}"));
+                return Err(tr_args!(
+                    "err_region_flash_failed",
+                    label = label,
+                    error = e.to_string()
+                ));
             }
         }
     }
@@ -999,7 +1032,10 @@ pub(crate) fn flash_worker(
         let work_dir = ltbox_core::app_paths::work_dir_for("flash_country");
         let _ = std::fs::remove_dir_all(&work_dir);
         if let Err(e) = std::fs::create_dir_all(&work_dir) {
-            return Err(format!("country work dir: {e}"));
+            return Err(tr_args!(
+                "err_country_work_dir_failed",
+                error = e.to_string()
+            ));
         }
         // Keep original region partitions for manual restore.
         let ts = std::time::SystemTime::now()
@@ -1009,7 +1045,7 @@ pub(crate) fn flash_worker(
         let critical_backup =
             ltbox_core::app_paths::backup_dir_for(&format!("backup_critical_{ts}"));
         std::fs::create_dir_all(&critical_backup)
-            .map_err(|e| format!("critical backup folder: {e}"))?;
+            .map_err(|e| tr_args!("err_country_backup_dir_failed", error = e.to_string()))?;
         // devinfo + persist resolve through the hardcoded
         // LUN map; start/num come from the device GPT via
         // `dump_partition_by_name`. Avoids re-decrypting
@@ -1282,7 +1318,10 @@ pub(crate) fn flash_worker(
     // and the freshly-written `_a` firmware
     // would never run.
     if let Err(e) = session.set_active_slot_a(&mut log) {
-        return Err(format!("set bootable LUN: {e}"));
+        return Err(tr_args!(
+            "err_flash_set_bootable_lun_failed",
+            error = e.to_string()
+        ));
     }
 
     live!(log, "[Flash] {}", phase_marker(4, 4, &ll.op_flash_phase[3]));
