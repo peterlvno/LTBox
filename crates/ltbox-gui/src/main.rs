@@ -889,6 +889,7 @@ enum Language {
     Ko,
     Zh,
     Ru,
+    Ja,
 }
 impl Language {
     /// Name in its own script — locale-neutral.
@@ -898,6 +899,7 @@ impl Language {
             Self::Ko => "한국어",
             Self::Zh => "中文",
             Self::Ru => "Русский",
+            Self::Ja => "日本語",
         }
     }
     fn code(&self) -> &'static str {
@@ -906,6 +908,7 @@ impl Language {
             Self::Ko => "ko",
             Self::Zh => "zh",
             Self::Ru => "ru",
+            Self::Ja => "ja",
         }
     }
     fn from_code(c: &str) -> Option<Self> {
@@ -914,11 +917,18 @@ impl Language {
             "ko" => Some(Self::Ko),
             "zh" => Some(Self::Zh),
             "ru" => Some(Self::Ru),
+            "ja" => Some(Self::Ja),
             _ => None,
         }
     }
 }
-const LANGUAGES: &[Language] = &[Language::En, Language::Ko, Language::Zh, Language::Ru];
+const LANGUAGES: &[Language] = &[
+    Language::En,
+    Language::Ko,
+    Language::Zh,
+    Language::Ru,
+    Language::Ja,
+];
 
 /// Theme preference. `System` reads the OS setting via
 /// `theme_detect::system_prefers_dark`; Light/Dark override.
@@ -1058,6 +1068,7 @@ const EN_JSON: &str = include_str!("../lang/en.json");
 const KO_JSON: &str = include_str!("../lang/ko.json");
 const ZH_JSON: &str = include_str!("../lang/zh.json");
 const RU_JSON: &str = include_str!("../lang/ru.json");
+const JA_JSON: &str = include_str!("../lang/ja.json");
 
 // Parsed once on first access; `Translations::load` then swaps two
 // `&'static` refs — no reparse on language switch.
@@ -1069,6 +1080,8 @@ static ZH_TABLE: std::sync::LazyLock<HashMap<String, String>> =
     std::sync::LazyLock::new(|| serde_json::from_str(ZH_JSON).expect("zh.json must parse"));
 static RU_TABLE: std::sync::LazyLock<HashMap<String, String>> =
     std::sync::LazyLock::new(|| serde_json::from_str(RU_JSON).expect("ru.json must parse"));
+static JA_TABLE: std::sync::LazyLock<HashMap<String, String>> =
+    std::sync::LazyLock::new(|| serde_json::from_str(JA_JSON).expect("ja.json must parse"));
 
 /// Active translation table + English fallback. Two `&'static` refs
 /// into the process-wide `LazyLock` tables, so reload is free.
@@ -1086,6 +1099,7 @@ impl Translations {
             Language::Ko => &KO_TABLE,
             Language::Zh => &ZH_TABLE,
             Language::Ru => &RU_TABLE,
+            Language::Ja => &JA_TABLE,
         };
         Self { primary, fallback }
     }
@@ -4081,7 +4095,7 @@ mod tests {
     #[test]
     fn all_lang_jsons_parse_and_share_keys() {
         let en = Translations::load(Language::En);
-        for lang in [Language::Ko, Language::Zh, Language::Ru] {
+        for lang in [Language::Ko, Language::Zh, Language::Ru, Language::Ja] {
             let tr = Translations::load(lang);
             for key in en.fallback.keys() {
                 assert!(
@@ -4098,8 +4112,10 @@ mod tests {
     fn language_switch_returns_localized_string() {
         let en = Translations::load(Language::En);
         let ko = Translations::load(Language::Ko);
+        let ja = Translations::load(Language::Ja);
         assert_eq!(en.t("nav_dashboard"), "Dashboard");
         assert_eq!(ko.t("nav_dashboard"), "대시보드");
+        assert_eq!(ja.t("nav_dashboard"), "ダッシュボード");
     }
 
     #[test]
