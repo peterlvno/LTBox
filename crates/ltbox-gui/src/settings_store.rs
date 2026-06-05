@@ -139,8 +139,9 @@ fn default_language() -> String {
 }
 
 /// Map an OS locale tag (e.g. `ko-KR`, `zh-Hant-TW`, `en-US`) to a UI
-/// language code LTBox ships. Every Chinese variant maps to `zh`, Korean to
-/// `ko`; anything else falls back to English.
+/// language code LTBox ships. Every Chinese variant maps to `zh`; Korean,
+/// Russian, and Japanese map to their matching UI language. Anything else
+/// falls back to English.
 fn ui_lang_for_locale(locale: &str) -> &'static str {
     // Compare only the BCP-47 / POSIX primary language subtag (`ko-KR`,
     // `ko_KR.UTF-8`, `zh-Hant-TW`), so neighbours like Konkani (`kok`) or
@@ -153,6 +154,8 @@ fn ui_lang_for_locale(locale: &str) -> &'static str {
     match primary.as_str() {
         "ko" => "ko",
         "zh" => "zh",
+        "ru" => "ru",
+        "ja" => "ja",
         _ => "en",
     }
 }
@@ -264,9 +267,16 @@ mod tests {
         ] {
             assert_eq!(ui_lang_for_locale(l), "zh", "{l}");
         }
+        // Russian and Japanese.
+        for l in ["ru-RU", "ru", "ru_RU.UTF-8", "RU"] {
+            assert_eq!(ui_lang_for_locale(l), "ru", "{l}");
+        }
+        for l in ["ja-JP", "ja", "ja_JP.UTF-8", "JA"] {
+            assert_eq!(ui_lang_for_locale(l), "ja", "{l}");
+        }
         // Everything else → English — including neighbours that merely share a
         // prefix (Konkani `kok`, Zhuang `zha`).
-        for l in ["en-US", "ru-RU", "ja-JP", "de", "kok-IN", "zha-CN", ""] {
+        for l in ["en-US", "de", "kok-IN", "zha-CN", ""] {
             assert_eq!(ui_lang_for_locale(l), "en", "{l}");
         }
     }
