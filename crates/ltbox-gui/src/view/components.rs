@@ -36,7 +36,11 @@ pub(crate) fn m3_dialog(inner: Element<'_, Message>) -> Element<'_, Message> {
         .height(Length::Fill)
         .center_x(Length::Fill)
         .center_y(Length::Fill);
-    iced::widget::stack![scrim, centered].into()
+    // `opaque` makes the whole dialog layer capture every pointer event, so
+    // hover/click can't fall through the parent `Stack` to the panel behind
+    // it (the scrim alone only paints — it doesn't block). Keeps the modal
+    // actually modal; the card's own buttons still receive their clicks.
+    iced::widget::opaque(iced::widget::stack![scrim, centered])
 }
 
 pub(crate) fn wizard_step_bar<'a>(steps: &[&str], current: usize) -> Element<'a, Message> {
