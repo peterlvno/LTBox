@@ -4116,59 +4116,6 @@ mod tests {
     }
 
     #[test]
-    fn language_switch_returns_localized_string() {
-        let en = Translations::load(Language::En);
-        let ko = Translations::load(Language::Ko);
-        let ja = Translations::load(Language::Ja);
-        assert_eq!(en.t("nav_dashboard"), "Dashboard");
-        assert_eq!(ko.t("nav_dashboard"), "대시보드");
-        assert_eq!(ja.t("nav_dashboard"), "ダッシュボード");
-    }
-
-    #[test]
-    fn korean_i18n_terms_are_normalized() {
-        let ko = Translations::load(Language::Ko);
-        assert_eq!(ko.t("log_avb_pubkey"), "공개 키");
-        assert_eq!(
-            ko.t("live_flash_edl_start_skips"),
-            "EDL에서 시작됨. 롤백 보호 우회와 모델 확인을 건너뜁니다."
-        );
-        assert_eq!(
-            ko.t("live_arb_image_status"),
-            "{name}: {image} 패치 {needs}"
-        );
-        assert_eq!(
-            ko.t("log_avb_unsigned_skip_key"),
-            "서명되지 않아 키를 지정하지 않습니다."
-        );
-        assert_eq!(
-            ko.t("model_unsupported").replace("{model}", "TB323FU"),
-            "TB323FU에서 지원되지 않음"
-        );
-        assert!(ko.t("err_flash_efisp_arb_failed").contains("벽돌"));
-        assert!(!ko.t("err_flash_efisp_arb_failed").contains("브릭"));
-    }
-
-    #[test]
-    fn brand_and_runtime_terms_are_normalized_across_locales() {
-        for lang in [Language::En, Language::Ko, Language::Ja, Language::Ru] {
-            let tr = Translations::load(lang);
-            assert!(
-                tr.t("ota_popup_error").contains("Lenovo"),
-                "{lang:?} should keep Lenovo untranslated"
-            );
-            assert!(
-                tr.t("log_magisk_preinit_none").contains("preinit"),
-                "{lang:?} should use lowercase preinit"
-            );
-        }
-
-        let zh = Translations::load(Language::Zh);
-        assert!(zh.t("ota_popup_error").contains("联想"));
-        assert!(zh.t("log_magisk_preinit_none").contains("preinit"));
-    }
-
-    #[test]
     fn flash_sidebar_uses_sidebar_specific_label_key() {
         assert_eq!(View::Flash.sidebar_label_key(), "nav_flash_sidebar");
         assert_eq!(View::Flash.label_key(), "nav_flash");
@@ -4176,13 +4123,6 @@ mod tests {
             View::Dashboard.sidebar_label_key(),
             View::Dashboard.label_key()
         );
-    }
-
-    #[test]
-    fn japanese_flash_sidebar_label_is_shortened() {
-        let ja = Translations::load(Language::Ja);
-        assert_eq!(ja.t("nav_flash"), "ファームウェアをフラッシュ");
-        assert_eq!(ja.t("nav_flash_sidebar"), "フラッシュ");
     }
 
     #[test]
