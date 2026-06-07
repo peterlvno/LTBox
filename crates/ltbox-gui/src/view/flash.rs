@@ -108,6 +108,15 @@ impl App {
         // keep the constraint visible on the picker.
         let tb322fc = self.is_tb322fc();
         let unsupported_tb322fc = tr_args!("model_unsupported", model = "TB322FC");
+        // Region-aware target descriptions spell out the hardware market and
+        // the ROM being installed so users don't conflate the two (the most
+        // common point of confusion in this wizard). device_region is chosen
+        // in step 0, so it is Some here; the None arm is a defensive fallback.
+        let (same_desc, other_desc) = match self.flash.device_region {
+            Some(DeviceRegion::Prc) => ("flashtarget_same_desc_prc", "flashtarget_other_desc_prc"),
+            Some(DeviceRegion::Row) => ("flashtarget_same_desc_row", "flashtarget_other_desc_row"),
+            None => ("flashtarget_same_desc", "flashtarget_other_desc"),
+        };
         let other_card: Element<'_, Message> = if tb322fc {
             icon_option_card_sub_disabled(
                 lucide_disabled(icon::tile_globe(), 57.6),
@@ -118,7 +127,7 @@ impl App {
             icon_option_card_sub(
                 lucide_primary(icon::tile_globe(), 57.6),
                 self.t(FlashTarget::OtherRegion.label_key()),
-                self.t("flashtarget_other_desc"),
+                self.t(other_desc),
                 self.flash.target == Some(FlashTarget::OtherRegion),
                 Message::Flash(FlashMsg::FlashTarget(FlashTarget::OtherRegion)),
             )
@@ -136,7 +145,7 @@ impl App {
                 icon_option_card_sub(
                     device,
                     self.t(FlashTarget::SameRegion.label_key()),
-                    self.t("flashtarget_same_desc"),
+                    self.t(same_desc),
                     self.flash.target == Some(FlashTarget::SameRegion),
                     Message::Flash(FlashMsg::FlashTarget(FlashTarget::SameRegion))
                 ),
