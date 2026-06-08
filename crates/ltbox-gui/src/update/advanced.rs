@@ -513,6 +513,86 @@ impl App {
     }
 
     #[allow(unreachable_code)]
+    pub(crate) fn update_simple_flash(&mut self, msg: SimpleFlashMsg) -> Task<Message> {
+        match msg {
+            SimpleFlashMsg::SimpleFlashNext => {
+                match self.simple_flash.step {
+                    // Intro → open the firmware-folder picker.
+                    0 => {
+                        return self.update(Message::SimpleFlash(
+                            SimpleFlashMsg::SimpleFlashSelectFolder,
+                        ));
+                    }
+                    // Confirm → start the flash.
+                    1 => {
+                        return self
+                            .update(Message::SimpleFlash(SimpleFlashMsg::SimpleFlashExecStart));
+                    }
+                    _ => {}
+                };
+                Task::none()
+            }
+            SimpleFlashMsg::SimpleFlashBack => {
+                self.simple_flash.back();
+                Task::none()
+            }
+            SimpleFlashMsg::SimpleFlashClose => {
+                self.advanced_wizard_open = AdvancedWizardOpen::None;
+                self.simple_flash.reset();
+                Task::none()
+            }
+            SimpleFlashMsg::SimpleFlashSelectFolder => {
+                return pick_folder_task(
+                    pickers::PickerKind::QfilFirmwareFolder,
+                    &self.recent_paths,
+                    |__v| Message::SimpleFlash(SimpleFlashMsg::SimpleFlashFolderChosen(__v)),
+                );
+                Task::none()
+            }
+            SimpleFlashMsg::SimpleFlashFolderChosen(path) => {
+                if let Some(folder) = path {
+                    self.remember_recent(pickers::PickerKind::QfilFirmwareFolder, &folder);
+                    self.simple_flash.firmware_folder = Some(folder);
+                    self.simple_flash.step = 1; // → Confirm
+                }
+                Task::none()
+            }
+            SimpleFlashMsg::SimpleFlashExecStart => {
+                self.simple_flash.next(); // → Exec screen
+                self.begin_op(View::Advanced);
+                self.error_msg = None;
+                let conn = self.connection;
+                let fw_folder = self
+                    .simple_flash
+                    .firmware_folder
+                    .clone()
+                    .unwrap_or_default();
+                let ll = self.live_labels();
+                self.log_push(format!(
+                    "[SimpleFlash] {}",
+                    tr_args!("live_flash_firmware_folder", path = fw_folder.clone())
+                ));
+                return task_heavy(
+                    move || simple_flash_worker(conn, fw_folder, ll),
+                    |result| match result {
+                        Ok(lines) => {
+                            Message::SimpleFlash(SimpleFlashMsg::SimpleFlashExecDone(lines))
+                        }
+                        Err(e) => Message::OperationError(e),
+                    },
+                    Err,
+                );
+                Task::none()
+            }
+            SimpleFlashMsg::SimpleFlashExecDone(lines) => {
+                self.flush_exec_done_log(lines);
+                self.end_op();
+                Task::none()
+            }
+        }
+    }
+
+    #[allow(unreachable_code)]
     pub(crate) fn update_adv(&mut self, msg: AdvMsg) -> Task<Message> {
         match msg {
             AdvMsg::AdvConfirm(a) => {
@@ -533,6 +613,13 @@ impl App {
                     self.flash_phys.reset();
                     self.advanced_wizard_open = AdvancedWizardOpen::FlashPhys;
                     return self.apply_default_loader_to_advanced_wizard();
+                } else if matches!(a, AdvAction::SimpleFlash) {
+                    // Dedicated wizard: intro (description) → folder picker →
+                    // confirm → flash. No loader step (the loader comes from
+                    // the firmware folder), so no default-loader fold-through.
+                    self.simple_flash.reset();
+                    self.advanced_wizard_open = AdvancedWizardOpen::SimpleFlash;
+                    return Task::none();
                 } else {
                     return self.update(Message::Adv(AdvMsg::AdvWizOpen(a)));
                 }

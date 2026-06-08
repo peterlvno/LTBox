@@ -1033,6 +1033,49 @@ impl EdlSession {
         Ok(())
     }
 
+    /// Flash every `<program>` / `<erase>` node exactly as the rawprogram
+    /// XMLs list them, then apply patch XMLs — no keep-data skipping and no
+    /// pre-erase pass.
+    ///
+    /// This mirrors a stock Lenovo flash script as closely as possible: the
+    /// data-wipe outcome is decided entirely by which rawprogram the catalog
+    /// selected (e.g. a persist-preserving `save_persist` variant vs a
+    /// `write_persist` one), not by any LTBox-side keep/wipe policy. Callers
+    /// that want the userdata/metadata keep-skip or the userdata/metadata/frp
+    /// pre-erase must use [`Self::flash_rawprogram_with_wipe`] instead.
+    pub fn flash_rawprogram_verbatim(
+        &mut self,
+        program_xmls: &[PathBuf],
+        patch_xmls: &[PathBuf],
+        log: &mut Vec<String>,
+    ) -> Result<()> {
+        for xml_path in program_xmls {
+            ltbox_core::live!(
+                log,
+                "[EDL] {} {}",
+                tr("log_edl_flash_cmd"),
+                xml_path.display()
+            );
+            // `wipe = true` here only means "do not skip userdata/metadata":
+            // `flash_one_rawprogram` writes every node verbatim and the
+            // separate pre-erase pass is intentionally not run.
+            self.flash_one_rawprogram(xml_path, true, log)?;
+        }
+        for xml_path in patch_xmls {
+            let display_name = xml_path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| xml_path.display().to_string());
+            ltbox_core::live!(
+                log,
+                "[EDL] {}",
+                tr("log_edl_patch_xml_cmd").replace("{path}", &display_name)
+            );
+            self.apply_patch_xml(xml_path, log)?;
+        }
+        Ok(())
+    }
+
     /// Erase every `<program>` whose label is in `WIPE_ERASE_BASES`
     /// using XML-reported coordinates. Skips partitions absent from the XMLs.
     fn pre_erase_wipe_labels(
@@ -1759,6 +1802,37 @@ mod tests {
             names.iter().collect::<std::collections::HashSet<_>>().len()
         );
         assert_eq!(xml_names(&patch), vec!["patch0.xml".to_string()]);
+    }
+
+    #[test]
+    fn collect_firmware_xmls_prefers_persistless_lun0_for_simple_flash() {
+        // Simple Flash reuses `collect_firmware_xmls_for_flash(dir, false)`:
+        // when a firmware ships both a persist-less LUN0 rawprogram
+        // (save_persist, empty persist filename) and a persist-writing one
+        // (write_persist), the persist-less variant must win and be the *only*
+        // LUN0 rawprogram kept.
+        let fw = TempFirmwareDir::new();
+        fw.write(
+            "rawprogram_save_persist_unsparse0.xml",
+            r#"<data><program label="persist" filename="" num_partition_sectors="1"/></data>"#,
+        );
+        fw.write(
+            "rawprogram_write_persist_unsparse0.xml",
+            r#"<data><program label="persist" filename="persist.img" num_partition_sectors="1"/></data>"#,
+        );
+
+        let (raw, _) =
+            collect_firmware_xmls_for_flash(fw.path(), false).expect("collect persist-less LUN0");
+        let names = xml_names(&raw);
+
+        assert!(names.contains(&"rawprogram_save_persist_unsparse0.xml".to_string()));
+        assert!(!names.contains(&"rawprogram_write_persist_unsparse0.xml".to_string()));
+        // Exactly one LUN0 rawprogram is kept.
+        let lun0 = names
+            .iter()
+            .filter(|n| n.contains("persist_unsparse0"))
+            .count();
+        assert_eq!(lun0, 1);
     }
 
     #[test]

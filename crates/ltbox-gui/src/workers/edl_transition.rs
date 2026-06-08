@@ -20,7 +20,31 @@ pub(crate) fn wait_for_edl_ready(tag: &str, log: &mut Vec<String>) -> Result<(),
             Ok(())
         }
         Err(e) => {
-            ltbox_core::live!(log, "[{tag}] {}", tr_args!("live_edl_not_found", error = e));
+            // Localize the common wait failures so the detail isn't raw
+            // English; rarer variants keep their Display text.
+            let detail = match &e {
+                ltbox_device::edl::EdlError::PortTimeout(d) => {
+                    tr_args!("live_edl_wait_timeout", seconds = d.as_secs().to_string())
+                }
+                ltbox_device::edl::EdlError::PortNotFound => {
+                    ltbox_core::i18n::tr("live_edl_port_not_found")
+                }
+                other => other.to_string(),
+            };
+            ltbox_core::live!(
+                log,
+                "[{tag}] {}",
+                tr_args!("live_edl_not_found", error = detail)
+            );
+            // Only the reboot / manual-wait paths reach here — an
+            // already-in-EDL start never calls this — so the device was sent
+            // toward EDL but its port never appeared. No write has happened
+            // yet; reassure the user before the caller aborts.
+            ltbox_core::live!(
+                log,
+                "{}",
+                ltbox_core::i18n::tr("live_edl_reboot_no_port_notice")
+            );
             Err(())
         }
     }

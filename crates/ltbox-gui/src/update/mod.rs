@@ -94,6 +94,7 @@ impl App {
                     self.dump_parts = DumpPartsWizard::default();
                     self.flash_phys = FlashPhysWizard::default();
                     self.dump_phys = DumpPhysWizard::default();
+                    self.simple_flash = SimpleFlashWizard::default();
                 }
             }
             Message::SetTheme(choice) => {
@@ -275,6 +276,7 @@ impl App {
                         self.dump_parts.reset();
                         self.dump_phys.reset();
                         self.flash_phys.reset();
+                        self.simple_flash.reset();
                         self.adv_wizard.reset();
                         self.adv_confirm = None;
                         self.adv_confirm_path = None;
@@ -844,6 +846,8 @@ impl App {
             Message::DumpPhys(m) => return self.update_dump_phys(m),
             // -- Physical Storage: Flash -------------------------------------
             Message::FlashPhys(m) => return self.update_flash_phys(m),
+            // -- Simple Firmware Flash (stock-equivalent, no checks) ----------
+            Message::SimpleFlash(m) => return self.update_simple_flash(m),
             Message::Reboot(m) => return self.update_reboot(m),
             Message::InstallDriversDone(result) => {
                 self.installing_drivers = false;

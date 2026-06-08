@@ -122,6 +122,7 @@ pub(crate) enum Message {
     DumpParts(DumpPartsMsg),
     DumpPhys(DumpPhysMsg),
     FlashPhys(FlashPhysMsg),
+    SimpleFlash(SimpleFlashMsg),
     Reboot(RebootMsg),
     Settings(SettingsMsg),
     /// Window resized — carries the new logical size from
@@ -321,6 +322,18 @@ pub(crate) enum FlashPhysMsg {
     FlashPhysClose,
     FlashPhysExecStart,
     FlashPhysExecDone(Vec<String>),
+}
+
+#[derive(Debug, Clone)]
+#[allow(clippy::enum_variant_names)]
+pub(crate) enum SimpleFlashMsg {
+    SimpleFlashNext,
+    SimpleFlashBack,
+    SimpleFlashClose,
+    SimpleFlashSelectFolder,
+    SimpleFlashFolderChosen(Option<String>),
+    SimpleFlashExecStart,
+    SimpleFlashExecDone(Vec<String>),
 }
 
 #[derive(Debug, Clone)]

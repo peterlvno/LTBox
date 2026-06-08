@@ -1096,6 +1096,44 @@ impl Wizard for FlashPhysWizard {
     }
 }
 
+// =========================================================================
+// Simple Firmware Flash wizard state (Advanced → EDL ops)
+// =========================================================================
+
+/// Minimal flash wizard for the "Simple Firmware Flash" advanced op: pick a
+/// firmware folder, review a read-only confirm screen, flash. Step 0 (intro)
+/// opens the folder picker on Next; the picker callback advances to the
+/// confirm step. No region / rollback / data choices — the flash runs the
+/// firmware's own rawprogram verbatim.
+#[derive(Default)]
+pub(crate) struct SimpleFlashWizard {
+    pub(crate) step: usize, // 0=Intro, 1=Confirm, 2=Exec
+    pub(crate) firmware_folder: Option<String>,
+}
+
+pub(crate) const SIMPLE_FLASH_STEPS: &[&str] = &[
+    "simple_flash_step_intro",
+    "flash_step_confirm",
+    "flash_step_flash",
+];
+
+impl Wizard for SimpleFlashWizard {
+    fn step(&self) -> usize {
+        self.step
+    }
+    fn step_mut(&mut self) -> &mut usize {
+        &mut self.step
+    }
+    fn step_count(&self) -> usize {
+        SIMPLE_FLASH_STEPS.len()
+    }
+    fn can_next(&self) -> bool {
+        // Intro (0): Next opens the firmware-folder picker. Confirm (1):
+        // Start. Exec (2) has no Next.
+        matches!(self.step, 0 | 1)
+    }
+}
+
 /// Wizard for every non-FlashPartitions Advanced action. Steps are
 /// [source, confirm, exec], plus country step between for `PatchDevinfo`.
 #[derive(Default, Debug, Clone)]

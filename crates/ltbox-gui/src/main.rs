@@ -570,6 +570,7 @@ enum AdvAction {
     FlashPartitions,
     FlashPhysical,
     RebuildVbmeta,
+    SimpleFlash,
 }
 impl AdvAction {
     fn label_key(&self) -> &'static str {
@@ -585,6 +586,7 @@ impl AdvAction {
             Self::FlashPartitions => "adv_flash_partitions",
             Self::FlashPhysical => "adv_flash_physical",
             Self::RebuildVbmeta => "adv_rebuild_vbmeta",
+            Self::SimpleFlash => "adv_simple_flash",
         }
     }
     fn desc_key(&self) -> &'static str {
@@ -600,6 +602,7 @@ impl AdvAction {
             Self::FlashPartitions => "adv_flash_partitions_desc",
             Self::FlashPhysical => "adv_flash_physical_desc",
             Self::RebuildVbmeta => "adv_rebuild_vbmeta_desc",
+            Self::SimpleFlash => "adv_simple_flash_desc",
         }
     }
     /// Browse-tile sub-description: *what* to pick, not the action's
@@ -617,6 +620,9 @@ impl AdvAction {
             Self::FlashPartitions => "adv_src_flash_partitions",
             Self::FlashPhysical => "adv_src_flash_physical",
             Self::RebuildVbmeta => "adv_src_rebuild_vbmeta",
+            // SimpleFlash uses a dedicated wizard (folder picker on Next),
+            // not the generic source tile — reuse the flash-folder caption.
+            Self::SimpleFlash => "flash_folder_desc",
         }
     }
     /// snake_case slug for `{exe_dir}/output_{slug}/` — Advanced ops
@@ -634,6 +640,7 @@ impl AdvAction {
             Self::FlashPartitions => "flash_partitions",
             Self::FlashPhysical => "flash_physical",
             Self::RebuildVbmeta => "rebuild_vbmeta",
+            Self::SimpleFlash => "simple_flash",
         }
     }
     /// True iff the action writes into the output folder — gates the
@@ -748,6 +755,8 @@ const ADV_SECTIONS: &[AdvSection] = &[
             // Whole-LUN dump / flash paired the same way.
             AdvAction::DumpPhysical,
             AdvAction::FlashPhysical,
+            // Stock-equivalent flash: no checks, no edits — just flashing.
+            AdvAction::SimpleFlash,
         ],
     },
 ];
@@ -2231,7 +2240,7 @@ pub(crate) fn transition_to_edl(
     log: &mut Vec<String>,
 ) -> std::result::Result<(), String> {
     let live = probe_connection_for_edl().unwrap_or(conn);
-    ensure_edl(live, "EDL", log).map_err(|()| "Could not transition device to EDL".to_string())
+    ensure_edl(live, "EDL", log).map_err(|()| ltbox_core::i18n::tr("err_edl_transition_failed"))
 }
 
 /// Quick EDL/Fastboot/ADB probe in that order. Returns `None` only when
@@ -2410,6 +2419,7 @@ enum AdvancedWizardOpen {
     DumpParts,
     DumpPhys,
     FlashPhys,
+    SimpleFlash,
 }
 
 impl AdvancedWizardOpen {
@@ -2427,6 +2437,9 @@ impl AdvancedWizardOpen {
     }
     fn is_flash_phys(self) -> bool {
         matches!(self, Self::FlashPhys)
+    }
+    fn is_simple_flash(self) -> bool {
+        matches!(self, Self::SimpleFlash)
     }
 }
 
@@ -2585,6 +2598,7 @@ struct App {
     dump_parts: DumpPartsWizard,
     dump_phys: DumpPhysWizard,
     flash_phys: FlashPhysWizard,
+    simple_flash: SimpleFlashWizard,
     /// Single sum-typed flag for the four mutually-exclusive Advanced
     /// sub-wizards. Replaces 4 parallel booleans whose `if/else if`
     /// read sites would silently pick a precedence if two ever got
@@ -2741,6 +2755,7 @@ impl Default for App {
             dump_parts: DumpPartsWizard::default(),
             dump_phys: DumpPhysWizard::default(),
             flash_phys: FlashPhysWizard::default(),
+            simple_flash: SimpleFlashWizard::default(),
             advanced_wizard_open: AdvancedWizardOpen::default(),
             op_steps: Vec::new(),
             current_op_step: 0,
@@ -3155,6 +3170,9 @@ impl App {
         if self.advanced_wizard_open.is_flash_phys() {
             return self.flash_phys.step >= 3;
         }
+        if self.advanced_wizard_open.is_simple_flash() {
+            return self.simple_flash.step >= 2;
+        }
         self.adv_wizard.action.is_some() && self.adv_wizard.step == self.adv_wizard.exec_step()
     }
 
@@ -3202,6 +3220,9 @@ impl App {
             // DumpPhys runs Select → Exec with no confirm screen to preserve.
             W::FlashPhys => self.flash_phys.step + 2 == FLASH_PHYS_STEPS.len(),
             W::DumpPhys => false,
+            // Simple Flash: preserve the confirm screen (folder already
+            // picked) so a sidebar bounce returns the user to it.
+            W::SimpleFlash => self.simple_flash.step == 1,
         }
     }
 
@@ -3224,6 +3245,9 @@ impl App {
         }
         if self.advanced_wizard_open.is_flash_phys() {
             return Some(self.t(AdvAction::FlashPhysical.label_key()).to_string());
+        }
+        if self.advanced_wizard_open.is_simple_flash() {
+            return Some(self.t(AdvAction::SimpleFlash.label_key()).to_string());
         }
         self.adv_wizard
             .action
@@ -3257,7 +3281,10 @@ impl App {
         if self.busy_view != Some(View::Advanced) {
             return None;
         }
-        if self.advanced_wizard_open.is_open() {
+        // Simple Flash is a full firmware flash, not a partition scan/write —
+        // let it fall through to the default "{operation} in progress" template
+        // (operation = its own label) instead of the partition-scan body.
+        if self.advanced_wizard_open.is_open() && !self.advanced_wizard_open.is_simple_flash() {
             // Write Partitions' exec phase is a partition *write*; the loader-
             // upload + GPT scan preamble (and the other advanced flows) keep
             // the scan label.
@@ -4548,6 +4575,7 @@ mod tests {
                 AdvAction::FlashPartitions,
                 AdvAction::DumpPhysical,
                 AdvAction::FlashPhysical,
+                AdvAction::SimpleFlash,
             ]
         );
     }

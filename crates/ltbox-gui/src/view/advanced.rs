@@ -19,6 +19,9 @@ impl App {
         if self.advanced_wizard_open.is_flash_phys() {
             return self.view_flash_phys_wizard();
         }
+        if self.advanced_wizard_open.is_simple_flash() {
+            return self.view_simple_flash_wizard();
+        }
         if self.adv_wizard.action.is_some() {
             return self.view_adv_wizard();
         }
@@ -682,5 +685,130 @@ impl App {
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    /// Simple Firmware Flash wizard: intro (description) → confirm → exec.
+    /// The firmware-folder picker opens on Next from the intro step.
+    pub(crate) fn view_simple_flash_wizard(&self) -> Element<'_, Message> {
+        if self.log_popup_open && self.simple_flash.step >= 2 {
+            return self.log_popup_view();
+        }
+        let step_labels: Vec<&str> = SIMPLE_FLASH_STEPS.iter().map(|k| self.t(k)).collect();
+        let step_bar = wizard_step_bar(&step_labels, self.simple_flash.step);
+        let body: Element<'_, Message> = match self.simple_flash.step {
+            0 => self.simple_flash_intro_step(),
+            1 => self.simple_flash_confirm_step(),
+            _ => self.exec_step_view(),
+        };
+        let nav = if self.simple_flash.step < 2 {
+            let is_start = self.simple_flash.step == 1;
+            let label = if is_start {
+                self.t("btn_start").to_string()
+            } else {
+                self.t("btn_next").to_string()
+            };
+            let can = self.simple_flash.can_next()
+                && !(self.busy && is_start)
+                && (!is_start || self.device_reachable());
+            wizard_nav_generic(
+                true,
+                &label,
+                can,
+                self.t("btn_back"),
+                if self.simple_flash.step == 0 {
+                    // Back on the intro step returns to the Advanced grid.
+                    Message::SimpleFlash(SimpleFlashMsg::SimpleFlashClose)
+                } else {
+                    Message::SimpleFlash(SimpleFlashMsg::SimpleFlashBack)
+                },
+                Message::SimpleFlash(SimpleFlashMsg::SimpleFlashNext),
+            )
+        } else {
+            container(text("")).into()
+        };
+        column![step_bar, body, nav]
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .into()
+    }
+
+    /// Intro step — shows the action description; Next opens the folder picker.
+    fn simple_flash_intro_step(&self) -> Element<'_, Message> {
+        let selected = self.simple_flash.firmware_folder.is_some();
+        let status = self
+            .simple_flash
+            .firmware_folder
+            .clone()
+            .unwrap_or_else(|| self.t("flash_folder_placeholder").to_string());
+        let status_style = move |t: &Theme| {
+            let p = pal_of(t);
+            iced::widget::text::Style {
+                color: Some(if selected { p.success } else { p.outline }),
+            }
+        };
+        let col = column![
+            text(self.t("adv_simple_flash").to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            text(self.t("adv_simple_flash_desc").to_string())
+                .size(13)
+                .style(muted_style)
+                .center(),
+            Space::new().height(8),
+            text(self.t("simple_flash_pick_hint").to_string())
+                .size(12)
+                .style(muted_style)
+                .center(),
+            text(status)
+                .size(12)
+                .width(Length::Fill)
+                .style(status_style)
+                .center()
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+        ]
+        .spacing(14)
+        .padding(28)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
+    /// Confirm step — mirrors the firmware-flash confirm, but with fixed
+    /// values: region edit / rollback bypass are OFF, and device region,
+    /// flash target, and data-wipe outcome are all "unknown" because Simple
+    /// Flash performs no detection or modification (the wipe outcome is
+    /// decided solely by the firmware's own rawprogram).
+    fn simple_flash_confirm_step(&self) -> Element<'_, Message> {
+        let unknown = self.t("common_unknown").to_string();
+        let off = self.t("flash_confirm_rb_off").to_string();
+        let folder = self
+            .simple_flash
+            .firmware_folder
+            .clone()
+            .unwrap_or_else(|| "—".to_string());
+        let rows = vec![
+            text(self.t("simple_flash_confirm_warning").to_string())
+                .size(13)
+                .style(warning_style)
+                .center()
+                .into(),
+            widget::rule::horizontal(1).into(),
+            info_kv_center(self.t("flash_confirm_region"), &unknown),
+            info_kv_center(self.t("flash_confirm_target"), &unknown),
+            info_kv_center(self.t("flash_confirm_data"), &unknown),
+            info_kv_center(self.t("flash_confirm_region_edit"), &off),
+            info_kv_center(self.t("flash_confirm_rollback"), &off),
+            info_kv_center(self.t("flash_confirm_folder"), &folder),
+        ];
+        self.confirm_view(
+            "flash_confirm_title",
+            self.t("flash_confirm_subtitle").to_string(),
+            rows,
+        )
     }
 }

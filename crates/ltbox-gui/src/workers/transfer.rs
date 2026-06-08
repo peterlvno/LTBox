@@ -30,7 +30,7 @@ fn scan_lun_partitions(
     String,
 > {
     if ensure_edl(conn, tag, log).is_err() {
-        return Err("Could not transition device to EDL".to_string());
+        return Err(ltbox_core::i18n::tr("err_edl_transition_failed"));
     }
 
     std::thread::sleep(std::time::Duration::from_secs(2));
@@ -44,7 +44,10 @@ fn scan_lun_partitions(
                 tag,
                 tr_args!(open_failed_key, error = e.to_string())
             );
-            return Err(format!("EDL session open failed: {e}"));
+            return Err(tr_args!(
+                "err_edl_session_open_failed",
+                error = e.to_string()
+            ));
         }
     };
 
@@ -58,7 +61,7 @@ fn scan_lun_partitions(
                 tr_args!(scan_failed_key, error = e.to_string())
             );
             let _ = session.reset_to_edl(log);
-            Err(format!("scan failed: {e}"))
+            Err(tr_args!("err_parts_scan_failed", error = e.to_string()))
         }
     }
 }
@@ -143,7 +146,10 @@ pub(crate) fn flash_parts_execute(
                 "[FlashParts] {}",
                 tr_args!("live_flashparts_edl_open_failed", error = e.to_string())
             );
-            return Err(format!("Flash Partitions: EDL open failed: {e}"));
+            return Err(tr_args!(
+                "err_edl_session_open_failed",
+                error = e.to_string()
+            ));
         }
     };
 
@@ -204,9 +210,10 @@ pub(crate) fn flash_parts_execute(
                     );
                     // Abort the remaining writes — a failed write can mean a
                     // dropped link, and the device is left in EDL for retry.
-                    return Err(format!(
-                        "Flash Partitions: flashing {} failed: {e}",
-                        row.label
+                    return Err(tr_args!(
+                        "err_flash_parts_part_failed",
+                        label = row.label,
+                        error = e.to_string()
                     ));
                 }
             }
@@ -237,9 +244,10 @@ pub(crate) fn flash_parts_execute(
                             error = e.to_string()
                         )
                     );
-                    return Err(format!(
-                        "Flash Partitions: erasing {} failed: {e}",
-                        row.label
+                    return Err(tr_args!(
+                        "err_flash_parts_erase_failed",
+                        label = row.label,
+                        error = e.to_string()
                     ));
                 }
             }
@@ -644,7 +652,7 @@ pub(crate) fn flash_physical_execute(
 ) -> Result<Vec<String>, String> {
     let mut log = Vec::new();
     if ensure_edl(conn, "FlashPhys", &mut log).is_err() {
-        return Err("Flash Physical: failed to enter EDL".to_string());
+        return Err(ltbox_core::i18n::tr("err_edl_transition_failed"));
     }
 
     std::thread::sleep(std::time::Duration::from_secs(2));
@@ -657,7 +665,10 @@ pub(crate) fn flash_physical_execute(
                 "[FlashPhys] {}",
                 tr_args!("live_flashphys_edl_open_failed", error = e.to_string())
             );
-            return Err(format!("Flash Physical: EDL open failed: {e}"));
+            return Err(tr_args!(
+                "err_edl_session_open_failed",
+                error = e.to_string()
+            ));
         }
     };
 
@@ -699,7 +710,11 @@ pub(crate) fn flash_physical_execute(
                 )
             );
             // Abort remaining LUN writes; device stays in EDL for retry.
-            return Err(format!("Flash Physical: writing LUN {lun} failed: {e}"));
+            return Err(tr_args!(
+                "err_flash_phys_write_failed",
+                lun = lun.to_string(),
+                error = e.to_string()
+            ));
         }
     }
 

@@ -42,7 +42,7 @@ pub(crate) fn reboot_worker(
                 RebootTarget::Edl => {
                     drop(dev);
                     ensure_edl(ConnectionStatus::Fastboot, "Reboot", &mut log)
-                        .map_err(|()| "Could not transition device to EDL".to_string())?;
+                        .map_err(|()| ltbox_core::i18n::tr("err_edl_transition_failed"))?;
                 }
                 RebootTarget::Recovery => {
                     return Err(
