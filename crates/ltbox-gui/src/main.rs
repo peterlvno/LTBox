@@ -258,6 +258,38 @@ fn install_desktop_file() -> ! {
 }
 
 fn main() -> iced::Result {
+    // Linux/X11 renderer default. On some X11 + Mesa/driver combos wgpu
+    // selects a Vulkan adapter whose X11 surface/device creation fails, so
+    // the window never appears and `./ltbox` looks dead (issue #69). OpenGL
+    // is robust there and more than enough for this UI, so default the wgpu
+    // backend to GL on an X11 session when the user hasn't picked one. Wayland
+    // keeps the wgpu default (Vulkan), which the Linux roadmap relies on for
+    // recent Nvidia. Override anytime, e.g. `WGPU_BACKEND=vulkan ./ltbox`.
+    #[cfg(target_os = "linux")]
+    {
+        // Treat a var as set only when it is non-empty — winit reads these
+        // the same way (an empty value means "unset").
+        let non_empty = |key: &str| std::env::var_os(key).is_some_and(|v| !v.is_empty());
+        // Only the singular WGPU_BACKEND is read by this iced/wgpu stack, so
+        // that alone counts as the user picking a backend. Checking the plural
+        // WGPU_BACKENDS would let a value wgpu ignores silently suppress the
+        // fallback below.
+        let backend_chosen = non_empty("WGPU_BACKEND");
+        // winit selects Wayland when WAYLAND_DISPLAY or WAYLAND_SOCKET is set,
+        // otherwise X11 via DISPLAY — mirror that to scope the override to
+        // pure-X11 sessions only.
+        let wayland_session = non_empty("WAYLAND_DISPLAY") || non_empty("WAYLAND_SOCKET");
+        let is_x11_session = !wayland_session && non_empty("DISPLAY");
+        if !backend_chosen && is_x11_session {
+            // SAFETY: first statement in `main`, before the stdout tap, the
+            // tracing writer, tokio, or iced spawn any threads — so the
+            // process is still single-threaded as `set_var` requires.
+            unsafe {
+                std::env::set_var("WGPU_BACKEND", "gl");
+            }
+        }
+    }
+
     // Pre-iced CLI subcommands. Each handler exits the process so
     // the iced setup path runs only when no subcommand fires. Kept
     // tiny + dep-free (no `clap`) — there's exactly one flag and it
