@@ -340,7 +340,7 @@ const EDL_POST_DUMP_STABILIZE: std::time::Duration = std::time::Duration::from_s
 /// error, not a per-row log line. These carry region/board state that a
 /// subsequent rescue flow cannot reconstruct from scratch. Mirrors v2
 /// `critical_targets` set in `bin/ltbox/actions/edl.py::dump_partitions`.
-const CRITICAL_DUMP_BASES: &[&str] = &["devinfo", "persist"];
+const CRITICAL_DUMP_BASES: &[&str] = &["devinfo", "persist", "oemowninfo"];
 
 /// Match a partition label (possibly slot-suffixed) against the critical
 /// base set. `devinfo`, `devinfo_a`, `DEVINFO_B` all match.

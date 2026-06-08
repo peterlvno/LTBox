@@ -1737,21 +1737,16 @@ pub(crate) fn flash_worker(
                 .unwrap_or(false)
                 || fingerprint_token_match(&device_model, m)
         });
-        let country_label = if oemowninfo_sku {
-            "oemowninfo"
+        // TB320FC / TB323FU keep the country code ONLY in oemowninfo; every
+        // other SKU keeps it in devinfo + persist. Dump / detect / patch / flash
+        // only those partitions for the model — no cross-partition work.
+        let country_partitions: &[&str] = if oemowninfo_sku {
+            &["oemowninfo"]
         } else {
-            "devinfo"
+            &["devinfo", "persist"]
         };
-        // TB323FU keeps /persist as dump + backup only —
-        // no country-code patch, no fingerprint edit, no
-        // re-flash. Only oemowninfo is modified + flashed.
-        let tb323fu_persist_backup_only = firmware_fingerprint
-            .as_deref()
-            .map(|fp| fingerprint_token_match(fp, "TB323FU"))
-            .unwrap_or(false)
-            || fingerprint_token_match(&device_model, "TB323FU");
-        let mut country_progress = CountryPatchProgress::new(&[country_label, "persist"]);
-        for label in [country_label, "persist"] {
+        let mut country_progress = CountryPatchProgress::new(country_partitions);
+        for label in country_partitions.iter().copied() {
             let Some(lun) = ltbox_core::partition_lun::lun_for_partition(label) else {
                 let reason = "no hardcoded LUN for label";
                 ltbox_core::live!(
@@ -1808,17 +1803,11 @@ pub(crate) fn flash_worker(
                 country_progress.mark_failed(label, reason);
                 continue;
             }
-            // TB323FU: /persist work stops at dump + backup.
-            if label == "persist" && tb323fu_persist_backup_only {
-                live!(
-                    log,
-                    "[Country] {}",
-                    ltbox_core::i18n::tr("live_country_persist_backup_only")
-                );
-                country_progress.mark_flashed(label);
-                continue;
-            }
-            let detected = match ltbox_patch::region::detect_country_code(&dump_path, KNOWN_CODES) {
+            let detected = match ltbox_patch::region::detect_country_code(
+                &dump_path,
+                KNOWN_CODES,
+                label == "persist",
+            ) {
                 Ok(c) => c,
                 Err(e) => {
                     let reason = format!("detect failed: {e}");
@@ -1859,6 +1848,7 @@ pub(crate) fn flash_worker(
                         old_code,
                         target_code,
                         EU_CODES,
+                        label == "persist",
                     ) {
                         Ok(c) => changed |= c,
                         Err(e) => {

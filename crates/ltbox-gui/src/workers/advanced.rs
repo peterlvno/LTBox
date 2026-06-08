@@ -202,7 +202,7 @@ pub(crate) fn advanced_file_worker(
             }
             let mut any_written = false;
             let mut any_found = false;
-            for name in ["devinfo.img", "persist.img"] {
+            for name in ["devinfo.img", "persist.img", "oemowninfo.img"] {
                 let src = input.join(name);
                 if !src.exists() {
                     ltbox_core::live!(
@@ -219,13 +219,14 @@ pub(crate) fn advanced_file_worker(
                     tr_args!("live_country_processing", path = src.display().to_string())
                 );
                 let detected =
-                    ltbox_patch::region::detect_country_code(&src, KNOWN).map_err(|e| {
-                        tr_args!(
-                            "err_country_detect_failed",
-                            name = name,
-                            error = e.to_string()
-                        )
-                    })?;
+                    ltbox_patch::region::detect_country_code(&src, KNOWN, name == "persist.img")
+                        .map_err(|e| {
+                            tr_args!(
+                                "err_country_detect_failed",
+                                name = name,
+                                error = e.to_string()
+                            )
+                        })?;
                 let Some(old_code) = detected else {
                     ltbox_core::live!(
                         log,
@@ -246,7 +247,12 @@ pub(crate) fn advanced_file_worker(
                 // v2 naming: `<stem>_modified.img`.
                 let output = output_dir.join(format!("{stem}_modified.img"));
                 match ltbox_patch::region::patch_country_code(
-                    &src, &output, &old_code, new_code, EU,
+                    &src,
+                    &output,
+                    &old_code,
+                    new_code,
+                    EU,
+                    name == "persist.img",
                 ) {
                     Ok(true) => {
                         ltbox_core::live!(

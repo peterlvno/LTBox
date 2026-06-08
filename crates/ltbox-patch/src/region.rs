@@ -373,9 +373,37 @@ pub const EU_COUNTRY_CODES: &[&str] = &[
     "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE",
 ];
 
-/// Detect country code in a binary image (devinfo/persist).
+/// Detect country code in a binary image (devinfo/persist/oemowninfo).
 /// Scans for patterns like "CNXX", "KRXX", "CNXE" etc.
-pub fn detect_country_code(image_path: &Path, known_codes: &[&str]) -> Result<Option<String>> {
+///
+/// ext4 data-block size — the persist country file's content starts on a block.
+const EXT4_BLOCK: usize = 4096;
+
+/// True when a `field_only` country match at byte offset `i` (length `n`) is a
+/// real stored field rather than embedded log text. The country code is a
+/// NUL-terminated string at the START of an ext4 data block, so require a
+/// LEADING boundary — block-aligned, or a NUL immediately before (file fields
+/// are NUL-delimited) — AND a trailing NUL. Log lines such as `Update country
+/// code CNXX\n` are mid-block and `code `-prefixed, so they fail the leading
+/// test even if a trailing NUL (zero slack) happened to follow. Verified on
+/// TB520FU / TB321FU persist dumps: the real field is 4K-aligned (TB520FU also
+/// NUL-preceded, TB321FU preceded by binary), the log hits are neither.
+fn is_country_field(data: &[u8], i: usize, n: usize) -> bool {
+    let leading = i.is_multiple_of(EXT4_BLOCK) || data[i - 1] == 0; // i==0 ⇒ aligned
+    let trailing = i + n == data.len() || data[i + n] == 0;
+    leading && trailing
+}
+
+/// `field_only` restricts matches to a real country field — a NUL-terminated
+/// string at an ext4 block boundary (see [`is_country_field`]). `persist` is an
+/// ext4 image whose log files also contain strings like `Update country code
+/// CNXX`, so a blind scan would detect (and a blind patch would corrupt) those
+/// log entries; `field_only` matches only the real country-code file.
+pub fn detect_country_code(
+    image_path: &Path,
+    known_codes: &[&str],
+    field_only: bool,
+) -> Result<Option<String>> {
     let data = fs::read(image_path)
         .map_err(|e| LtboxError::Patch(format!("Cannot read {}: {e}", image_path.display())))?;
 
@@ -385,7 +413,11 @@ pub fn detect_country_code(image_path: &Path, known_codes: &[&str]) -> Result<Op
         for suffix in [b"XE", b"XX"] {
             let mut pattern = code_bytes.to_vec();
             pattern.extend_from_slice(suffix);
-            if data.windows(pattern.len()).any(|w| w == pattern.as_slice()) {
+            let found = data.windows(pattern.len()).enumerate().any(|(i, w)| {
+                w == pattern.as_slice()
+                    && (!field_only || is_country_field(&data, i, pattern.len()))
+            });
+            if found {
                 return Ok(Some(code.to_string()));
             }
         }
@@ -394,14 +426,42 @@ pub fn detect_country_code(image_path: &Path, known_codes: &[&str]) -> Result<Op
     Ok(None)
 }
 
+/// Replace `from` with `to` (equal length) only where the match is a real
+/// country field — a NUL-terminated string at an ext4 block boundary (see
+/// [`is_country_field`]). Skips matches embedded in text (e.g. persist log lines
+/// like `Update country code CNXX\n`), so only the real country-code file is
+/// edited.
+fn replace_country_field(data: &mut [u8], from: &[u8], to: &[u8]) -> usize {
+    debug_assert_eq!(from.len(), to.len());
+    let n = from.len();
+    if n == 0 || data.len() < n {
+        return 0;
+    }
+    let mut count = 0;
+    let mut i = 0;
+    while i + n <= data.len() {
+        if &data[i..i + n] == from && is_country_field(data, i, n) {
+            data[i..i + n].copy_from_slice(to);
+            count += 1;
+            i += n;
+        } else {
+            i += 1;
+        }
+    }
+    count
+}
+
 /// Patch country code in a binary image.
-/// Returns true if any replacement was made.
+/// Returns true if any replacement was made. `field_only` (see
+/// [`detect_country_code`]) edits only the null-terminated country field, so a
+/// persist ext4 image's log entries are left untouched.
 pub fn patch_country_code(
     input: &Path,
     output: &Path,
     old_code: &str,
     new_code: &str,
     eu_codes: &[&str],
+    field_only: bool,
 ) -> Result<bool> {
     let mut data = fs::read(input)
         .map_err(|e| LtboxError::Patch(format!("Cannot read {}: {e}", input.display())))?;
@@ -414,12 +474,25 @@ pub fn patch_country_code(
     };
     let to = format!("{new_code}{new_suffix}");
 
+    // Field replacement is in-place, so the old/new patterns must be the same
+    // length. Return a recoverable error rather than panicking in
+    // `copy_from_slice` if the codes differ in length.
+    if field_only && old_code.len() != new_code.len() {
+        return Err(LtboxError::Patch(format!(
+            "field-only country patch needs equal-length codes ({old_code} -> {new_code})"
+        )));
+    }
+
     // Scan both `XE` and `XX` for old_code — stock Lenovo firmware mixes them
     // (e.g. `FRXX` in the wild). Widen unconditionally; false positives are free.
     let mut total_count = 0usize;
     for old_suffix in ["XE", "XX"] {
         let from = format!("{old_code}{old_suffix}");
-        let n = replace_in_place(&mut data, from.as_bytes(), to.as_bytes())?;
+        let n = if field_only {
+            replace_country_field(&mut data, from.as_bytes(), to.as_bytes())
+        } else {
+            replace_in_place(&mut data, from.as_bytes(), to.as_bytes())?
+        };
         if n > 0 {
             info!("Replacing country code {from} → {to} ({n} occurrences)");
             total_count += n;
@@ -578,8 +651,68 @@ mod tests {
         let path = dir.path().join("test.img");
         fs::write(&path, data).unwrap();
 
-        let code = detect_country_code(&path, &["CN", "KR", "US"]).unwrap();
+        let code = detect_country_code(&path, &["CN", "KR", "US"], false).unwrap();
         assert_eq!(code, Some("CN".to_string()));
+    }
+
+    #[test]
+    fn field_only_skips_log_country_codes() {
+        // Mimics a persist ext4: a hwdiag log line carrying the code
+        // (text-delimited) plus the real country file (null-terminated).
+        let data = b"Update country code CNXX\njunk\x00CNXX\x00\x00";
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("persist.img");
+        fs::write(&src, data).unwrap();
+
+        assert_eq!(
+            detect_country_code(&src, &["CN"], true).unwrap(),
+            Some("CN".to_string())
+        );
+
+        // Field-only patch edits only the null-terminated field; the log entry
+        // keeps its CNXX.
+        let out = dir.path().join("persist.patched.img");
+        let changed = patch_country_code(&src, &out, "CN", "KR", EU_COUNTRY_CODES, true).unwrap();
+        assert!(changed);
+        let patched = fs::read(&out).unwrap();
+        assert!(patched.windows(6).any(|w| w == b"\x00KRXX\x00"));
+        assert!(
+            patched
+                .windows("country code CNXX\n".len())
+                .any(|w| w == b"country code CNXX\n")
+        );
+    }
+
+    #[test]
+    fn field_only_requires_leading_boundary() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // codex's case: a log string with zero slack — `...code CNXX\0\0\0`.
+        // Mid-block and `code `-prefixed, so the trailing NUL alone must NOT make
+        // it look like a field.
+        let log_with_nul = b"xx Update country code CNXX\x00\x00\x00".to_vec();
+        let src = dir.path().join("log.img");
+        fs::write(&src, &log_with_nul).unwrap();
+        assert_eq!(detect_country_code(&src, &["CN"], true).unwrap(), None);
+        let out = dir.path().join("log.patched.img");
+        assert!(!patch_country_code(&src, &out, "CN", "KR", EU_COUNTRY_CODES, true).unwrap());
+
+        // A block-aligned field NOT preceded by a NUL (mimics the TB321FU persist
+        // dump: the code starts a 4K block, preceded by the prior block's binary
+        // tail). Must still be detected + patched.
+        let mut blk = vec![0xABu8; EXT4_BLOCK];
+        blk.extend_from_slice(b"CNXX");
+        blk.extend_from_slice(&[0u8; 4]);
+        let src2 = dir.path().join("aligned.img");
+        fs::write(&src2, &blk).unwrap();
+        assert_eq!(
+            detect_country_code(&src2, &["CN"], true).unwrap(),
+            Some("CN".to_string())
+        );
+        let out2 = dir.path().join("aligned.patched.img");
+        assert!(patch_country_code(&src2, &out2, "CN", "KR", EU_COUNTRY_CODES, true).unwrap());
+        let patched = fs::read(&out2).unwrap();
+        assert_eq!(&patched[EXT4_BLOCK..EXT4_BLOCK + 4], b"KRXX");
     }
 
     #[test]
