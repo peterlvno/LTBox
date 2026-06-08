@@ -89,10 +89,12 @@ impl From<ureq::Error> for DriverError {
 pub type Result<T> = std::result::Result<T, DriverError>;
 
 /// Best-effort reachability probe for the GitHub host LTBox downloads the
-/// driver installer from. Used to pre-disable the install / update buttons
-/// (with an "internet required" tooltip) instead of letting the user click
-/// into a download that can only fail. A short timeout keeps a dead network
-/// from stalling startup; any transport / non-2xx result reads as offline.
+/// Windows Qualcomm-driver installer from. Used to pre-disable the install /
+/// update buttons (with an "internet required" tooltip) instead of letting the
+/// user click into a download that can only fail. A short timeout keeps a dead
+/// network from stalling startup; any transport / non-2xx result reads as
+/// offline.
+#[cfg(windows)]
 pub fn probe_connectivity() -> bool {
     let agent = ureq::Agent::config_builder()
         .user_agent(concat!("ltbox/", env!("CARGO_PKG_VERSION")))
@@ -100,6 +102,14 @@ pub fn probe_connectivity() -> bool {
         .build()
         .new_agent();
     agent.get("https://api.github.com/").call().is_ok()
+}
+
+/// The driver install / update buttons this gates only exist on Windows
+/// (Linux + macOS need no Qualcomm driver), so off-Windows this reports
+/// "reachable" immediately — no startup network round-trip to GitHub.
+#[cfg(not(windows))]
+pub fn probe_connectivity() -> bool {
+    true
 }
 
 #[cfg(windows)]
