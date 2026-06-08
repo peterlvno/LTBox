@@ -324,25 +324,19 @@ fn read_device_vbmeta(
 }
 
 /// Back up the device's active-slot `abl` (the bootloader) for later restore.
-/// `abl` is not in the static LUN map, so its LUN is found by GPT-scanning the
-/// device. Returns `(lun, backup_path)` — the LUN holds both `abl_a`/`abl_b`,
-/// and the restore later targets `abl_a` (firmware always lands on `_a`).
+/// Returns `(lun, backup_path)` — the LUN holds both `abl_a`/`abl_b`, and the
+/// restore later targets `abl_a` (firmware always lands on `_a`).
 fn backup_device_abl(
     session: &mut ltbox_device::edl::EdlSession,
     slot: &str,
     work_dir: &std::path::Path,
     log: &mut Vec<String>,
 ) -> std::result::Result<(u8, std::path::PathBuf), String> {
-    let parts = session
-        .scan_partitions(0..=5, log)
-        .map_err(|e| format!("scan partitions for abl: {e}"))?;
     let abl_part = format!("abl{slot}");
-    let lun = parts
-        .iter()
-        .find(|p| p.name == "abl_a")
-        .or_else(|| parts.iter().find(|p| p.name == abl_part))
-        .map(|p| p.lun)
-        .ok_or_else(|| "abl partition not found on device".to_string())?;
+    // Static LUN map (abl is mapped to LUN 4) with a GPT-scan fallback.
+    let lun = session
+        .lun_for(&abl_part, log)
+        .map_err(|e| format!("resolve LUN for {abl_part}: {e}"))?;
     let out = work_dir.join("dev_abl_backup.img");
     session
         .dump_partition(&abl_part, &out, 0, lun, log)

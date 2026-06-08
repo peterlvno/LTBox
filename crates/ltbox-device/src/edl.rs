@@ -83,6 +83,8 @@ pub enum EdlError {
     Session(String),
     #[error("Partition not found: {0}")]
     PartitionNotFound(String),
+    #[error("Partition {0} resolves to multiple LUNs (ambiguous; cannot target one)")]
+    AmbiguousPartitionLun(String),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -516,6 +518,56 @@ impl EdlSession {
             }
         }
         Ok(out)
+    }
+
+    /// Resolve a partition's UFS LUN: the static [`ltbox_core::partition_lun`]
+    /// table first (no I/O), then a GPT scan across LUNs `0..=5` as a fallback
+    /// for partitions not in the table (a model whose rawprogram wasn't compared,
+    /// or a future layout). Slot suffix / case are normalised. Errors when the
+    /// label is on no LUN's GPT.
+    pub fn lun_for(&mut self, label: &str, log: &mut Vec<String>) -> Result<u8> {
+        if let Some(lun) = ltbox_core::partition_lun::lun_for_partition(label) {
+            return Ok(lun);
+        }
+        let parts = self.scan_partitions(0..=5, log)?;
+        // Resolve from the device GPT: an EXACT label match first, then the
+        // slot-stripped base. Within each tier the matches MUST agree on one LUN.
+        // A deliberately multi-LUN label (e.g. `xbl` on LUN 1+2, `last_parti` on
+        // every LUN) is omitted from the static map precisely because it has no
+        // single LUN, so returning an arbitrary first hit would defeat that
+        // omission — error on ambiguity instead. A slot-suffixed `xbl_a` / `xbl_b`
+        // resolves through the exact tier to its own entry.
+        let exact: Vec<u8> = parts
+            .iter()
+            .filter(|p| p.name.eq_ignore_ascii_case(label))
+            .map(|p| p.lun)
+            .collect();
+        if let Some(lun) = Self::single_matching_lun(&exact, label)? {
+            return Ok(lun);
+        }
+        let want = ltbox_core::partition_lun::strip_slot_suffix(label).to_ascii_lowercase();
+        let stripped: Vec<u8> = parts
+            .iter()
+            .filter(|p| {
+                ltbox_core::partition_lun::strip_slot_suffix(&p.name).to_ascii_lowercase() == want
+            })
+            .map(|p| p.lun)
+            .collect();
+        Self::single_matching_lun(&stripped, label)?
+            .ok_or_else(|| EdlError::PartitionNotFound(label.to_string()))
+    }
+
+    /// Collapse the LUNs of GPT entries that matched a label into a single LUN.
+    /// `Ok(None)` = no match (caller tries the next tier or reports not-found);
+    /// `Ok(Some(lun))` = every match shares one LUN; `Err(AmbiguousPartitionLun)`
+    /// = the label spans more than one distinct LUN and cannot be targeted
+    /// unambiguously (a multi-LUN label deliberately absent from the static map).
+    fn single_matching_lun(luns: &[u8], label: &str) -> Result<Option<u8>> {
+        match luns.first() {
+            None => Ok(None),
+            Some(&first) if luns.iter().all(|&l| l == first) => Ok(Some(first)),
+            Some(_) => Err(EdlError::AmbiguousPartitionLun(label.to_string())),
+        }
     }
 
     /// GPT lookup by partition name.
@@ -1571,6 +1623,27 @@ mod tests {
         assert_eq!(EdlSession::partition_span_sectors("p", 5, 5).unwrap(), 1);
         // Inverted range must error, never produce a tiny bogus span.
         assert!(EdlSession::partition_span_sectors("p", 200, 100).is_err());
+    }
+
+    #[test]
+    fn single_matching_lun_resolves_unique_and_rejects_ambiguous() {
+        // No GPT match -> None (caller falls through to the next tier / not-found).
+        assert_eq!(EdlSession::single_matching_lun(&[], "boot").unwrap(), None);
+        // One entry, or several all on the same LUN -> that LUN.
+        assert_eq!(
+            EdlSession::single_matching_lun(&[4], "boot").unwrap(),
+            Some(4)
+        );
+        assert_eq!(
+            EdlSession::single_matching_lun(&[2, 2, 2], "apdpb").unwrap(),
+            Some(2)
+        );
+        // A label spanning >1 LUN (e.g. `xbl` on LUN 1+2) is ambiguous, never an
+        // arbitrary first hit.
+        assert!(matches!(
+            EdlSession::single_matching_lun(&[1, 2], "xbl"),
+            Err(EdlError::AmbiguousPartitionLun(_))
+        ));
     }
 
     #[test]
