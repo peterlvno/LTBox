@@ -3263,11 +3263,19 @@ impl App {
     }
 
     /// True when the Advanced view holds wizard state the user would lose to a
-    /// sidebar bounce: a generic op sitting on its confirm step, or a partition
+    /// sidebar bounce: an op's exec/result surface (running, or its Done screen
+    /// still up), a generic op sitting on its confirm step, or a partition
     /// read/write whose GPT table is still valid (device still in EDL). The
     /// `Navigate` handler consults this to skip the entry-time reset so
     /// navigating away and back keeps the user's place.
     fn advanced_in_progress(&self) -> bool {
+        // The exec/result surface must survive a sidebar bounce until the user
+        // hits 'start over' — mirrors the `is_in_exec()` gate the Root / Flash /
+        // etc. views use in `Navigate`. `busy` already covers a running op; this
+        // also keeps the result on screen after the op finishes.
+        if self.advanced_inline_exec_surface_active() {
+            return true;
+        }
         use AdvancedWizardOpen as W;
         match self.advanced_wizard_open {
             // Generic advanced op (PatchArb / PatchDevinfo / DetectArb / ...):
@@ -4443,6 +4451,21 @@ mod tests {
         app.advanced_wizard_open = AdvancedWizardOpen::DumpPhys;
         assert!(!app.advanced_in_progress());
         app.advanced_wizard_open = AdvancedWizardOpen::None;
+        assert!(!app.advanced_in_progress());
+
+        // Exec / result surface preserves until 'start over': a Simple Flash on
+        // its confirm step (folder picked) AND on its exec/result step (>=2)
+        // both survive a sidebar bounce; the intro step (0, after 'start over')
+        // resets.
+        let mut app = App {
+            advanced_wizard_open: AdvancedWizardOpen::SimpleFlash,
+            ..App::default()
+        };
+        app.simple_flash.step = 1; // Confirm
+        assert!(app.advanced_in_progress());
+        app.simple_flash.step = 2; // Exec / result
+        assert!(app.advanced_in_progress());
+        app.simple_flash.step = 0; // Intro
         assert!(!app.advanced_in_progress());
     }
 

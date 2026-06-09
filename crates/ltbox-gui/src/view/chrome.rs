@@ -832,7 +832,11 @@ impl App {
         .padding(24)
         .width(420);
 
-        m3_dialog(content.into())
+        // Modeless: a flash can run for minutes, so the busy dialog must NOT
+        // trap the user — the sidebar stays clickable to navigate back to the
+        // running op's progress screen. (Confirm dialogs use the modal
+        // `m3_dialog`.)
+        m3_dialog_modeless(content.into())
     }
 
     /// Shared loading-state body for any `_popup_view` that fetches

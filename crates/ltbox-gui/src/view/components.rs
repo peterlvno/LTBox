@@ -5,8 +5,31 @@ use iced::widget::{self, Space, button, column, container, row, text};
 use iced::{Element, Length, Theme};
 use theme::with_alpha;
 
-/// Centered M3 dialog card on a scrim. Inner owns padding/width.
+/// Centered M3 dialog card on a scrim. Inner owns padding/width. MODAL: the
+/// whole layer is wrapped in `opaque`, so it captures every pointer event and
+/// nothing behind it reacts. Use for confirm dialogs (reboot, country,
+/// region-target, rescue, root prompts) that must block the panel behind them.
 pub(crate) fn m3_dialog(inner: Element<'_, Message>) -> Element<'_, Message> {
+    // `opaque` makes the whole dialog layer capture every pointer event, so
+    // hover/click can't fall through the parent `Stack` to the panel behind it
+    // (the scrim alone only paints — it doesn't block). The card's own buttons
+    // still receive their clicks.
+    iced::widget::opaque(m3_dialog_layers(inner))
+}
+
+/// Like [`m3_dialog`] but MODELESS: no `opaque` wrapper, so pointer events fall
+/// through the scrim to the panel behind. Use for the busy progress dialog — a
+/// long-running flash must not trap the user; the sidebar (and current view)
+/// stay clickable so they can navigate back to the op's progress screen.
+pub(crate) fn m3_dialog_modeless(inner: Element<'_, Message>) -> Element<'_, Message> {
+    m3_dialog_layers(inner)
+}
+
+/// Shared scrim + centered card layers behind [`m3_dialog`] /
+/// [`m3_dialog_modeless`]. The scrim only paints its dim background (in iced a
+/// plain `container` does not capture pointer events); modality is decided by
+/// the caller wrapping this in `opaque` or not.
+fn m3_dialog_layers(inner: Element<'_, Message>) -> Element<'_, Message> {
     let card = container(inner).style(|t: &Theme| {
         let p = pal_of(t);
         container::Style {
@@ -36,11 +59,7 @@ pub(crate) fn m3_dialog(inner: Element<'_, Message>) -> Element<'_, Message> {
         .height(Length::Fill)
         .center_x(Length::Fill)
         .center_y(Length::Fill);
-    // `opaque` makes the whole dialog layer capture every pointer event, so
-    // hover/click can't fall through the parent `Stack` to the panel behind
-    // it (the scrim alone only paints — it doesn't block). Keeps the modal
-    // actually modal; the card's own buttons still receive their clicks.
-    iced::widget::opaque(iced::widget::stack![scrim, centered])
+    iced::widget::stack![scrim, centered].into()
 }
 
 pub(crate) fn wizard_step_bar<'a>(steps: &[&str], current: usize) -> Element<'a, Message> {
