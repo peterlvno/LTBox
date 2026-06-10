@@ -381,7 +381,7 @@ impl App {
                 color: Some(if selected { p.success } else { p.outline }),
             }
         };
-        let col = column![
+        let mut col = column![
             text(self.t("adv_loader_title").to_string())
                 .size(theme::text_size::WIZARD_STEP_TITLE)
                 .center(),
@@ -406,6 +406,21 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
+        // The Settings default EDL loader was bypassed because its extension
+        // doesn't fit the connected model — say so, so the picker's appearance
+        // isn't mistaken for a bug.
+        if self.default_loader_path.is_some() && !self.default_loader_fits_model() {
+            col = col.push(
+                text(self.t("loader_default_ext_unsupported").to_string())
+                    .size(12)
+                    .width(Length::Fill)
+                    .style(|t: &Theme| iced::widget::text::Style {
+                        color: Some(pal_of(t).error),
+                    })
+                    .center()
+                    .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+            );
+        }
         container(col)
             .width(Length::Fill)
             .height(Length::Fill)
@@ -606,6 +621,19 @@ impl App {
                     .center()
                     .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
             );
+            // Default loader bypassed for an extension unsupported on this model.
+            if self.default_loader_path.is_some() && !self.default_loader_fits_model() {
+                col = col.push(
+                    text(self.t("loader_default_ext_unsupported").to_string())
+                        .size(12)
+                        .width(Length::Fill)
+                        .style(|t: &Theme| iced::widget::text::Style {
+                            color: Some(pal_of(t).error),
+                        })
+                        .center()
+                        .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+                );
+            }
         }
         container(col)
             .width(Length::Fill)

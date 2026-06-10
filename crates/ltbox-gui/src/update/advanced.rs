@@ -627,6 +627,15 @@ impl App {
             }
             AdvMsg::AdvWizOpen(a) => {
                 self.adv_wizard.open(a);
+                // DetectArb on TB320FC needs an EDL loader (Firehose) — apply the
+                // Settings default loader like every other loader-picker flow.
+                if matches!(a, AdvAction::DetectArb)
+                    && self.device_model.eq_ignore_ascii_case("TB320FC")
+                    && let Some(path) = self.resolved_default_loader()
+                    && let Ok(resolved) = self.resolve_loader_input(&path)
+                {
+                    self.adv_wizard.file_path = Some(resolved);
+                }
                 // Mirror into legacy fields so AdvFileSelected /
                 // AdvExecDone keep working unchanged.
                 self.adv_confirm = Some(a);
@@ -718,6 +727,27 @@ impl App {
                         self.arb_index_popup_open = true;
                         return Task::none();
                     }
+                }
+                // Change Country: leaving the Country step → apply the Settings
+                // default EDL loader the same way the dedicated EDL wizards do
+                // (auto-fill + skip the Loader step when a fitting default is set),
+                // so loader handling stays consistent across every picker flow.
+                if matches!(self.adv_wizard.action, Some(AdvAction::PatchDevinfo))
+                    && self.adv_wizard.step == 0
+                {
+                    self.adv_wizard.next(); // Country → Loader
+                    if let Some(path) = self.resolved_default_loader() {
+                        // resolved_default_loader already model-fit-checks the path.
+                        match self.resolve_loader_input(&path) {
+                            Ok(resolved) => {
+                                self.adv_wizard.file_path = Some(resolved);
+                                self.error_msg = None;
+                                self.adv_wizard.next(); // Loader → Confirm
+                            }
+                            Err(msg) => self.error_msg = Some(msg),
+                        }
+                    }
+                    return Task::none();
                 }
                 if self.adv_wizard.is_confirm_step() {
                     let Some(action) = self.adv_wizard.action else {

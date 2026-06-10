@@ -98,8 +98,9 @@ impl App {
             }
             RootMsg::RootSelectFolder => {
                 // Historical field name; value is now a single EDL loader file.
-                if let Some(path) = self.default_loader_path.clone() {
-                    // Settings default loader bypasses the picker.
+                if let Some(path) = self.resolved_default_loader() {
+                    // A fitting Settings default loader bypasses the picker; a
+                    // model-mismatched (or missing) one falls through to it.
                     self.root.folder_path = Some(path);
                     return Task::none();
                 }
