@@ -16,6 +16,7 @@
 #[path = "icon.rs"]
 mod icon;
 mod arb;
+mod device_name;
 mod loader;
 mod message;
 mod model;
@@ -33,6 +34,7 @@ mod workers;
 // Extracted items live in their own modules; re-export so the rest of the
 // crate keeps referring to them unqualified.
 pub(crate) use arb::{detect_arb_run, format_unix_timestamp_utc};
+pub(crate) use device_name::*;
 pub(crate) use loader::*;
 pub(crate) use message::*;
 pub(crate) use model::device::*;
@@ -1801,60 +1803,6 @@ fn read_device_rollback_index_via_edl(
     let _ = std::fs::remove_file(&boot_img);
     let _ = std::fs::remove_file(&vbs_img);
     Ok(boot_idx.max(vbs_idx))
-}
-
-/// Trim Lenovo build-display to the ROM + version tail. Example:
-/// `TB322FC_..._ZUXOS_1.5.10.183_ST_...` → `ZUXOS_1.5.10.183_ST_...`.
-/// ROW firmware uses `_ZUI_`. No marker → passthrough.
-fn trim_build_display(s: &str) -> String {
-    if let Some(i) = s.find("_ZUXOS_") {
-        return s[i + 1..].to_string();
-    }
-    if let Some(i) = s.find("_ZUI_") {
-        return s[i + 1..].to_string();
-    }
-    s.to_string()
-}
-
-/// True if the ADB product name is a TWRP recovery build. Lenovo stock
-/// never uses this prefix, so it's reliable without `ro.bootmode`.
-fn is_twrp_product(product: &str) -> bool {
-    product.to_ascii_lowercase().starts_with("twrp_")
-}
-
-/// Strip a leading `twrp_` (any case) from a product name.
-fn strip_twrp_prefix(product: &str) -> String {
-    if is_twrp_product(product) {
-        product[5..].to_string()
-    } else {
-        product.to_string()
-    }
-}
-
-/// Normalize a raw `getprop` value for display: trim surrounding whitespace
-/// and treat an empty or whitespace-only result (what `getprop` prints for an
-/// absent property) as `None`.
-fn non_empty_prop(raw: &str) -> Option<String> {
-    let trimmed = raw.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
-}
-
-/// Pick the dashboard device name from the LGSI market-name properties in
-/// priority order, falling back to the legacy `kirby_en` property. `getprop`
-/// is invoked lazily, so the probe stops at the first populated property.
-///
-/// `getprop(name)` returns the raw `getprop <name>` output (empty/whitespace
-/// when the property is absent).
-fn select_device_name<F: FnMut(&str) -> String>(mut getprop: F) -> String {
-    [
-        "ro.vendor.config.lgsi.en.market_name",
-        "ro.vendor.config.lgsi.market_name",
-        "ro.config.lgsi.market_name",
-        "ro.vendor.config.lgsi.kirby_en",
-    ]
-    .into_iter()
-    .find_map(|prop| non_empty_prop(&getprop(prop)))
-    .unwrap_or_default()
 }
 
 /// GBL EFI asset suffix for a TB323FU target firmware, by region (`is_prc`) and
