@@ -198,8 +198,12 @@ pub(super) fn extract_first_apk_from_zip(
     if output_path.exists() {
         fs::remove_file(output_path).ok();
     }
-    let mut out = fs::File::create(output_path)?;
-    std::io::copy(&mut entry, &mut out)?;
+    crate::zip_util::copy_capped(
+        &mut entry,
+        output_path,
+        crate::zip_util::MAX_ENTRY_BYTES,
+        &member_name,
+    )?;
     ltbox_core::live!(
         log,
         "[{log_tag}] {}",

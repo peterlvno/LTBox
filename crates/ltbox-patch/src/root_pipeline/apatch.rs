@@ -26,9 +26,12 @@ fn extract_kpimg_from_apk(
     let mut entry = archive
         .by_name("assets/kpimg")
         .map_err(|e| LtboxError::Patch(format!("{repo}: APK missing assets/kpimg: {e}")))?;
-    let size = entry.size();
-    let mut out = fs::File::create(&kpimg_dst)?;
-    std::io::copy(&mut entry, &mut out)?;
+    let size = crate::zip_util::copy_capped(
+        &mut entry,
+        &kpimg_dst,
+        crate::zip_util::MAX_ENTRY_BYTES,
+        "assets/kpimg",
+    )?;
     ltbox_core::live!(
         log,
         "[APatch] {}",

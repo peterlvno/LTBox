@@ -67,9 +67,38 @@ pub(super) fn fetch_nightly_apk_outer_zip(
         let f = fs::File::open(&outer_zip_path)?;
         let mut archive = zip::ZipArchive::new(f)
             .map_err(|e| LtboxError::Patch(format!("{repo}: nightly artifact not a zip: {e}")))?;
-        archive
-            .extract(&staging)
-            .map_err(|e| LtboxError::Patch(format!("{repo}: extract nightly zip: {e}")))?;
+        // Stage only the `.apk` entries, each streamed under a hard per-entry
+        // size cap. `archive.extract` writes every entry with no bound (a
+        // decompression-bomb sink) when all we need is the APK the recursive
+        // pick below selects. `enclosed_name` rejects zip-slip paths.
+        for i in 0..archive.len() {
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| LtboxError::Patch(format!("{repo}: read nightly entry {i}: {e}")))?;
+            if !entry.is_file() {
+                continue;
+            }
+            let Some(rel) = entry.enclosed_name() else {
+                continue;
+            };
+            let is_apk = rel
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("apk"));
+            if !is_apk {
+                continue;
+            }
+            let dst = staging.join(&rel);
+            if let Some(parent) = dst.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            crate::zip_util::copy_capped(
+                &mut entry,
+                &dst,
+                crate::zip_util::MAX_ENTRY_BYTES,
+                rel.display(),
+            )?;
+        }
     }
 
     // Walk the extracted artifact recursively — some providers nest
