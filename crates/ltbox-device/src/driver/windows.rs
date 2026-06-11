@@ -44,7 +44,6 @@ const RELEASES_API: &str =
 /// Windows release tags carry a `win` token (`release-win-v1.0.2.0`); the
 /// repo also publishes Linux-only tags that ship no `.exe` installer.
 const WIN_TAG_NEEDLE: &str = "win";
-const USER_AGENT: &str = concat!("ltbox/", env!("CARGO_PKG_VERSION"));
 
 /// Signed installer asset name for the host architecture. The release
 /// ships one self-extracting `.exe` per arch.
@@ -119,11 +118,7 @@ fn driver_present_via_driver_store(inf_name: &str) -> bool {
 /// installer, returning `(tag_name, asset_download_url)`. Shared by the
 /// installer and the update check so both resolve to the same release.
 fn fetch_latest_win_release() -> Result<(String, String)> {
-    let meta_agent = ureq::Agent::config_builder()
-        .user_agent(USER_AGENT)
-        .timeout_global(Some(std::time::Duration::from_secs(30)))
-        .build()
-        .new_agent();
+    let meta_agent = ltbox_core::downloader::build_agent();
 
     let releases: Vec<GithubRelease> = meta_agent
         .get(RELEASES_API)
@@ -325,13 +320,7 @@ pub fn download_and_install(log: &mut Vec<String>) -> Result<()> {
     std::fs::create_dir_all(&tmp_dir)?;
     let exe_path = tmp_dir.join(asset_name);
 
-    let dl_agent = ureq::Agent::config_builder()
-        .user_agent(USER_AGENT)
-        .timeout_connect(Some(std::time::Duration::from_secs(15)))
-        .timeout_recv_response(Some(std::time::Duration::from_secs(30)))
-        .timeout_recv_body(Some(std::time::Duration::from_secs(300)))
-        .build()
-        .new_agent();
+    let dl_agent = ltbox_core::downloader::build_agent();
 
     download_with_progress(&dl_agent, &asset_url, asset_name, &exe_path, log)?;
 

@@ -96,8 +96,11 @@ pub type Result<T> = std::result::Result<T, DriverError>;
 /// offline.
 #[cfg(windows)]
 pub fn probe_connectivity() -> bool {
+    // Bespoke agent: an 8s global timeout keeps a dead network from stalling
+    // startup, so this probe does not reuse the shared pooled agent (which has
+    // no global cap). It does reuse the shared user-agent string.
     let agent = ureq::Agent::config_builder()
-        .user_agent(concat!("ltbox/", env!("CARGO_PKG_VERSION")))
+        .user_agent(ltbox_core::downloader::USER_AGENT)
         .timeout_global(Some(std::time::Duration::from_secs(8)))
         .build()
         .new_agent();

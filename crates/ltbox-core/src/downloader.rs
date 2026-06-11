@@ -8,7 +8,10 @@ use std::path::Path;
 
 use crate::error::{LtboxError, Result};
 
-const USER_AGENT: &str = "LTBox-rs/3.0";
+/// Shared `ltbox/<version>` user agent for every outbound request. The
+/// `probe_connectivity` startup check builds its own short-timeout agent but
+/// reuses this string, so the user agent has a single definition.
+pub const USER_AGENT: &str = concat!("ltbox/", env!("CARGO_PKG_VERSION"));
 
 /// Process-wide shared `ureq::Agent`. Reuses TLS roots + the connection
 /// pool across every outbound HTTP request in the workspace (downloader,
@@ -35,9 +38,11 @@ fn shared_agent() -> &'static ureq::Agent {
     })
 }
 
-/// Public alias — clones the cheap `Arc`-backed `ureq::Agent` handle so
-/// existing call sites (`build_agent()`) keep their by-value signature.
-pub(crate) fn build_agent() -> ureq::Agent {
+/// Clone the process-wide shared `ureq::Agent` handle (cheap, `Arc`-backed).
+/// Reuse this for every outbound HTTP request in the workspace — including
+/// other crates — so they share TLS roots, the connection pool, and a single
+/// `ltbox/<version>` user agent.
+pub fn build_agent() -> ureq::Agent {
     shared_agent().clone()
 }
 
