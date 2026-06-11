@@ -119,3 +119,11 @@ qdl = { path = "vendor/qdl", features = ["serial", "usb"] }
 # build.rs codegen) but spams `cargo build` with two parse errors per
 # run. Bump back to `branch = "master"` once upstream lands a fix.
 iced_lucide = { git = "https://github.com/A-Disruption/iced_lucide", rev = "d06e2cc" }
+
+# Release tuning for the shipped GUI binary. `panic` is left at the default
+# "unwind" on purpose: worker threads rely on unwinding so a single failed
+# operation aborts that task instead of taking down the whole app.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
