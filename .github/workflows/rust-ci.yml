@@ -391,6 +391,9 @@ jobs:
         # clippy job never sees.
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      - name: cargo test --workspace
+        run: cargo test --workspace --locked
+
       - name: Build universal LTBox.app + tarball
         # make-app.sh builds both Mac arches (LIBUSB_STATIC=1), lipo's the
         # universal binary, assembles + ad-hoc-signs LTBox.app, and packages
