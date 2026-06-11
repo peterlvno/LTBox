@@ -114,6 +114,23 @@ jobs:
         # same world rustc will compile against.
         run: cargo xwin clippy --workspace --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings
 
+  cargo-deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: cargo deny check
+        # Advisories (RUSTSEC), license policy, banned crates, and dependency
+        # sources — config in deny.toml at the repo root.
+        run: cargo deny check
+
   build-windows:
     name: Build ${{ matrix.name }}
     needs: fmt-clippy
