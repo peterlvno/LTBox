@@ -133,7 +133,6 @@ jobs:
 
   build-windows:
     name: Build ${{ matrix.name }}
-    needs: fmt-clippy
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -262,7 +261,6 @@ jobs:
 
   build-linux:
     name: Build linux_${{ matrix.arch }}
-    needs: fmt-clippy
     # Each matrix entry pins its runner so the artifact inherits the
     # older glibc 2.35 floor (ubuntu-22.04 / -arm). AppImage built
     # against an older glibc is forward-compatible with newer
@@ -369,7 +367,6 @@ jobs:
 
   build-macos:
     name: Build macos_universal
-    needs: fmt-clippy
     # macos-14 is the Apple Silicon (arm64) runner; the x86_64 slice
     # cross-builds on it natively (Apple clang + the universal SDK), so one
     # runner produces the lipo'd universal binary. macOS needs no apt-style
@@ -448,7 +445,6 @@ jobs:
     # matrix above for compile-time validation; runtime coverage is
     # the x86_64 host's job.
     name: Test (host x86_64)
-    needs: fmt-clippy
     runs-on: windows-latest
     timeout-minutes: 30
     defaults:
@@ -476,7 +472,6 @@ jobs:
     # Same package list as `build-linux` so what CI proves green
     # locally maps 1:1 to what packagers will need to install.
     name: Test linux_x86_64
-    needs: fmt-clippy
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
@@ -516,7 +511,7 @@ jobs:
 
   release:
     name: Draft GitHub Release
-    needs: [build-windows, build-linux, build-macos, test, test-linux]
+    needs: [fmt-clippy, cargo-deny, build-windows, build-linux, build-macos, test, test-linux]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
