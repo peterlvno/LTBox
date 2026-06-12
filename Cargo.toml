@@ -83,6 +83,8 @@ rsa = { version = "0.9", features = ["pem"] }
 # USB (for Fastboot).
 nusb = "0.2"
 pollster = "0.4"
+# Serial (for kernel-driver EDL backend discovery).
+serialport = "4"
 
 # GUI
 iced = { version = "0.14", features = ["tokio", "svg", "image", "advanced"] }

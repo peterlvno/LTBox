@@ -169,6 +169,8 @@ impl App {
                     | ltbox_device::driver::DriverStatus::UdevRulesMissing
                     | ltbox_device::driver::DriverStatus::UdevRulesStale
                     | ltbox_device::driver::DriverStatus::UdevRulesNoPermission
+                    | ltbox_device::driver::DriverStatus::KernelDriverMissing
+                    | ltbox_device::driver::DriverStatus::KernelDriverUnsupported
             )
         ) {
             content = content.push(self.driver_warning_banner());

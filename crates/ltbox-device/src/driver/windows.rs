@@ -1,7 +1,8 @@
-//! Qualcomm 9008 EDL WinUSB driver detection + auto-install on Windows.
+//! Qualcomm 9008 EDL driver detection + auto-install on Windows.
 //!
-//! LTBox requires `qcserlib.inf` from Qualcomm's userspace driver bundle,
-//! then runs the signed per-arch installer through Windows UAC.
+//! Userspace mode requires `qcserlib.inf` from Qualcomm's WinUSB bundle.
+//! Kernel mode requires `qcwdfser.inf` from Qualcomm's kernel-driver bundle.
+//! Both modes run signed per-arch installers through Windows UAC.
 
 use std::path::Path;
 use std::process::Command;
@@ -9,7 +10,7 @@ use std::process::Command;
 use ltbox_core::i18n::tr;
 use ltbox_core::{live, tr_args};
 
-use super::{DriverError, DriverStatus, DriverUpdate, Result};
+use super::{DriverError, DriverStatus, DriverUpdate, QcomDriverMode, Result, qcom_driver_mode};
 
 /// `Command::new` with no console window.
 fn silent_command(program: &str) -> Command {
@@ -20,8 +21,40 @@ fn silent_command(program: &str) -> Command {
     cmd
 }
 
-/// INFs whose absence triggers a missing-driver banner.
-const REQUIRED_INFS: &[&str] = &["qcserlib.inf"];
+#[derive(Clone, Copy)]
+struct WindowsDriverSpec {
+    releases_api: &'static str,
+    required_infs: &'static [&'static str],
+    version_inf: &'static str,
+    asset_x64: &'static str,
+    asset_arm64: &'static str,
+    asset_x86: &'static str,
+}
+
+const USERSPACE_SPEC: WindowsDriverSpec = WindowsDriverSpec {
+    releases_api: "https://api.github.com/repos/qualcomm/qcom-usb-userspace-drivers/releases?per_page=10",
+    required_infs: &["qcserlib.inf"],
+    version_inf: "qcserlib.inf",
+    asset_x64: "qcom_usb_userspace_drivers_x64.exe",
+    asset_arm64: "qcom_usb_userspace_drivers_arm64.exe",
+    asset_x86: "qcom_usb_userspace_drivers_x86.exe",
+};
+
+const KERNEL_SPEC: WindowsDriverSpec = WindowsDriverSpec {
+    releases_api: "https://api.github.com/repos/qualcomm/qcom-usb-kernel-drivers/releases?per_page=10",
+    required_infs: &["qcwdfser.inf"],
+    version_inf: "qcwdfser.inf",
+    asset_x64: "qcom_usb_kernel_drivers_x64.exe",
+    asset_arm64: "qcom_usb_kernel_drivers_arm64.exe",
+    asset_x86: "qcom_usb_kernel_drivers_x86.exe",
+};
+
+fn driver_spec(mode: QcomDriverMode) -> WindowsDriverSpec {
+    match mode {
+        QcomDriverMode::Userspace => USERSPACE_SPEC,
+        QcomDriverMode::Kernel => KERNEL_SPEC,
+    }
+}
 
 #[derive(Debug, serde::Deserialize)]
 struct GithubRelease {
@@ -43,27 +76,27 @@ struct GithubAsset {
     browser_download_url: String,
 }
 
-const RELEASES_API: &str =
-    "https://api.github.com/repos/qualcomm/qcom-usb-userspace-drivers/releases?per_page=10";
 /// Windows release tags carry a `win` token (`release-win-v1.0.2.0`); the
 /// repo also publishes Linux-only tags that ship no `.exe` installer.
 const WIN_TAG_NEEDLE: &str = "win";
 
 /// Signed installer asset name for the host architecture. The release
 /// ships one self-extracting `.exe` per arch.
-fn arch_installer_asset() -> &'static str {
+fn arch_installer_asset(spec: WindowsDriverSpec) -> &'static str {
     if cfg!(target_arch = "aarch64") {
-        "qcom_usb_userspace_drivers_arm64.exe"
+        spec.asset_arm64
     } else if cfg!(target_arch = "x86") {
-        "qcom_usb_userspace_drivers_x86.exe"
+        spec.asset_x86
     } else {
-        "qcom_usb_userspace_drivers_x64.exe"
+        spec.asset_x64
     }
 }
 
 /// Probe whether the Qualcomm USB drivers are installed.
 pub fn check_required_drivers() -> DriverStatus {
-    let missing: Vec<&'static str> = REQUIRED_INFS
+    let spec = driver_spec(qcom_driver_mode());
+    let missing: Vec<&'static str> = spec
+        .required_infs
         .iter()
         .copied()
         .filter(|inf| !is_driver_present(inf))
@@ -123,16 +156,17 @@ fn driver_present_via_driver_store(inf_name: &str) -> bool {
 /// `(tag_name, asset_download_url)`. Shared by the
 /// installer and the update check so both resolve to the same release.
 fn fetch_latest_win_release() -> Result<(String, String)> {
+    let spec = driver_spec(qcom_driver_mode());
     let meta_agent = ltbox_core::downloader::build_agent();
 
     let releases: Vec<GithubRelease> = meta_agent
-        .get(RELEASES_API)
+        .get(spec.releases_api)
         .call()?
         .body_mut()
         .read_json()
         .map_err(|e| DriverError::Parse(e.to_string()))?;
 
-    let asset_name = arch_installer_asset();
+    let asset_name = arch_installer_asset(spec);
     // Pre-releases are intentionally INCLUDED — only drafts are skipped. The
     // upstream repo currently ships its Windows driver solely as a pre-release
     // (`release-win-v1.0.2.0`), and a newer pre-release should win over an
@@ -290,6 +324,7 @@ fn parse_driver_ver(inf_text: &str) -> Option<String> {
 /// `qcserlib.inf_*` folders (multiple versions); the max is the effective
 /// one for an update comparison.
 pub fn installed_driver_version() -> Option<String> {
+    let spec = driver_spec(qcom_driver_mode());
     let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
     let repo = Path::new(&system_root)
         .join("System32")
@@ -299,10 +334,10 @@ pub fn installed_driver_version() -> Option<String> {
     let mut best: Option<String> = None;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-        if !name.starts_with("qcserlib.inf") {
+        if !name.starts_with(spec.version_inf) {
             continue;
         }
-        let inf = entry.path().join("qcserlib.inf");
+        let inf = entry.path().join(spec.version_inf);
         let Some(text) = read_inf_text(&inf) else {
             continue;
         };
@@ -319,7 +354,7 @@ pub fn installed_driver_version() -> Option<String> {
 /// Download the host-arch userspace-driver installer and run it elevated.
 pub fn download_and_install(log: &mut Vec<String>) -> Result<()> {
     live!(log, "[Driver] {}", tr("live_driver_fetch_meta"));
-    let asset_name = arch_installer_asset();
+    let asset_name = arch_installer_asset(driver_spec(qcom_driver_mode()));
     let (_tag, asset_url) = fetch_latest_win_release()?;
 
     live!(
@@ -482,16 +517,21 @@ mod tests {
     /// shipped variants.
     #[test]
     fn arch_asset_is_known() {
-        let name = arch_installer_asset();
-        assert!(
-            matches!(
-                name,
-                "qcom_usb_userspace_drivers_x64.exe"
-                    | "qcom_usb_userspace_drivers_arm64.exe"
-                    | "qcom_usb_userspace_drivers_x86.exe"
-            ),
-            "unexpected asset name: {name}"
-        );
+        for spec in [USERSPACE_SPEC, KERNEL_SPEC] {
+            let name = arch_installer_asset(spec);
+            assert!(
+                matches!(
+                    name,
+                    "qcom_usb_userspace_drivers_x64.exe"
+                        | "qcom_usb_userspace_drivers_arm64.exe"
+                        | "qcom_usb_userspace_drivers_x86.exe"
+                        | "qcom_usb_kernel_drivers_x64.exe"
+                        | "qcom_usb_kernel_drivers_arm64.exe"
+                        | "qcom_usb_kernel_drivers_x86.exe"
+                ),
+                "unexpected asset name: {name}"
+            );
+        }
     }
 
     #[test]

@@ -3,6 +3,7 @@
 use anyhow::{Result, bail};
 use serial2::{self, SerialPort};
 use std::io::{BufRead, Read, Write};
+use std::time::Duration;
 
 use crate::types::QdlReadWrite;
 
@@ -13,7 +14,6 @@ pub struct QdlSerialConfig {
     cap: usize,
 }
 
-// TODO: timeouts?
 impl Write for QdlSerialConfig {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         self.serport.write(buf)
@@ -66,12 +66,18 @@ pub fn setup_serial_device(dev_path: Option<String>) -> Result<QdlSerialConfig> 
     if dev_path.is_none() {
         bail!("Serial port path unspecified");
     }
+    let path = dev_path.unwrap();
 
-    let serport = SerialPort::open(dev_path.unwrap(), |mut settings: serial2::Settings| {
+    let mut serport = SerialPort::open(&path, |s| Ok(s))?;
+    if let Ok(mut settings) = serport.get_configuration() {
         settings.set_raw();
-        settings.set_baud_rate(115200)?;
-        Ok(settings)
-    })?;
+        let _ = settings.set_baud_rate(115200);
+        if let Err(e) = serport.set_configuration(&settings) {
+            eprintln!("[qdl] serial: best-effort termios apply on {path} failed ({e}); proceeding");
+        }
+    }
+    serport.set_read_timeout(Duration::from_secs(10))?;
+    serport.set_write_timeout(Duration::from_secs(10))?;
 
     Ok(QdlSerialConfig {
         serport,

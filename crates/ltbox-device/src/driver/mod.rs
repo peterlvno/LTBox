@@ -10,13 +10,66 @@
 //!
 //! | Host    | Module                  | Strategy |
 //! |---------|-------------------------|----------|
-//! | Windows | `driver::windows`       | `pnputil /enum-drivers` + DriverStore probe for `qcserlib.inf` (the WinUSB stub for PID 9008); install by downloading the signed per-arch `qcom_usb_userspace_drivers_<arch>.exe` from the latest `qcom-usb-userspace-drivers` release and launching it via UAC (`Start-Process -Verb RunAs`). The installer self-elevates, so LTBox itself does not need to run as Administrator. |
-//! | Linux   | `driver::linux`         | Detect the LTBox udev rules at `/etc/udev/rules.d/51-ltbox-qcom.rules` and classify them against the embedded copy (`UdevRulesMissing` / `UdevRulesStale` / `UdevRulesNoPermission` / `Present`); install by re-launching the binary through `pkexec … --install-udev`. A `/sys/bus/usb/devices` walk for `05c6:9008` + serial-node permission test is deferred until a Qualcomm target is in reach. |
-//! | macOS   | `driver::unsupported`   | No-op `NotWindows` — macOS needs no driver and no udev rules (libusb claims the device directly). |
+//! | Windows | `driver::windows`       | Mode-aware `pnputil /enum-drivers` + DriverStore probe (`qcserlib.inf` for userspace / `qcwdfser.inf` for kernel); install by downloading the selected signed per-arch Qualcomm `.exe` and launching it via UAC (`Start-Process -Verb RunAs`). The installer self-elevates, so LTBox itself does not need to run as Administrator. |
+//! | Linux   | `driver::linux`         | Userspace mode detects the LTBox udev rules at `/etc/udev/rules.d/51-ltbox-qcom.rules` and installs them through `pkexec … --install-udev`. Kernel mode probes the `qud` Debian package and installs the latest `qud_*_all.zip` release through `pkexec dpkg -i`. |
+//! | macOS   | `driver::unsupported`   | No-op `NotWindows` — macOS is forced to userspace mode because Qualcomm publishes no macOS kernel driver and libusb claims the device directly. |
 //!
 //! The shared `DriverStatus` / `DriverError` / `Result` types live here so
 //! the GUI never branches by `cfg`; the per-OS module decides which variants
 //! it can produce.
+
+use std::sync::atomic::{AtomicU8, Ordering};
+
+/// Qualcomm USB driver family LTBox should use for EDL.
+///
+/// `Userspace` is the current/default path: WinUSB on Windows and direct USB
+/// plus udev rules on Linux. `Kernel` uses Qualcomm's kernel driver packages
+/// and the qdl serial backend, so it is unavailable on macOS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum QcomDriverMode {
+    #[default]
+    Userspace,
+    Kernel,
+}
+
+impl QcomDriverMode {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Userspace => "userspace",
+            Self::Kernel => "kernel",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "kernel" => Self::Kernel,
+            _ => Self::Userspace,
+        }
+    }
+
+    pub const fn is_kernel(self) -> bool {
+        matches!(self, Self::Kernel)
+    }
+}
+
+static QCOM_DRIVER_MODE: AtomicU8 = AtomicU8::new(0);
+
+pub fn set_qcom_driver_mode(mode: QcomDriverMode) {
+    QCOM_DRIVER_MODE.store(
+        match mode {
+            QcomDriverMode::Userspace => 0,
+            QcomDriverMode::Kernel => 1,
+        },
+        Ordering::Relaxed,
+    );
+}
+
+pub fn qcom_driver_mode() -> QcomDriverMode {
+    match QCOM_DRIVER_MODE.load(Ordering::Relaxed) {
+        1 => QcomDriverMode::Kernel,
+        _ => QcomDriverMode::Userspace,
+    }
+}
 
 /// Shape returned by [`check_required_drivers`]. Windows produces
 /// `Present` / `Missing`; Linux produces `Present` / `UdevRules*`; macOS
@@ -38,6 +91,10 @@ pub enum DriverStatus {
     /// Linux: the udev rules file exists but could not be read to verify it
     /// (e.g. permission denied) — surfaced as a repairable state.
     UdevRulesNoPermission,
+    /// Kernel-driver mode: the Qualcomm kernel driver package is not present.
+    KernelDriverMissing,
+    /// Kernel-driver mode is selected on a host where LTBox cannot automate it.
+    KernelDriverUnsupported,
 }
 
 /// Result of comparing the locally-installed Qualcomm driver version
@@ -47,27 +104,29 @@ pub enum DriverStatus {
 /// "update available" banner.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DriverUpdate {
-    /// Dotted version parsed from the installed `qcserlib.inf` `DriverVer`.
+    /// Dotted version parsed from the selected installed driver package.
     pub current: String,
-    /// Dotted version parsed from the latest Windows release tag.
+    /// Dotted version parsed from the latest selected driver release tag.
     pub latest: String,
 }
 
 #[derive(thiserror::Error, Debug)]
 pub enum DriverError {
-    #[error("Not running on Windows — driver install is only supported on Windows")]
+    #[error("Driver install is not supported on this host")]
     NotWindows,
     // ureq has no thiserror-friendly root error, so collapse transport + status.
     #[error("Network error: {0}")]
     Http(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("Zip extraction error: {0}")]
+    Zip(#[from] zip::result::ZipError),
     /// GitHub release JSON could not be parsed.
     #[error("GitHub release parse error: {0}")]
     Parse(String),
-    /// The latest `qcom-usb-userspace-drivers` release shipped no signed
-    /// installer `.exe` for the host architecture.
-    #[error("No matching signed installer found in the latest release")]
+    /// The latest selected Qualcomm driver release shipped no installer
+    /// asset for the host architecture / package type.
+    #[error("No matching driver asset found in the latest release")]
     NoAsset,
     /// The user dismissed the elevation prompt (Windows UAC for the signed
     /// installer, or polkit for the Linux `pkexec --install-udev` call), so
@@ -77,7 +136,7 @@ pub enum DriverError {
     /// the only elevation step.
     #[error("Driver install was cancelled at the elevation prompt.")]
     InstallCancelled,
-    /// The signed installer `.exe` exited with a non-zero status.
+    /// The selected driver installer exited with a non-zero status.
     #[error("Driver installer exited with code {exit_code}.")]
     InstallerFailed { exit_code: i32 },
 }
@@ -90,14 +149,13 @@ impl From<ureq::Error> for DriverError {
 
 pub type Result<T> = std::result::Result<T, DriverError>;
 
-/// Best-effort reachability probe for the GitHub host LTBox downloads the
-/// Windows Qualcomm-driver installer from. Used to pre-disable the install /
-/// update buttons (with an "internet required" tooltip) instead of letting the
-/// user click into a download that can only fail. A short timeout keeps a dead
-/// network from stalling startup; any transport / non-2xx result reads as
-/// offline.
-#[cfg(windows)]
-pub fn probe_connectivity() -> bool {
+/// Best-effort reachability probe for the GitHub host LTBox downloads driver
+/// assets from. Used to pre-disable install / update buttons (with an
+/// "internet required" tooltip) instead of letting the user click into a
+/// download that can only fail. A short timeout keeps a dead network from
+/// stalling startup; any transport / non-2xx result reads as offline.
+#[cfg(any(windows, target_os = "linux"))]
+fn github_reachable() -> bool {
     // Bespoke agent: an 8s global timeout keeps a dead network from stalling
     // startup, so this probe does not reuse the shared pooled agent (which has
     // no global cap). It does reuse the shared user-agent string.
@@ -109,10 +167,23 @@ pub fn probe_connectivity() -> bool {
     agent.get("https://api.github.com/").call().is_ok()
 }
 
-/// The driver install / update buttons this gates only exist on Windows
-/// (Linux + macOS need no Qualcomm driver), so off-Windows this reports
-/// "reachable" immediately — no startup network round-trip to GitHub.
-#[cfg(not(windows))]
+#[cfg(windows)]
+pub fn probe_connectivity() -> bool {
+    github_reachable()
+}
+
+#[cfg(target_os = "linux")]
+pub fn probe_connectivity() -> bool {
+    if qcom_driver_mode().is_kernel() {
+        github_reachable()
+    } else {
+        true
+    }
+}
+
+/// macOS has no driver download path, so do not spend startup time probing
+/// GitHub just to gate a button that will never be shown.
+#[cfg(not(any(windows, target_os = "linux")))]
 pub fn probe_connectivity() -> bool {
     true
 }
@@ -156,6 +227,21 @@ pub(crate) fn classify_udev_rules(installed: Option<&str>) -> DriverStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn driver_mode_codes_round_trip() {
+        assert_eq!(QcomDriverMode::from_code("kernel"), QcomDriverMode::Kernel);
+        assert_eq!(
+            QcomDriverMode::from_code("userspace"),
+            QcomDriverMode::Userspace
+        );
+        assert_eq!(
+            QcomDriverMode::from_code("unknown"),
+            QcomDriverMode::Userspace
+        );
+        assert_eq!(QcomDriverMode::Kernel.code(), "kernel");
+        assert_eq!(QcomDriverMode::Userspace.code(), "userspace");
+    }
 
     #[test]
     fn classify_udev_rules_states() {

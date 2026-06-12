@@ -352,6 +352,7 @@ pub(crate) enum RebootMsg {
 pub(crate) enum SettingsMsg {
     SetLanguage(Language),
     SetThemeSeed(ThemeSeed),
+    SetQcomDriverMode(ltbox_device::driver::QcomDriverMode),
     SettingsPickDefaultLoader,
     SettingsDefaultLoaderChosen(Option<String>),
     SettingsClearDefaultLoader,

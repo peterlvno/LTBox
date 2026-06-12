@@ -119,6 +119,10 @@ pub struct PersistedSettings {
     /// before.
     #[serde(default)]
     pub default_loader_path: Option<String>,
+    /// Qualcomm USB driver family: "userspace" (default) or "kernel".
+    /// Unknown / missing values are normalized by the GUI when loaded.
+    #[serde(default = "default_qcom_driver_mode")]
+    pub qcom_driver_mode: String,
     /// Last window size (logical pixels) recorded on resize. Restored on
     /// next launch so the user's preferred geometry survives restarts.
     /// `None` on first run → the default 820×620 in `main` applies.
@@ -180,6 +184,10 @@ fn default_theme_seed() -> String {
     "indigo".to_string()
 }
 
+fn default_qcom_driver_mode() -> String {
+    "userspace".to_string()
+}
+
 impl Default for PersistedSettings {
     fn default() -> Self {
         Self {
@@ -189,6 +197,7 @@ impl Default for PersistedSettings {
             dark_mode: false,
             recent_paths: RecentPaths::default(),
             default_loader_path: None,
+            qcom_driver_mode: default_qcom_driver_mode(),
             window_size: None,
             qcom_driver_update_dismissed: false,
             dual_usb_advisory_dismissed_models: Vec::new(),
@@ -296,6 +305,7 @@ mod tests {
         assert_eq!(s.language, "en");
         assert_eq!(s.theme, "");
         assert_eq!(s.theme_seed, "indigo");
+        assert_eq!(s.qcom_driver_mode, "userspace");
         assert!(s.dark_mode);
     }
 

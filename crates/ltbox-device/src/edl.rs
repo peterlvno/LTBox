@@ -1,22 +1,19 @@
 //! EDL (Emergency Download) — Qualcomm 9008 USB device detection and
 //! session management (Sahara → Firehose configure → operations).
 //!
-//! Transport is `QdlBackend::Usb` (WinUSB stub on Windows via
-//! `qcom-usb-userspace-drivers` / libusb on Linux). The previous
-//! `QdlBackend::Serial` path went through the kernel-mode usbser COM
-//! port — upstream `qdl::serial` set no read/write timeout (literal
-//! `// TODO: timeouts?` in the source), so any device-side stall larger
-//! than the OS-default serial timeout punched through qdl's
-//! `firehose_program_storage` `.expect("Error sending data")` and aborted
-//! the whole flash mid-partition. `QdlBackend::Usb` sets explicit 10 s
-//! endpoint timeouts at the `nusb` layer so the same stall surfaces as a
-//! recoverable `io::Error` instead.
+//! Transport follows the configured Qualcomm driver mode:
+//!
+//! * userspace driver mode: `QdlBackend::Usb` (WinUSB stub on Windows via
+//!   `qcom-usb-userspace-drivers` / libusb-style access on Linux/macOS)
+//! * kernel driver mode: `QdlBackend::Serial` (Windows COM / Linux tty exposed
+//!   by `qcom-usb-kernel-drivers`)
 
 use std::io::{Cursor, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
+use crate::driver::{QcomDriverMode, qcom_driver_mode};
 use ltbox_core::i18n::tr;
 
 use qdl::types::{
@@ -114,8 +111,51 @@ pub fn find_edl_device() -> Result<String> {
     Err(EdlError::PortNotFound)
 }
 
+/// Scan for the Qualcomm 9008 serial port exposed by the kernel-driver mode.
+pub fn find_edl_port() -> Result<String> {
+    let ports = serialport::available_ports().map_err(|e| EdlError::Serial(e.to_string()))?;
+    for port in &ports {
+        if let serialport::SerialPortType::UsbPort(usb) = &port.port_type
+            && usb.vid == QUALCOMM_VID
+            && usb.pid == QUALCOMM_EDL_PID
+        {
+            return Ok(port.port_name.clone());
+        }
+    }
+    Err(EdlError::PortNotFound)
+}
+
 pub fn check_device() -> bool {
-    find_edl_device().is_ok()
+    match qcom_driver_mode() {
+        QcomDriverMode::Userspace => find_edl_device().is_ok(),
+        QcomDriverMode::Kernel => find_edl_port().is_ok(),
+    }
+}
+
+fn serial_open_error_hint(port: &str, err: &anyhow::Error) -> String {
+    let raw = err.to_string();
+    let lower = raw.to_ascii_lowercase();
+    let base = format!("Transport setup failed: {raw}");
+
+    #[cfg(target_os = "linux")]
+    {
+        let busy = lower.contains("resource busy")
+            || lower.contains("device or resource busy")
+            || lower.contains("os error 16");
+        let denied = lower.contains("permission denied") || lower.contains("os error 13");
+        if busy {
+            return format!(
+                "{base}\nhint: another process is holding {port}. Re-plug the device after installing the Qualcomm kernel driver, or stop ModemManager temporarily."
+            );
+        }
+        if denied {
+            return format!(
+                "{base}\nhint: the desktop user cannot open {port}. Check udev/group permissions or run the kernel-driver install again."
+            );
+        }
+    }
+    let _ = (&lower, port);
+    base
 }
 
 /// Wait for a stable EDL port after a reset. Two phases:
@@ -182,10 +222,14 @@ where
     Err(EdlError::PortTimeout(timeout))
 }
 
-fn wait_for_stable_port() -> Result<String> {
+fn wait_for_stable_port(mode: QcomDriverMode) -> Result<String> {
     let deadline = Instant::now() + EDL_SESSION_OPEN_TIMEOUT;
+    let finder: fn() -> Result<String> = match mode {
+        QcomDriverMode::Userspace => find_edl_device,
+        QcomDriverMode::Kernel => find_edl_port,
+    };
     wait_for_stable_port_with(
-        find_edl_device,
+        finder,
         std::thread::sleep,
         move || Instant::now() >= deadline,
         EDL_SESSION_OPEN_TIMEOUT,
@@ -198,7 +242,7 @@ fn wait_for_stable_port() -> Result<String> {
 /// `controller.rs`; the underlying transport just moved from a COM port
 /// name to a libusb VID/PID marker.
 pub fn wait_for_device() -> Result<String> {
-    wait_for_stable_port()
+    wait_for_stable_port(qcom_driver_mode())
 }
 
 /// One partition entry surfaced by [`EdlSession::scan_partitions`].
@@ -248,9 +292,18 @@ impl EdlSession {
     /// recursive drop-time reset stack overflow. Call [`EdlSession::reset`]
     /// explicitly on the happy path.
     pub fn open(loader_path: &Path, auto_reset: bool, log: &mut Vec<String>) -> Result<Self> {
+        Self::open_with_mode(loader_path, auto_reset, log, qcom_driver_mode())
+    }
+
+    pub fn open_with_mode(
+        loader_path: &Path,
+        auto_reset: bool,
+        log: &mut Vec<String>,
+        mode: QcomDriverMode,
+    ) -> Result<Self> {
         let _ = auto_reset;
         ltbox_core::live!(log, "[EDL] {}", tr("log_edl_scanning"));
-        let port = wait_for_stable_port()?;
+        let port = wait_for_stable_port(mode)?;
         // `port` is now a libusb marker string ("USB:VID_05C6&PID_9008"),
         // not a COM port name — the log line wording is generic enough
         // ("found on …") that the swap doesn't require an i18n update.
@@ -321,15 +374,24 @@ impl EdlSession {
             };
 
         ltbox_core::live!(log, "[EDL] {}", tr("log_edl_transport_setup"));
-        // `QdlBackend::Usb` — see module-level doc for the rationale on
-        // migrating off the Serial COM-port path. `setup_target_device`
-        // discovers the device via libusb (VID 05C6 + PID 9008 / 900E)
-        // and claims the bulk-in / bulk-out endpoints with explicit
-        // 10 s read + write timeouts; no port name or serial number is
-        // required when only one EDL device is plugged in.
-        let _ = &port; // port marker retained for logging only
-        let rw = qdl::setup_target_device(QdlBackend::Usb, None, None)
-            .map_err(|e| EdlError::Session(format!("Transport setup failed: {e}")))?;
+        let backend = match mode {
+            QcomDriverMode::Userspace => QdlBackend::Usb,
+            QcomDriverMode::Kernel => QdlBackend::Serial,
+        };
+        let rw = match mode {
+            QcomDriverMode::Userspace => qdl::setup_target_device(backend, None, None)
+                .map_err(|e| EdlError::Session(format!("Transport setup failed: {e}")))?,
+            QcomDriverMode::Kernel => {
+                match qdl::setup_target_device(backend, None, Some(port.clone())) {
+                    Ok(rw) => rw,
+                    Err(e) => {
+                        let msg = serial_open_error_hint(&port, &e);
+                        ltbox_core::live!(log, "[EDL] {msg}");
+                        return Err(EdlError::Session(msg));
+                    }
+                }
+            }
+        };
 
         let mut dev = QdlDevice {
             rw,
@@ -337,7 +399,7 @@ impl EdlSession {
                 storage_type: FirehoseStorageType::Ufs,
                 storage_sector_size: 4096,
                 bypass_storage: false,
-                backend: QdlBackend::Usb,
+                backend,
                 skip_firehose_log: true,
                 verbose_firehose: false,
                 ..Default::default()

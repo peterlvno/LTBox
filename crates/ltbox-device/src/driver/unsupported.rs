@@ -5,10 +5,14 @@
 //! returns a no-op so the GUI's driver banner never fires and the install
 //! button stays inert.
 
-use super::{DriverError, DriverStatus, DriverUpdate, Result};
+use super::{DriverError, DriverStatus, DriverUpdate, Result, qcom_driver_mode};
 
 pub fn check_required_drivers() -> DriverStatus {
-    DriverStatus::NotWindows
+    if qcom_driver_mode().is_kernel() {
+        DriverStatus::KernelDriverUnsupported
+    } else {
+        DriverStatus::NotWindows
+    }
 }
 
 pub fn check_driver_update() -> Option<DriverUpdate> {

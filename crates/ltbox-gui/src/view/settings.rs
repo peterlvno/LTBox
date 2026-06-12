@@ -100,6 +100,83 @@ impl App {
         ]
         .align_y(iced::Alignment::Center);
 
+        let driver_userspace = self.t("settings_qcom_driver_mode_userspace").to_string();
+        let driver_kernel = self.t("settings_qcom_driver_mode_kernel").to_string();
+        let current_driver_label = match self.qcom_driver_mode {
+            ltbox_device::driver::QcomDriverMode::Userspace => driver_userspace.clone(),
+            ltbox_device::driver::QcomDriverMode::Kernel => driver_kernel.clone(),
+        };
+        let driver_help_key = if cfg!(target_os = "macos") {
+            "settings_qcom_driver_mode_macos"
+        } else {
+            "settings_qcom_driver_mode_help"
+        };
+        let driver_help_icon = widget::tooltip(
+            container(text("?").size(11).style(label_style))
+                .padding([2, 6])
+                .style(|t: &Theme| {
+                    let p = pal_of(t);
+                    container::Style {
+                        background: Some(with_alpha(p.on_surface_variant, 0.10).into()),
+                        border: iced::Border {
+                            radius: theme::shape::FULL.into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }
+                }),
+            container(text(self.t(driver_help_key).to_string()).size(11))
+                .padding([6, 10])
+                .max_width(280)
+                .style(|t: &Theme| theme::tooltip_style(t, theme::shape::SM)),
+            widget::tooltip::Position::Right,
+        );
+        let driver_control: Element<'_, Message> = if self.busy || cfg!(target_os = "macos") {
+            container(text(current_driver_label).size(13).style(muted_style))
+                .padding([7, 12])
+                .width(160)
+                .style(|t: &Theme| {
+                    let p = pal_of(t);
+                    container::Style {
+                        background: Some(with_alpha(p.on_surface_variant, 0.06).into()),
+                        border: iced::Border {
+                            color: p.outline_variant,
+                            width: 1.0,
+                            radius: theme::shape::XS.into(),
+                        },
+                        ..Default::default()
+                    }
+                })
+                .into()
+        } else {
+            let driver_kernel_for_pick = driver_kernel.clone();
+            widget::pick_list(
+                vec![driver_userspace, driver_kernel],
+                Some(current_driver_label),
+                move |selected| {
+                    let mode = if selected == driver_kernel_for_pick {
+                        ltbox_device::driver::QcomDriverMode::Kernel
+                    } else {
+                        ltbox_device::driver::QcomDriverMode::Userspace
+                    };
+                    Message::Settings(SettingsMsg::SetQcomDriverMode(mode))
+                },
+            )
+            .text_size(13)
+            .style(m3_pick_list_style)
+            .menu_style(m3_pick_list_menu_style)
+            .width(160)
+            .into()
+        };
+        let driver_label = row![
+            text(self.t("settings_qcom_driver_mode").to_string()).size(13),
+            driver_help_icon,
+        ]
+        .spacing(6)
+        .align_y(iced::Alignment::Center)
+        .width(Length::Fill);
+        let driver_row = row![driver_label, driver_control].align_y(iced::Alignment::Center);
+
         // Default EDL loader used to auto-fill loader pickers.
         let default_loader_help = self.t("settings_default_loader_help").to_string();
         let help_icon = widget::tooltip(
@@ -237,15 +314,21 @@ impl App {
         .spacing(6);
 
         let prefs_card = container(
-            column![lang_row, theme_row, seed_row, default_loader_row,]
-                .spacing(14)
-                .padding(iced::Padding {
-                    top: 14.0,
-                    right: 18.0,
-                    bottom: 14.0,
-                    left: 18.0,
-                })
-                .width(Length::Fill),
+            column![
+                lang_row,
+                theme_row,
+                seed_row,
+                driver_row,
+                default_loader_row,
+            ]
+            .spacing(14)
+            .padding(iced::Padding {
+                top: 14.0,
+                right: 18.0,
+                bottom: 14.0,
+                left: 18.0,
+            })
+            .width(Length::Fill),
         )
         .width(Length::Fill)
         .style(|t: &Theme| {

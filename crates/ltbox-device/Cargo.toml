@@ -15,7 +15,9 @@ adb_client = { workspace = true }
 rsa = { workspace = true }
 nusb = { workspace = true }
 pollster = { workspace = true }
+serialport = { workspace = true }
 ureq = { workspace = true }
 roxmltree = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+zip = { workspace = true }

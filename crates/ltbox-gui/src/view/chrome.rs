@@ -579,35 +579,54 @@ impl App {
     pub(crate) fn driver_warning_banner(&self) -> Element<'_, Message> {
         use ltbox_device::driver::DriverStatus;
         let installing = self.installing_drivers;
-        // Per-state copy. The Windows driver install downloads from GitHub
-        // (network required); the Linux udev-rules install is a local pkexec
-        // call, so it is never gated on connectivity.
-        let (title_key, desc_key, install_key, needs_network) = match self.driver_status {
-            Some(DriverStatus::UdevRulesMissing) => (
-                "driver_udev_missing_title",
-                "driver_udev_missing_desc",
-                "driver_udev_install_btn",
-                false,
-            ),
-            Some(DriverStatus::UdevRulesStale) => (
-                "driver_udev_stale_title",
-                "driver_udev_stale_desc",
-                "driver_udev_install_btn",
-                false,
-            ),
-            Some(DriverStatus::UdevRulesNoPermission) => (
-                "driver_udev_noperm_title",
-                "driver_udev_noperm_desc",
-                "driver_udev_install_btn",
-                false,
-            ),
-            _ => (
-                "driver_missing_title",
-                "driver_missing_desc",
-                "driver_install_btn",
-                true,
-            ),
-        };
+        // Per-state copy. Windows drivers and Linux kernel-driver packages
+        // download from GitHub (network required); Linux udev-rules install is
+        // a local pkexec call. Unsupported states show copy only, no action.
+        let (title_key, desc_key, install_key, needs_network, can_install) =
+            match self.driver_status {
+                Some(DriverStatus::UdevRulesMissing) => (
+                    "driver_udev_missing_title",
+                    "driver_udev_missing_desc",
+                    "driver_udev_install_btn",
+                    false,
+                    true,
+                ),
+                Some(DriverStatus::UdevRulesStale) => (
+                    "driver_udev_stale_title",
+                    "driver_udev_stale_desc",
+                    "driver_udev_install_btn",
+                    false,
+                    true,
+                ),
+                Some(DriverStatus::UdevRulesNoPermission) => (
+                    "driver_udev_noperm_title",
+                    "driver_udev_noperm_desc",
+                    "driver_udev_install_btn",
+                    false,
+                    true,
+                ),
+                Some(DriverStatus::KernelDriverMissing) => (
+                    "driver_kernel_missing_title",
+                    "driver_kernel_missing_desc",
+                    "driver_install_btn",
+                    true,
+                    true,
+                ),
+                Some(DriverStatus::KernelDriverUnsupported) => (
+                    "driver_kernel_unsupported_title",
+                    "driver_kernel_unsupported_desc",
+                    "driver_install_btn",
+                    false,
+                    false,
+                ),
+                _ => (
+                    "driver_missing_title",
+                    "driver_missing_desc",
+                    "driver_install_btn",
+                    true,
+                    true,
+                ),
+            };
         let offline = needs_network && self.online == Some(false);
         let btn_label = if installing {
             self.t("driver_installing_btn").to_string()
@@ -623,17 +642,21 @@ impl App {
         let btn_label_text = text(btn_label)
             .size(theme::text_size::LABEL_LARGE)
             .wrapping(iced::widget::text::Wrapping::None);
-        let mut btn = button(btn_label_text)
-            .padding([8, 18])
-            .style(md_filled_btn_style);
-        // Offline → the fetch can only fail, so disable + explain on hover.
-        if !installing && !offline {
-            btn = btn.on_press(Message::InstallDrivers);
-        }
-        let action: Element<'_, Message> = if offline {
-            self.needs_internet_tooltip(btn)
+        let action: Element<'_, Message> = if can_install {
+            let mut btn = button(btn_label_text)
+                .padding([8, 18])
+                .style(md_filled_btn_style);
+            // Offline → the fetch can only fail, so disable + explain on hover.
+            if !installing && !offline {
+                btn = btn.on_press(Message::InstallDrivers);
+            }
+            if offline {
+                self.needs_internet_tooltip(btn)
+            } else {
+                btn.into()
+            }
         } else {
-            btn.into()
+            Space::new().width(0).into()
         };
 
         // `body` fills the remainder via `Length::Fill` so the button

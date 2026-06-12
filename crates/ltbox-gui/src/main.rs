@@ -1961,6 +1961,20 @@ fn edl_entry_action(conn: ConnectionStatus) -> EdlEntryAction {
     }
 }
 
+fn effective_qcom_driver_mode(
+    mode: ltbox_device::driver::QcomDriverMode,
+) -> ltbox_device::driver::QcomDriverMode {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = mode;
+        ltbox_device::driver::QcomDriverMode::Userspace
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        mode
+    }
+}
+
 struct App {
     window_id: Option<iced::window::Id>,
     current_view: View,
@@ -2065,6 +2079,7 @@ struct App {
     recent_paths: settings_store::RecentPaths,
     /// When set, every loader picker bypasses to this path. Re-validated at exec.
     default_loader_path: Option<String>,
+    qcom_driver_mode: ltbox_device::driver::QcomDriverMode,
     log_lines: Vec<String>,
     /// Selectable mirror of `log_lines`. Rebuilt on drain tick when `log_dirty`
     /// — batched to keep a long pbr flash from crashing wgpu.
@@ -2180,6 +2195,10 @@ impl Default for App {
             }
         });
         let theme_seed = ThemeSeed::from_code(&persisted.theme_seed).unwrap_or_default();
+        let qcom_driver_mode = effective_qcom_driver_mode(
+            ltbox_device::driver::QcomDriverMode::from_code(&persisted.qcom_driver_mode),
+        );
+        ltbox_device::driver::set_qcom_driver_mode(qcom_driver_mode);
         let dark_mode = match theme_choice {
             ThemeChoice::Light => false,
             ThemeChoice::Dark => true,
@@ -2242,6 +2261,7 @@ impl Default for App {
             busy_view: None,
             recent_paths: persisted.recent_paths.clone(),
             default_loader_path: persisted.default_loader_path.clone(),
+            qcom_driver_mode,
             log_lines: vec![ready_log.clone()],
             log_editor: iced::widget::text_editor::Content::with_text(&ready_log),
             log_dirty: false,
@@ -2955,6 +2975,7 @@ impl App {
             dark_mode: self.dark_mode,
             recent_paths: self.recent_paths.clone(),
             default_loader_path: self.default_loader_path.clone(),
+            qcom_driver_mode: self.qcom_driver_mode.code().to_string(),
             window_size: Some(self.window_size),
             qcom_driver_update_dismissed: self.qcom_driver_update_dismissed,
             dual_usb_advisory_dismissed_models: self.dual_usb_advisory_dismissed.clone(),
