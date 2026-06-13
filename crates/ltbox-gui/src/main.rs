@@ -313,6 +313,30 @@ fn main() -> iced::Result {
         }
     }
 
+    // Windows renderer default. Left to itself, wgpu may pick its OpenGL
+    // backend, which on hybrid laptops routes through the integrated GPU's
+    // OpenGL ICD (e.g. AMD's `atio6axx.dll`) — a fragile path that crashes
+    // with an access violation (c0000005) on some driver/GPU combos. DX12 is
+    // the native, robust path on Windows 10+ (including AMD/Intel iGPUs) and
+    // covers this UI fully, so default the wgpu backend to DX12 when the user
+    // hasn't picked one. The software renderer stays reachable via
+    // `ICED_BACKEND=tiny-skia` for hosts with broken GPU drivers; override the
+    // backend anytime, e.g. `WGPU_BACKEND=vulkan ltbox.exe`.
+    #[cfg(target_os = "windows")]
+    {
+        // Treat a var as set only when non-empty (an empty value reads as
+        // unset), matching the Linux branch above.
+        let backend_chosen = std::env::var_os("WGPU_BACKEND").is_some_and(|v| !v.is_empty());
+        if !backend_chosen {
+            // SAFETY: still in the first statements of `main`, before the
+            // stdout tap, tracing, tokio, or iced spawn any threads — the
+            // process is single-threaded as `set_var` requires.
+            unsafe {
+                std::env::set_var("WGPU_BACKEND", "dx12");
+            }
+        }
+    }
+
     // Pre-iced CLI subcommands. Each handler exits the process so
     // the iced setup path runs only when no subcommand fires. Kept
     // tiny + dep-free (no `clap`) — there's exactly one flag and it

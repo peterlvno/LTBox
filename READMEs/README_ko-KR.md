@@ -75,6 +75,18 @@ LTBox는 사이드바 중심의 데스크톱 GUI입니다. 각 항목을 열면 
 
 ---
 
+## 🛠️ 문제 해결
+
+**실행 시 크래시 / 빈 창 (Windows, 하이브리드 GPU 노트북).** 이제 LTBox는 불안정한 OpenGL GPU 드라이버 크래시를 피하기 위해 DirectX 12 렌더러를 기본값으로 사용합니다. 그래도 실행되지 않으면 소프트웨어 안전 모드로 실행하세요:
+
+```powershell
+$env:ICED_BACKEND = "tiny-skia"; .\ltbox.exe
+```
+
+특정 GPU 백엔드를 강제하려면 `WGPU_BACKEND`를 설정하세요(예: `vulkan`, `gl`, `dx12`).
+
+---
+
 ## 🙏 크레딧
 
 - **익명의 [ㅇㅇ](https://gall.dcinside.com/board/lists?id=tabletpc)**

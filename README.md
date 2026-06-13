@@ -75,6 +75,18 @@ LTBox is a sidebar-driven desktop GUI; each entry opens a guided wizard.
 
 ---
 
+## 🛠️ Troubleshooting
+
+**Crashes on launch / blank window (Windows, hybrid-GPU laptops).** LTBox now defaults to the DirectX 12 renderer to avoid fragile OpenGL GPU-driver crashes. If it still won't start, launch in software safe-mode:
+
+```powershell
+$env:ICED_BACKEND = "tiny-skia"; .\ltbox.exe
+```
+
+To force a specific GPU backend instead, set `WGPU_BACKEND` (e.g. `vulkan`, `gl`, `dx12`).
+
+---
+
 ## 🙏 Credits
 
 - **Anonymous [ㅇㅇ](https://gall.dcinside.com/board/lists?id=tabletpc)**
