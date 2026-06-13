@@ -26,6 +26,13 @@ struct WindowsDriverSpec {
     releases_api: &'static str,
     required_infs: &'static [&'static str],
     version_inf: &'static str,
+    /// Add/Remove Programs `DisplayName` of the installed package. Set only
+    /// when the driver's INF `DriverVer` lives in a different version namespace
+    /// than the GitHub release tag, so the update check must read the
+    /// `DisplayVersion` from the uninstall registry to compare like-for-like.
+    /// `None` → the INF `DriverVer` is already in the tag's namespace and is
+    /// used directly. Presence detection always uses the INF, regardless.
+    uninstall_display_name: Option<&'static str>,
     asset_x64: &'static str,
     asset_arm64: &'static str,
     asset_x86: &'static str,
@@ -35,6 +42,9 @@ const USERSPACE_SPEC: WindowsDriverSpec = WindowsDriverSpec {
     releases_api: "https://api.github.com/repos/qualcomm/qcom-usb-userspace-drivers/releases?per_page=10",
     required_infs: &["qcserlib.inf"],
     version_inf: "qcserlib.inf",
+    // The userspace `qcserlib.inf` DriverVer matches the release tag version,
+    // so the INF is a valid update-comparison source.
+    uninstall_display_name: None,
     asset_x64: "qcom_usb_userspace_drivers_x64.exe",
     asset_arm64: "qcom_usb_userspace_drivers_arm64.exe",
     asset_x86: "qcom_usb_userspace_drivers_x86.exe",
@@ -44,6 +54,12 @@ const KERNEL_SPEC: WindowsDriverSpec = WindowsDriverSpec {
     releases_api: "https://api.github.com/repos/qualcomm/qcom-usb-kernel-drivers/releases?per_page=10",
     required_infs: &["qcwdfser.inf"],
     version_inf: "qcwdfser.inf",
+    // The kernel `qcwdfser.inf` DriverVer (e.g. "1.0.3.6") is a different
+    // namespace than the QUD release tag / package version (e.g. "1.00.94.6"),
+    // so comparing the two always reports an update. The installer registers
+    // the QUD package version under this Add/Remove Programs name; read it for
+    // a like-for-like comparison instead.
+    uninstall_display_name: Some("Qualcomm USB Kernel Drivers"),
     asset_x64: "qcom_usb_kernel_drivers_x64.exe",
     asset_arm64: "qcom_usb_kernel_drivers_arm64.exe",
     asset_x86: "qcom_usb_kernel_drivers_x86.exe",
@@ -319,12 +335,58 @@ fn parse_driver_ver(inf_text: &str) -> Option<String> {
     None
 }
 
-/// Highest `DriverVer` among installed `qcserlib.inf` DriverStore copies,
-/// or `None` when the driver is not installed. Windows may stage several
-/// `qcserlib.inf_*` folders (multiple versions); the max is the effective
-/// one for an update comparison.
+/// Installed driver version for the active mode, in the same version namespace
+/// as [`version_from_tag`], or `None` when the driver is not installed / the
+/// version is unparseable (which collapses the update check to no banner).
+///
+/// Userspace reads the INF `DriverVer` directly; kernel reads the QUD package
+/// `DisplayVersion` from the uninstall registry, because the kernel INF version
+/// is a different namespace than the release tag (see [`KERNEL_SPEC`]).
 pub fn installed_driver_version() -> Option<String> {
     let spec = driver_spec(qcom_driver_mode());
+    match spec.uninstall_display_name {
+        Some(name) => installed_version_from_registry(name),
+        None => installed_inf_driver_version(spec),
+    }
+}
+
+/// Read the installed package `DisplayVersion` from the Windows "Add/Remove
+/// Programs" (uninstall) registry by matching `display_name` across the 64-bit,
+/// 32-bit (`WOW6432Node`), and per-user hives. Returns `None` when the package
+/// is not registered or its version is unparseable. PowerShell is reused here
+/// (as for the elevated installer) to avoid a registry-crate dependency.
+fn installed_version_from_registry(display_name: &str) -> Option<String> {
+    // Escape for a PowerShell single-quoted literal (`'` → `''`). The names are
+    // static constants without quotes, but escape defensively.
+    let needle = display_name.replace('\'', "''");
+    let script = format!(
+        "$ErrorActionPreference='SilentlyContinue'; \
+         $p=@('HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',\
+         'HKLM:\\SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*',\
+         'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'); \
+         $v=Get-ItemProperty $p | Where-Object {{ $_.DisplayName -eq '{needle}' }} | \
+         Select-Object -First 1 -ExpandProperty DisplayVersion; \
+         if ($v) {{ [Console]::Out.Write($v) }}"
+    );
+    let out = silent_command("powershell")
+        .arg("-NoProfile")
+        .arg("-NonInteractive")
+        .arg("-Command")
+        .arg(&script)
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let version = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    parse_version(&version).is_some().then_some(version)
+}
+
+/// Highest `DriverVer` among installed `version_inf` DriverStore copies,
+/// or `None` when the driver is not installed. Windows may stage several
+/// `*.inf_*` folders (multiple versions); the max is the effective
+/// one for an update comparison.
+fn installed_inf_driver_version(spec: WindowsDriverSpec) -> Option<String> {
     let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
     let repo = Path::new(&system_root)
         .join("System32")
@@ -587,6 +649,32 @@ mod tests {
             parse_driver_ver("DriverVer=\"09/27/2023,1.0.2.0\"").as_deref(),
             Some("1.0.2.0")
         );
+    }
+
+    /// The kernel driver compares the QUD package version (uninstall-registry
+    /// `DisplayVersion`); the userspace driver compares the INF `DriverVer`.
+    #[test]
+    fn only_kernel_spec_uses_uninstall_registry() {
+        assert_eq!(
+            KERNEL_SPEC.uninstall_display_name,
+            Some("Qualcomm USB Kernel Drivers")
+        );
+        assert_eq!(USERSPACE_SPEC.uninstall_display_name, None);
+    }
+
+    /// Regression: the kernel INF `DriverVer` ("1.0.3.6") and the QUD release
+    /// tag ("1.00.94.6") are different namespaces, so the old INF-vs-tag
+    /// comparison always reported an update. Comparing the registry
+    /// `DisplayVersion` (same namespace as the tag) clears the false banner.
+    #[test]
+    fn kernel_version_namespaces_do_not_mix() {
+        // Old, broken comparison: INF DriverVer vs QUD tag → always "older".
+        assert!(version_lt("1.0.3.6", "1.00.94.6"));
+        // Fixed comparison: installed QUD version vs latest QUD tag.
+        assert!(!version_lt("1.00.94.6", "1.00.94.6"));
+        assert!(version_lt("1.00.94.6", "1.00.94.7"));
+        // Leading zeros in the QUD scheme parse numerically (`00` == 0).
+        assert!(!version_lt("1.00.94.6", "1.0.94.6"));
     }
 
     #[test]
