@@ -1985,16 +1985,17 @@ fn edl_entry_action(conn: ConnectionStatus) -> EdlEntryAction {
     }
 }
 
+/// Clamp a requested driver mode to what the host can actually use. Kernel mode
+/// is forced back to userspace where it is unsupported (macOS, and non-Debian
+/// Linux without `dpkg-query`), so a persisted/stale `kernel` value or a UI race
+/// can never leave the app in an unusable kernel state. Mirrors the Settings
+/// picker lock in `view::settings`.
 fn effective_qcom_driver_mode(
     mode: ltbox_device::driver::QcomDriverMode,
 ) -> ltbox_device::driver::QcomDriverMode {
-    #[cfg(target_os = "macos")]
-    {
-        let _ = mode;
+    if mode.is_kernel() && !ltbox_device::driver::kernel_mode_supported() {
         ltbox_device::driver::QcomDriverMode::Userspace
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
+    } else {
         mode
     }
 }

@@ -816,6 +816,7 @@
   "settings_qcom_driver_mode": "퀄컴 USB 드라이버",
   "settings_qcom_driver_mode_help": "전환하면 선택한 드라이버를 설치하고 EDL에 해당 전송 방식을 사용합니다.",
   "settings_qcom_driver_mode_kernel": "커널",
+  "settings_qcom_driver_mode_linux_unsupported": "퀄컴 커널 드라이버는 데비안 계열 리눅스에서만 지원되어, 여기서는 유저스페이스 모드만 사용할 수 있습니다.",
   "settings_qcom_driver_mode_macos": "macOS에는 퀄컴 커널 드라이버가 없어 유저스페이스 모드만 사용합니다.",
   "settings_qcom_driver_mode_userspace": "유저스페이스",
   "settings_theme": "테마",

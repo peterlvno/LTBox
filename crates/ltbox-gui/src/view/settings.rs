@@ -106,8 +106,16 @@ impl App {
             ltbox_device::driver::QcomDriverMode::Userspace => driver_userspace.clone(),
             ltbox_device::driver::QcomDriverMode::Kernel => driver_kernel.clone(),
         };
+        // Kernel mode is unusable on macOS and on non-Debian Linux (no
+        // `dpkg-query`); there the picker is locked to userspace and the help
+        // text explains why.
+        let kernel_mode_supported = ltbox_device::driver::kernel_mode_supported();
         let driver_help_key = if cfg!(target_os = "macos") {
             "settings_qcom_driver_mode_macos"
+        } else if !kernel_mode_supported {
+            // Reachable only on non-Debian Linux — Windows and Debian Linux
+            // support kernel mode, macOS is handled above.
+            "settings_qcom_driver_mode_linux_unsupported"
         } else {
             "settings_qcom_driver_mode_help"
         };
@@ -131,7 +139,7 @@ impl App {
                 .style(|t: &Theme| theme::tooltip_style(t, theme::shape::SM)),
             widget::tooltip::Position::Right,
         );
-        let driver_control: Element<'_, Message> = if self.busy || cfg!(target_os = "macos") {
+        let driver_control: Element<'_, Message> = if self.busy || !kernel_mode_supported {
             container(text(current_driver_label).size(13).style(muted_style))
                 .padding([7, 12])
                 .width(160)

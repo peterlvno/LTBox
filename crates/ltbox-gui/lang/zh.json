@@ -816,6 +816,7 @@
   "settings_qcom_driver_mode": "Qualcomm USB 驱动",
   "settings_qcom_driver_mode_help": "切换后会安装所选驱动系列，并在 EDL 中使用对应传输方式。",
   "settings_qcom_driver_mode_kernel": "内核",
+  "settings_qcom_driver_mode_linux_unsupported": "Qualcomm 内核驱动仅支持基于 Debian 的 Linux 发行版，因此此处只能使用用户空间模式。",
   "settings_qcom_driver_mode_macos": "macOS 没有 Qualcomm 内核驱动，因此始终使用用户空间模式。",
   "settings_qcom_driver_mode_userspace": "用户空间",
   "settings_theme": "主题",

@@ -816,6 +816,7 @@
   "settings_qcom_driver_mode": "Qualcomm USB driver",
   "settings_qcom_driver_mode_help": "Switching installs the selected driver family and uses that transport for EDL.",
   "settings_qcom_driver_mode_kernel": "Kernel",
+  "settings_qcom_driver_mode_linux_unsupported": "The Qualcomm kernel driver requires a Debian-based Linux distribution, so only userspace mode is available here.",
   "settings_qcom_driver_mode_macos": "macOS has no Qualcomm kernel driver, so userspace mode is always used.",
   "settings_qcom_driver_mode_userspace": "Userspace",
   "settings_theme": "Theme",

@@ -816,6 +816,7 @@
   "settings_qcom_driver_mode": "Qualcomm USBドライバ",
   "settings_qcom_driver_mode_help": "切り替えると、選択したドライバ系統をインストールし、EDLでその転送方式を使います。",
   "settings_qcom_driver_mode_kernel": "カーネル",
+  "settings_qcom_driver_mode_linux_unsupported": "QualcommカーネルドライバはDebian系Linuxでのみ利用できるため、ここではユーザースペースモードのみ使用できます。",
   "settings_qcom_driver_mode_macos": "macOSにはQualcommカーネルドライバがないため、常にユーザースペースモードを使います。",
   "settings_qcom_driver_mode_userspace": "ユーザースペース",
   "settings_theme": "テーマ",

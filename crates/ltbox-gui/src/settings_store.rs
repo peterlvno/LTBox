@@ -192,9 +192,9 @@ fn default_theme_seed() -> String {
 /// (signed kernel driver) and Debian-style Linux (`dpkg-query` present, so the
 /// `qud` package install path works). Other Linux distros and macOS have no
 /// usable kernel-driver path, so they default to `"userspace"`/udev. See
-/// [`ltbox_device::driver::kernel_default_supported`].
+/// [`ltbox_device::driver::kernel_mode_supported`].
 fn default_qcom_driver_mode() -> String {
-    if ltbox_device::driver::kernel_default_supported() {
+    if ltbox_device::driver::kernel_mode_supported() {
         "kernel".to_string()
     } else {
         "userspace".to_string()

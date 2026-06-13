@@ -816,6 +816,7 @@
   "settings_qcom_driver_mode": "Драйвер Qualcomm USB",
   "settings_qcom_driver_mode_help": "При переключении устанавливается выбранное семейство драйверов, и EDL использует этот транспорт.",
   "settings_qcom_driver_mode_kernel": "Ядро",
+  "settings_qcom_driver_mode_linux_unsupported": "Драйвер ядра Qualcomm поддерживается только в Linux на базе Debian, поэтому здесь доступен только userspace-режим.",
   "settings_qcom_driver_mode_macos": "Для macOS нет драйвера ядра Qualcomm, поэтому всегда используется userspace-режим.",
   "settings_qcom_driver_mode_userspace": "Userspace",
   "settings_theme": "Тема",
