@@ -151,7 +151,7 @@ impl App {
         } else {
             let driver_kernel_for_pick = driver_kernel.clone();
             widget::pick_list(
-                vec![driver_userspace, driver_kernel],
+                vec![driver_kernel, driver_userspace],
                 Some(current_driver_label),
                 move |selected| {
                     let mode = if selected == driver_kernel_for_pick {

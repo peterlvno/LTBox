@@ -448,6 +448,13 @@ fn which_pkexec() -> Option<std::path::PathBuf> {
     which_program("pkexec")
 }
 
+/// Whether `dpkg-query` is on `PATH` — the signal that this Linux host is
+/// Debian-style and can use the Qualcomm kernel driver. Mirrors the gate in
+/// [`check_kernel_driver`] and backs [`super::kernel_default_supported`].
+pub(super) fn dpkg_available() -> bool {
+    which_program("dpkg-query").is_some()
+}
+
 fn which_program(name: &str) -> Option<std::path::PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path)

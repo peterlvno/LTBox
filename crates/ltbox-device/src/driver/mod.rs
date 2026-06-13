@@ -22,9 +22,11 @@ use std::sync::atomic::{AtomicU8, Ordering};
 
 /// Qualcomm USB driver family LTBox should use for EDL.
 ///
-/// `Userspace` is the current/default path: WinUSB on Windows and direct USB
-/// plus udev rules on Linux. `Kernel` uses Qualcomm's kernel driver packages
-/// and the qdl serial backend, so it is unavailable on macOS.
+/// `Userspace` uses WinUSB on Windows and direct USB plus udev rules on Linux.
+/// `Kernel` uses Qualcomm's kernel driver packages and the qdl serial backend,
+/// so it is unavailable on macOS. Windows and Debian-style Linux default to
+/// `Kernel` (see [`kernel_default_supported`]); other Linux distros and macOS
+/// default to / are forced to `Userspace`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum QcomDriverMode {
     #[default]
@@ -49,6 +51,27 @@ impl QcomDriverMode {
 
     pub const fn is_kernel(self) -> bool {
         matches!(self, Self::Kernel)
+    }
+}
+
+/// Whether the Qualcomm kernel driver is a viable *default* on this host, used
+/// to pick the first-run driver mode. Windows ships the signed kernel driver;
+/// Linux only automates the kernel-driver (`qud`) install on Debian-style hosts
+/// where `dpkg-query` exists, so non-Debian distros keep the working
+/// userspace/udev default; macOS has no kernel driver at all. Mirrors the
+/// support gate in the Linux backend's `check_kernel_driver`.
+pub fn kernel_default_supported() -> bool {
+    #[cfg(windows)]
+    {
+        true
+    }
+    #[cfg(target_os = "linux")]
+    {
+        self::linux::dpkg_available()
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        false
     }
 }
 

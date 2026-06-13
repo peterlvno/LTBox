@@ -119,8 +119,10 @@ pub struct PersistedSettings {
     /// before.
     #[serde(default)]
     pub default_loader_path: Option<String>,
-    /// Qualcomm USB driver family: "userspace" (default) or "kernel".
-    /// Unknown / missing values are normalized by the GUI when loaded.
+    /// Qualcomm USB driver family: "userspace" or "kernel". Defaults to
+    /// "kernel" on Windows and Linux, "userspace" elsewhere (see
+    /// [`default_qcom_driver_mode`]). Unknown / missing values are normalized
+    /// by the GUI when loaded.
     #[serde(default = "default_qcom_driver_mode")]
     pub qcom_driver_mode: String,
     /// Last window size (logical pixels) recorded on resize. Restored on
@@ -184,8 +186,19 @@ fn default_theme_seed() -> String {
     "indigo".to_string()
 }
 
+/// Default Qualcomm USB driver family.
+///
+/// Defaults to `"kernel"` where the kernel driver is a viable default — Windows
+/// (signed kernel driver) and Debian-style Linux (`dpkg-query` present, so the
+/// `qud` package install path works). Other Linux distros and macOS have no
+/// usable kernel-driver path, so they default to `"userspace"`/udev. See
+/// [`ltbox_device::driver::kernel_default_supported`].
 fn default_qcom_driver_mode() -> String {
-    "userspace".to_string()
+    if ltbox_device::driver::kernel_default_supported() {
+        "kernel".to_string()
+    } else {
+        "userspace".to_string()
+    }
 }
 
 impl Default for PersistedSettings {
@@ -305,7 +318,7 @@ mod tests {
         assert_eq!(s.language, "en");
         assert_eq!(s.theme, "");
         assert_eq!(s.theme_seed, "indigo");
-        assert_eq!(s.qcom_driver_mode, "userspace");
+        assert_eq!(s.qcom_driver_mode, default_qcom_driver_mode());
         assert!(s.dark_mode);
     }
 
