@@ -151,8 +151,12 @@ jobs:
 
       - name: cargo deny check
         # Advisories (RUSTSEC), license policy, banned crates, and dependency
-        # sources — config in deny.toml at the repo root.
-        run: cargo deny check
+        # sources — config in deny.toml at the repo root. This metadata-only
+        # job does not install sccache, so keep it independent of the global
+        # compiler wrapper used by build/test jobs.
+        run: |
+          unset RUSTC_WRAPPER
+          cargo deny check
 
   build-windows:
     name: Build ${{ matrix.name }}
