@@ -431,7 +431,7 @@
   "live_flash_efisp_erase": "正在擦除 efisp（LUN 4）…",
   "live_flash_efisp_erase_failed": "efisp 擦除失败（{error}）— 仍将继续重启到系统",
   "live_flash_efisp_erased": "efisp 已擦除",
-  "live_flash_efisp_fetch": "正在从 gbl_root_canoe 下载 efisp EFI（{variant}）…",
+  "live_flash_efisp_fetch": "正在从 gbl_root_baldur 下载 efisp EFI（{variant}）…",
   "live_flash_efisp_fetched": "efisp EFI 下载完成：{name}",
   "live_flash_efisp_flash": "正在刷入 efisp（LUN 4）…",
   "live_flash_efisp_flash_failed": "efisp 刷入失败（{error}）— 仍将继续重启到系统",

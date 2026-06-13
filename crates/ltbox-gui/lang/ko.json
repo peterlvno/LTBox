@@ -431,7 +431,7 @@
   "live_flash_efisp_erase": "efisp 지우는 중 (LUN 4)…",
   "live_flash_efisp_erase_failed": "efisp 지우기 실패 ({error}) — 시스템 재부팅은 계속 진행",
   "live_flash_efisp_erased": "efisp 지움 완료",
-  "live_flash_efisp_fetch": "efisp EFI({variant})를 gbl_root_canoe에서 받는 중…",
+  "live_flash_efisp_fetch": "efisp EFI({variant})를 gbl_root_baldur에서 받는 중…",
   "live_flash_efisp_fetched": "efisp EFI 다운로드 완료: {name}",
   "live_flash_efisp_flash": "efisp 플래싱 중 (LUN 4)…",
   "live_flash_efisp_flash_failed": "efisp 플래싱 실패 ({error}) — 시스템 재부팅은 계속 진행",

@@ -431,7 +431,7 @@
   "live_flash_efisp_erase": "Очистка efisp (LUN 4)…",
   "live_flash_efisp_erase_failed": "Не удалось очистить efisp ({error}) — продолжаем сброс в систему",
   "live_flash_efisp_erased": "efisp очищен",
-  "live_flash_efisp_fetch": "Загрузка efisp EFI ({variant}) из gbl_root_canoe…",
+  "live_flash_efisp_fetch": "Загрузка efisp EFI ({variant}) из gbl_root_baldur…",
   "live_flash_efisp_fetched": "efisp EFI загружен: {name}",
   "live_flash_efisp_flash": "Прошивка efisp (LUN 4)…",
   "live_flash_efisp_flash_failed": "Не удалось прошить efisp ({error}) — продолжаем сброс в систему",

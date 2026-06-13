@@ -431,7 +431,7 @@
   "live_flash_efisp_erase": "efisp (LUN 4) を消去中...",
   "live_flash_efisp_erase_failed": "efisp の消去に失敗しました ({error}) — システムリセットを続行します",
   "live_flash_efisp_erased": "efisp が消去されました",
-  "live_flash_efisp_fetch": "gbl_root_canoe から efisp EFI ({variant}) を取得中...",
+  "live_flash_efisp_fetch": "gbl_root_baldur から efisp EFI ({variant}) を取得中...",
   "live_flash_efisp_fetched": "efisp EFI がダウンロードされました: {name}",
   "live_flash_efisp_flash": "efisp (LUN 4) をフラッシュ中...",
   "live_flash_efisp_flash_failed": "efisp のフラッシュに失敗しました ({error}) — システムリセットを続行します",

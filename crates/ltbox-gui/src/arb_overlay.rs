@@ -6,7 +6,7 @@ use crate::*;
 /// GBL EFI asset suffix for a TB323FU target firmware, by region (`is_prc`) and
 /// whether the anti-rollback build is needed (`arb`). Picks the
 /// `*_prc.efi` / `*_row.efi` asset (or `*_prc_arb.efi` / `*_row_arb.efi`) from
-/// the gbl_root_canoe release. The `_arb` GBL roots trust at the testkey so it
+/// the gbl_root_baldur release. The `_arb` GBL roots trust at the testkey so it
 /// accepts the testkey-re-signed boot chain LTBox stages on a downgrade. The
 /// region comes from the vendor_boot `product_region` DTB marker — TB323FU's AVB
 /// fingerprint carries no `_PRC`/`_ROW` token.

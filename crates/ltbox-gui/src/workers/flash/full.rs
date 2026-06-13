@@ -1099,12 +1099,12 @@ pub(crate) fn flash_worker(
             "[Flash] {}",
             tr_args!("live_flash_efisp_fetch", variant = suffix)
         );
-        let gh = ltbox_core::github::GitHubClient::from_url("github.com/miner7222/gbl_root_canoe")
+        let gh = ltbox_core::github::GitHubClient::from_url("github.com/miner7222/gbl_root_baldur")
             .map_err(|e| format!("efisp EFI: GitHub client: {e}"))?;
         let (asset_name, asset_url) = gh
             .latest_release_asset_where(|n| n.to_ascii_lowercase().ends_with(suffix))
             .map_err(|e| {
-                format!("efisp EFI: no '{suffix}' asset on latest gbl_root_canoe release: {e}")
+                format!("efisp EFI: no '{suffix}' asset on latest gbl_root_baldur release: {e}")
             })?;
         let efi_dir = ltbox_core::app_paths::work_dir_for("flash_efisp");
         let _ = std::fs::remove_dir_all(&efi_dir);
