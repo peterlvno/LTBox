@@ -74,13 +74,25 @@ fn pal_of(t: &Theme) -> Palette {
 /// Upper bound on `App.log_lines` — keeps memory flat over long sessions.
 const LOG_MAX_LINES: usize = 500;
 
-/// 32×32 RGBA image handle for the title-bar brand icon. Built once,
-/// cheap to clone (ref-counted).
+/// Image handle for the title-bar brand icon. Built once, cheap to clone
+/// (ref-counted). macOS builds show the Liquid Glass app icon so the custom
+/// title bar matches the bundle icon; other platforms keep the 32×32 RGBA mark.
 static TITLE_BAR_ICON_HANDLE: std::sync::LazyLock<iced::widget::image::Handle> =
-    std::sync::LazyLock::new(|| {
-        let bytes: &'static [u8] = include_bytes!("../assets/icon_32.bin");
-        iced::widget::image::Handle::from_rgba(32, 32, bytes.to_vec())
-    });
+    std::sync::LazyLock::new(build_title_bar_icon);
+
+/// macOS: the Liquid Glass mark, rendered from `misc/macos/AppIcon.icon`
+/// (regenerate `assets/icon_macos.png` with `misc/macos/render-icon.sh`).
+#[cfg(target_os = "macos")]
+fn build_title_bar_icon() -> iced::widget::image::Handle {
+    iced::widget::image::Handle::from_bytes(include_bytes!("../assets/icon_macos.png").as_slice())
+}
+
+/// Windows / Linux: the 32×32 RGBA brand mark.
+#[cfg(not(target_os = "macos"))]
+fn build_title_bar_icon() -> iced::widget::image::Handle {
+    let bytes: &'static [u8] = include_bytes!("../assets/icon_32.bin");
+    iced::widget::image::Handle::from_rgba(32, 32, bytes.to_vec())
+}
 
 /// Reverse-DNS app id. Becomes Wayland `app_id` / X11 `WM_CLASS` via
 /// iced `Settings::id`; matches the shipped `.desktop`'s
