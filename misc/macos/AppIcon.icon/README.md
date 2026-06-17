@@ -3,8 +3,9 @@
 macOS-only Liquid Glass app icon source. **Not used on Windows or Linux** —
 those keep `crates/ltbox-gui/assets/icon_source.svg`. `misc/macos/make-app.sh`
 (step 4) renders this `.icon` into `AppIcon.icns` via Icon Composer's `ictool`
-when it is available, and falls back to the cross-platform SVG (printing a
-notice) otherwise.
+when available, otherwise ships the committed `../AppIcon.icns`, and only
+rasterises the cross-platform SVG if neither is present (the three tiers are
+detailed under [Build wiring](#build-wiring)).
 
 This `.icon` was authored and validated with `ictool` from
 Icon Composer 2 (also bundled in Xcode 26). It compiles cleanly and renders the
@@ -39,19 +40,32 @@ let the system supply reflection / shadow / blur / highlights.
 
 ## Build wiring
 
-### Static `.icns` (works on every macOS — already wired)
+### Static `.icns` (already wired) — three tiers
 
-`make-app.sh` step 4 finds `ictool` (standalone `Icon Composer.app`, Xcode 26
-Developer tools, or `xcrun -f ictool`; override with `XCODE_APP`) and runs:
+`make-app.sh` step 4 resolves `AppIcon.icns` in order:
+
+1. **`ictool` present** → render fresh from this `.icon`. `ictool` is found in
+   the standalone `Icon Composer.app`, inside Xcode 26, or via `xcrun`
+   (override with `XCODE_APP`), and validated to support `--export-image`:
+   ```bash
+   ictool AppIcon.icon --export-image --output-file icon_1024.png \
+     --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
+   ```
+   then `sips` into an `.iconset` and `iconutil -c icns`. CI builds on
+   `macos-26` (Xcode 26), so this tier runs there.
+2. **No `ictool`, committed `../AppIcon.icns` exists** → ship that pre-rendered
+   glass icon. The committed `misc/macos/AppIcon.icns` is the safety net so a
+   host without Icon Composer never regresses to the old art.
+3. **Neither** → rasterise `crates/ltbox-gui/assets/icon_source.svg` (the
+   pre-Liquid-Glass path; Windows/Linux art unaffected).
+
+The result is referenced by `CFBundleIconFile` in `Info.plist`.
+
+**After editing this `.icon`, regenerate the committed icns and commit it:**
 
 ```bash
-ictool AppIcon.icon --export-image --output-file icon_1024.png \
-  --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
+misc/macos/render-icon.sh        # writes misc/macos/AppIcon.icns
 ```
-
-then sizes it into an `.iconset` and `iconutil -c icns` → `AppIcon.icns`
-(referenced by `CFBundleIconFile` in `Info.plist`). No `ictool` → it falls back
-to the SVG and the macOS build looks exactly as it did before.
 
 ### Dynamic glass icon (optional, macOS 26 — follow-up)
 
@@ -67,8 +81,8 @@ actool AppIcon.icon --compile "$APP/Contents/Resources" \
 
 then add `CFBundleIconName = AppIcon` to `Info.plist`. Verify the `actool`
 flags against the installed Xcode 26 (they are not exercised by `make-app.sh`).
-CI also needs a `macos-26` runner with Xcode 26 selected before either path
-produces the glass icon (the current `macos-14` runner hits the SVG fallback).
+Since CI now runs `build-macos` on `macos-26`, the toolchain for this is
+available there when someone wants to wire it up.
 
 ## Re-editing
 
