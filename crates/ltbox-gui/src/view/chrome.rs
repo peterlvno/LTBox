@@ -31,7 +31,10 @@ impl App {
         // overpaint the borderless window's edge. With native macOS decorations
         // the system frame bounds the window, so skip the inset/outline.
         let framed: Element<'_, Message> = if crate::SYSTEM_WINDOW_CHROME {
-            container(main).width(Length::Fill).height(Length::Fill).into()
+            container(main)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
         } else {
             container(main)
                 .width(Length::Fill)
