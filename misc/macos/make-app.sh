@@ -62,72 +62,34 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 # 3. Info.plist (substitute the version).
 sed "s/__SHORT_VERSION__/$VERSION/g" "$HERE/Info.plist" > "$APP/Contents/Info.plist"
 
-# 4. AppIcon.icns. macOS-only Liquid Glass, resolved in three tiers:
-#      1. Icon Composer's `ictool` present → render the .icns fresh from the
-#         Icon Composer source (misc/macos/AppIcon.icon). `ictool` ships inside
-#         the standalone Icon Composer app and inside Xcode 26 — so the CI
-#         macos-26 runner (Xcode 26) renders the glass mark directly.
-#      2. No ictool but a committed misc/macos/AppIcon.icns exists → ship that
-#         pre-rendered glass icon. This is the safety net: build hosts without
-#         Icon Composer (older runners, CLT-only Macs) still get the glass icon
-#         instead of silently regressing to the old art. Regenerate it with
-#         misc/macos/render-icon.sh after editing AppIcon.icon.
-#      3. Neither → rasterise the cross-platform app SVG with built-in tools
-#         (qlmanage → sips → iconutil, no Homebrew) — the pre-Liquid-Glass path,
-#         so Windows/Linux art (icon_source.svg) is never affected.
-#    Point at a specific Xcode with XCODE_APP=/path/to/Xcode.app. A dynamic
-#    light/dark/clear/tinted icon additionally needs `actool` to compile
-#    AppIcon.icon into an Assets.car + CFBundleIconName in Info.plist; see
-#    AppIcon.icon/README.md.
+# 4. App icon (macOS-only Liquid Glass). Two independent parts:
+#    A) Legacy AppIcon.icns (CFBundleIconFile) — used by macOS < 26 and anywhere
+#       an .icns is consumed. Source: the committed full-res glass
+#       misc/macos/AppIcon.icns (regenerate with render-icon.sh); else rasterise
+#       the cross-platform app SVG with built-in tools (qlmanage → sips →
+#       iconutil, no Homebrew) — the pre-Liquid-Glass path, so Windows/Linux art
+#       (icon_source.svg) is never affected.
+#    B) Dynamic Liquid Glass icon for macOS 26 (light / dark / clear / tinted) —
+#       compile AppIcon.icon into an Assets.car with `actool`, which ships in
+#       EVERY Xcode 26 (no Icon Composer needed), drop it in Resources/, and add
+#       CFBundleIconName so macOS 26 renders the dynamic icon. Without actool
+#       (no Xcode) only the static .icns ships. Point at an Xcode with
+#       XCODE_APP=/path/to/Xcode.app. (If actool ever crashes on a given Xcode
+#       — see the Xcode 26.5 .icon report — it degrades to static-only; pin a
+#       known-good Xcode via XCODE_APP if needed.)
 ICON_DIR="$HERE/AppIcon.icon"
-RES_ICNS="$APP/Contents/Resources/AppIcon.icns"
+RES="$APP/Contents/Resources"
 
-ictool_bin() {
-    # The Icon Composer `ictool` (the one that supports `--export-image`) lives
-    # inside the Icon Composer app — standalone *and* embedded in Xcode. A
-    # different, actool-style `ictool` sits at Xcode's Contents/Developer/usr/bin
-    # and rejects `--export-image`, and `xcrun -f ictool` resolves to that one.
-    # So prefer the Icon Composer.app executables and validate every candidate
-    # against its own --help before accepting it.
-    local c h
-    for c in \
-        ${XCODE_APP:+"$XCODE_APP/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"} \
-        "/Applications/Icon Composer.app/Contents/Executables/ictool" \
-        "/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" \
-        ${XCODE_APP:+"$XCODE_APP/Contents/Developer/usr/bin/ictool"} \
-        "/Applications/Xcode.app/Contents/Developer/usr/bin/ictool" \
-        "$(xcrun -f ictool 2>/dev/null || true)"; do
-        [ -n "$c" ] && [ -x "$c" ] || continue
-        h="$("$c" --help 2>&1 || true)"
-        case "$h" in *--export-image*) printf '%s\n' "$c"; return 0 ;; esac
-    done
-    return 1
-}
-
-# src = a 1024 master PNG to build the iconset from; empty when a tier copies a
-# finished .icns directly (the committed prebuilt).
-src=""
-if [ -d "$ICON_DIR" ] && ICT="$(ictool_bin)"; then
-    echo "Icon: rendering Liquid Glass AppIcon.icns from $(basename "$ICON_DIR") via ictool"
-    itmp="$(mktemp -d)"
-    # Render the macOS Default appearance at full size; ictool bakes the icon
-    # grid + bleed, so no extra padding is needed.
-    "$ICT" "$ICON_DIR" --export-image --output-file "$itmp/icon_1024.png" \
-        --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
-    [ -f "$itmp/icon_1024.png" ] || { echo "ictool produced no PNG (check the AppIcon.icon source)" >&2; exit 1; }
-    src="$itmp/icon_1024.png"
-elif [ -f "$HERE/AppIcon.icns" ]; then
-    echo "Icon: using committed AppIcon.icns (no Icon Composer ictool on this host; regenerate with render-icon.sh)"
-    cp "$HERE/AppIcon.icns" "$RES_ICNS"
+# --- A) legacy .icns ---
+if [ -f "$HERE/AppIcon.icns" ]; then
+    echo "Icon: legacy AppIcon.icns <- committed glass icns"
+    cp "$HERE/AppIcon.icns" "$RES/AppIcon.icns"
 else
-    echo "Icon: no Icon Composer + no committed AppIcon.icns — rasterising the SVG fallback ($(basename "$ICON_SVG"))."
+    echo "Icon: legacy AppIcon.icns <- SVG fallback ($(basename "$ICON_SVG"))"
     qdir="$(mktemp -d)"
     qlmanage -t -s 1024 -o "$qdir" "$ICON_SVG" >/dev/null 2>&1
     src="$qdir/$(basename "$ICON_SVG").png"
     [ -f "$src" ] || { echo "icon rasterize failed (qlmanage produced no PNG)" >&2; exit 1; }
-fi
-
-if [ -n "$src" ]; then
     iconset="$(mktemp -d)/AppIcon.iconset"
     mkdir -p "$iconset"
     gen() { sips -z "$2" "$2" "$src" --out "$iconset/$1" >/dev/null; }
@@ -136,7 +98,50 @@ if [ -n "$src" ]; then
     gen icon_128x128.png 128; gen icon_128x128@2x.png 256
     gen icon_256x256.png 256; gen icon_256x256@2x.png 512
     gen icon_512x512.png 512; gen icon_512x512@2x.png 1024
-    iconutil -c icns "$iconset" -o "$RES_ICNS"
+    iconutil -c icns "$iconset" -o "$RES/AppIcon.icns"
+fi
+
+# --- B) dynamic Assets.car (macOS 26) via actool, when an Xcode is present ---
+actool_bin() {
+    local c
+    for c in \
+        ${XCODE_APP:+"$XCODE_APP/Contents/Developer/usr/bin/actool"} \
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/actool" \
+        "$(xcrun -f actool 2>/dev/null || true)"; do
+        [ -n "$c" ] && [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+    done
+    return 1
+}
+
+if [ -d "$ICON_DIR" ] && ACT="$(actool_bin)"; then
+    dd="${ACT%/usr/bin/actool}"   # → …/Contents/Developer, for DEVELOPER_DIR
+    atmp="$(mktemp -d)"
+    echo "Icon: compiling dynamic Liquid Glass Assets.car from $(basename "$ICON_DIR") via actool"
+    # Require actool to exit 0 AND leave an Assets.car — so a crash/nonzero run
+    # (e.g. the reported Xcode 26.5 .icon crash) that drops a partial file is
+    # not shipped. Running it as an `if` condition keeps `set -e` from aborting.
+    if DEVELOPER_DIR="$dd" "$ACT" "$ICON_DIR" \
+        --compile "$atmp" \
+        --app-icon AppIcon --include-all-app-icons \
+        --output-partial-info-plist "$atmp/partial.plist" \
+        --enable-on-demand-resources NO \
+        --development-region en \
+        --target-device mac \
+        --minimum-deployment-target 26.0 \
+        --platform macosx \
+        --output-format human-readable-text >/dev/null 2>&1 \
+        && [ -f "$atmp/Assets.car" ]; then
+        cp "$atmp/Assets.car" "$RES/Assets.car"
+        # Point macOS 26 at the named icon in Assets.car (dynamic appearances);
+        # CFBundleIconFile (the .icns) stays the source for macOS < 26.
+        /usr/libexec/PlistBuddy -c "Add :CFBundleIconName string AppIcon" "$APP/Contents/Info.plist" >/dev/null 2>&1 \
+            || /usr/libexec/PlistBuddy -c "Set :CFBundleIconName AppIcon" "$APP/Contents/Info.plist" >/dev/null
+        echo "Icon: dynamic Assets.car installed + CFBundleIconName set (macOS 26 Liquid Glass)"
+    else
+        echo "Icon: actool did not produce a usable Assets.car — shipping the static .icns only" >&2
+    fi
+else
+    echo "Icon: no actool (Xcode) — static .icns only; build on macos-26 / Xcode 26 for the dynamic Liquid Glass icon."
 fi
 
 # 5. Guard against a non-self-contained bundle: no Homebrew/@rpath/libusb dylib.

@@ -1,15 +1,14 @@
 # LTBox macOS Liquid Glass app icon
 
 macOS-only Liquid Glass app icon source. **Not used on Windows or Linux** —
-those keep `crates/ltbox-gui/assets/icon_source.svg`. `misc/macos/make-app.sh`
-(step 4) renders this `.icon` into `AppIcon.icns` via Icon Composer's `ictool`
-when available, otherwise ships the committed `../AppIcon.icns`, and only
-rasterises the cross-platform SVG if neither is present (the three tiers are
-detailed under [Build wiring](#build-wiring)).
+those keep `crates/ltbox-gui/assets/icon_source.svg`. On macOS,
+`misc/macos/make-app.sh` (step 4) compiles this `.icon` into a dynamic
+`Assets.car` with `actool` (macOS 26 light/dark/clear/tinted) and ships a
+full-res `AppIcon.icns` for macOS < 26 — see [Build wiring](#build-wiring).
 
-This `.icon` was authored and validated with `ictool` from
-Icon Composer 2 (also bundled in Xcode 26). It compiles cleanly and renders the
-macOS Default / Dark appearances.
+This `.icon` was authored with Icon Composer and validated end-to-end:
+`actool` compiles it to an `Assets.car` whose `AppIcon` carries the Aqua /
+DarkAqua / Tintable appearances, and `ictool` renders the full-res legacy icns.
 
 ## Design
 
@@ -40,49 +39,49 @@ let the system supply reflection / shadow / blur / highlights.
 
 ## Build wiring
 
-### Static `.icns` (already wired) — three tiers
+`make-app.sh` step 4 builds two things, independently:
 
-`make-app.sh` step 4 resolves `AppIcon.icns` in order:
+### Dynamic Liquid Glass icon (macOS 26) — `Assets.car` via `actool`
 
-1. **`ictool` present** → render fresh from this `.icon`. `ictool` is found in
-   the standalone `Icon Composer.app`, inside Xcode 26, or via `xcrun`
-   (override with `XCODE_APP`), and validated to support `--export-image`:
-   ```bash
-   ictool AppIcon.icon --export-image --output-file icon_1024.png \
-     --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
-   ```
-   then `sips` into an `.iconset` and `iconutil -c icns`. CI builds on
-   `macos-26` (Xcode 26), so this tier runs there.
-2. **No `ictool`, committed `../AppIcon.icns` exists** → ship that pre-rendered
-   glass icon. The committed `misc/macos/AppIcon.icns` is the safety net so a
-   host without Icon Composer never regresses to the old art.
-3. **Neither** → rasterise `crates/ltbox-gui/assets/icon_source.svg` (the
-   pre-Liquid-Glass path; Windows/Linux art unaffected).
-
-The result is referenced by `CFBundleIconFile` in `Info.plist`.
-
-**After editing this `.icon`, regenerate the committed icns and commit it:**
-
-```bash
-misc/macos/render-icon.sh        # writes misc/macos/AppIcon.icns
-```
-
-### Dynamic glass icon (optional, macOS 26 — follow-up)
-
-The live light/dark/clear/tinted icon needs the compiled asset catalog, not a
-static `.icns`. On an Xcode 26 host:
+This is what makes the icon respond to the light / dark / clear / tinted
+appearances. `actool` ships in **every Xcode 26** (it is *not* Icon Composer —
+no `ictool` / Apple-Developer download needed), so the `macos-26` CI runner has
+it. `make-app.sh` runs roughly:
 
 ```bash
 actool AppIcon.icon --compile "$APP/Contents/Resources" \
-  --app-icon AppIcon --output-partial-info-plist /tmp/icon-plist \
-  --platform macosx --minimum-deployment-target 26.0 \
-  --output-format human-readable-text
+  --app-icon AppIcon --include-all-app-icons \
+  --output-partial-info-plist /tmp/partial.plist \
+  --enable-on-demand-resources NO --development-region en \
+  --target-device mac --minimum-deployment-target 26.0 \
+  --platform macosx --output-format human-readable-text
 ```
 
-then add `CFBundleIconName = AppIcon` to `Info.plist`. Verify the `actool`
-flags against the installed Xcode 26 (they are not exercised by `make-app.sh`).
-Since CI now runs `build-macos` on `macos-26`, the toolchain for this is
-available there when someone wants to wire it up.
+then drops `Assets.car` in `Contents/Resources/` and adds `CFBundleIconName =
+AppIcon` to `Info.plist`. macOS 26 reads that and renders the dynamic icon.
+`actool` is found via `XCODE_APP`, `/Applications/Xcode.app`, or `xcrun`. If
+`actool` is absent (no Xcode) — or it fails (there is a reported `.icon`
+actool crash on some Xcode 26.5 builds; pin a good Xcode via `XCODE_APP`) —
+the step degrades gracefully to the static `.icns` only.
+
+### Legacy `.icns` (macOS < 26) — `CFBundleIconFile`
+
+A full-resolution static glass icon for systems that don't read `Assets.car`.
+Source order: the committed **`../AppIcon.icns`** (regenerate with
+`render-icon.sh`); else rasterise `crates/ltbox-gui/assets/icon_source.svg`
+(the pre-Liquid-Glass path — Windows/Linux art unaffected). `actool` can emit
+an `.icns` too, but only up to 256 px, so the committed full-res icns is
+preferred for crisp Dock/Finder rendering on older macOS.
+
+**After editing this `.icon`, regenerate the committed legacy icns and commit it:**
+
+```bash
+misc/macos/render-icon.sh        # writes misc/macos/AppIcon.icns (needs Icon Composer)
+```
+
+`render-icon.sh` uses Icon Composer's `ictool` (full-res render); only this
+maintainer step needs Icon Composer — the app build (`make-app.sh`) needs just
+`actool`.
 
 ## Re-editing
 

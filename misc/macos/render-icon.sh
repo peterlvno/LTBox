@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 #
-# Regenerate misc/macos/AppIcon.icns from misc/macos/AppIcon.icon using Icon
-# Composer's `ictool`.
+# Regenerate the committed, full-resolution misc/macos/AppIcon.icns from
+# misc/macos/AppIcon.icon using Icon Composer's `ictool`.
 #
-# Why a committed .icns: the `.icon` is the editable Liquid Glass source, but
-# rendering it needs Icon Composer (standalone app or bundled in Xcode 26),
-# which not every build host has. make-app.sh prefers a live ictool render, but
-# ships the committed AppIcon.icns as a fallback so a host without Icon Composer
-# never regresses to the old art. Run this on a Mac that has Icon Composer after
-# editing the .icon, then commit the updated AppIcon.icns.
+# Role: make-app.sh ships this committed .icns as the legacy CFBundleIconFile
+# (macOS < 26) and compiles the .icon into Assets.car with `actool` for the
+# dynamic macOS 26 icon. `actool` can also emit an .icns, but only up to 256px;
+# `ictool` renders the .icon to a crisp full-res (1024) .icns, so the committed
+# legacy icon is produced here. ictool needs Icon Composer (the standalone app,
+# or — when present — an Xcode 26 install; note GitHub's macos-26 runner has
+# Xcode 26 but NOT Icon Composer), so run this on a Mac that has it after
+# editing the .icon, then commit the updated AppIcon.icns. (make-app.sh itself
+# needs only actool, not Icon Composer.)
 #
 #   misc/macos/render-icon.sh            # writes misc/macos/AppIcon.icns
 #   XCODE_APP=/path/to/Xcode.app misc/macos/render-icon.sh
