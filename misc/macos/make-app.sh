@@ -62,13 +62,63 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 # 3. Info.plist (substitute the version).
 sed "s/__SHORT_VERSION__/$VERSION/g" "$HERE/Info.plist" > "$APP/Contents/Info.plist"
 
-# 4. AppIcon.icns from the app SVG using only built-in tools (no Homebrew).
+# 4. AppIcon.icns.
+#    macOS-only Liquid Glass: when Icon Composer's `ictool` is available, render
+#    the .icns from the Icon Composer source (misc/macos/AppIcon.icon) so the
+#    macOS build gets the frosted-glass hammer mark. `ictool` ships with the
+#    standalone Icon Composer app and inside Xcode 26 (Developer tools) — not
+#    the bare Command Line Tools — so a host without it automatically falls
+#    back to rasterising the cross-platform app SVG with built-in tools
+#    (qlmanage → sips → iconutil, no Homebrew). The fallback is byte-for-byte
+#    the pre-Liquid-Glass path, so Windows/Linux art (icon_source.svg) is never
+#    affected. Point at a specific Xcode with XCODE_APP=/path/to/Xcode.app.
+#    A dynamic light/dark/clear/tinted icon (the full Liquid Glass experience
+#    on macOS 26) additionally needs `actool` to compile AppIcon.icon into an
+#    Assets.car + CFBundleIconName in Info.plist; that is documented in
+#    AppIcon.icon/README.md as a follow-up for an Xcode-26 build host.
+ICON_DIR="$HERE/AppIcon.icon"
 iconset="$(mktemp -d)/AppIcon.iconset"
-qdir="$(mktemp -d)"
 mkdir -p "$iconset"
-qlmanage -t -s 1024 -o "$qdir" "$ICON_SVG" >/dev/null 2>&1
-src="$qdir/$(basename "$ICON_SVG").png"
-[ -f "$src" ] || { echo "icon rasterize failed (qlmanage produced no PNG)" >&2; exit 1; }
+
+ictool_bin() {
+    # The Icon Composer `ictool` (the one that supports `--export-image`) lives
+    # inside the Icon Composer app — standalone *and* embedded in Xcode. A
+    # different, actool-style `ictool` sits at Xcode's Contents/Developer/usr/bin
+    # and rejects `--export-image`, and `xcrun -f ictool` resolves to that one.
+    # So prefer the Icon Composer.app executables and validate every candidate
+    # against its own --help before accepting it.
+    local c h
+    for c in \
+        ${XCODE_APP:+"$XCODE_APP/Contents/Applications/Icon Composer.app/Contents/Executables/ictool"} \
+        "/Applications/Icon Composer.app/Contents/Executables/ictool" \
+        "/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" \
+        ${XCODE_APP:+"$XCODE_APP/Contents/Developer/usr/bin/ictool"} \
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/ictool" \
+        "$(xcrun -f ictool 2>/dev/null || true)"; do
+        [ -n "$c" ] && [ -x "$c" ] || continue
+        h="$("$c" --help 2>&1 || true)"
+        case "$h" in *--export-image*) printf '%s\n' "$c"; return 0 ;; esac
+    done
+    return 1
+}
+
+if [ -d "$ICON_DIR" ] && ICT="$(ictool_bin)"; then
+    echo "Icon: rendering Liquid Glass AppIcon.icns from $(basename "$ICON_DIR") via ictool"
+    itmp="$(mktemp -d)"
+    # Render the macOS Default appearance at full size; ictool bakes the icon
+    # grid + bleed, so no extra padding is needed.
+    "$ICT" "$ICON_DIR" --export-image --output-file "$itmp/icon_1024.png" \
+        --platform macOS --rendition Default --width 1024 --height 1024 --scale 1
+    [ -f "$itmp/icon_1024.png" ] || { echo "ictool produced no PNG (check the AppIcon.icon source)" >&2; exit 1; }
+    src="$itmp/icon_1024.png"
+else
+    [ -d "$ICON_DIR" ] && echo "Icon: $(basename "$ICON_DIR") present but ictool not found — using the SVG fallback (install Icon Composer / Xcode 26, or set XCODE_APP, to build the glass icon)."
+    qdir="$(mktemp -d)"
+    qlmanage -t -s 1024 -o "$qdir" "$ICON_SVG" >/dev/null 2>&1
+    src="$qdir/$(basename "$ICON_SVG").png"
+    [ -f "$src" ] || { echo "icon rasterize failed (qlmanage produced no PNG)" >&2; exit 1; }
+fi
+
 gen() { sips -z "$2" "$2" "$src" --out "$iconset/$1" >/dev/null; }
 gen icon_16x16.png 16;    gen icon_16x16@2x.png 32
 gen icon_32x32.png 32;    gen icon_32x32@2x.png 64
