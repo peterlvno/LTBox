@@ -410,9 +410,11 @@ jobs:
     # runner produces the lipo'd universal binary. macOS needs no apt-style
     # native deps — libusb is vendored static (LIBUSB_STATIC=1), Metal and
     # the rest are system frameworks. Free runner minutes for public repos.
-    # macos-26 (Xcode 26) is used so make-app.sh can render the Liquid Glass
-    # AppIcon via Icon Composer's `ictool` (bundled in Xcode 26); if it is ever
-    # unavailable, make-app.sh falls back to the committed misc/macos/AppIcon.icns.
+    # macos-26 (Xcode 26) is used so make-app.sh can compile the dynamic Liquid
+    # Glass icon (AppIcon.icon -> Assets.car + CFBundleIconName) with `actool`,
+    # which ships in every Xcode 26 — no Icon Composer needed. If actool is ever
+    # unavailable, make-app.sh still ships the committed misc/macos/AppIcon.icns
+    # (static glass), so the icon never regresses to the old art.
     runs-on: macos-26
     timeout-minutes: 45
     steps:
