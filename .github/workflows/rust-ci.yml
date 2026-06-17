@@ -405,18 +405,21 @@ jobs:
 
   build-macos:
     name: Build macos_universal
-    # macos-14 is the Apple Silicon (arm64) runner; the x86_64 slice
+    # macos-26 is the Apple Silicon (arm64) runner; the x86_64 slice
     # cross-builds on it natively (Apple clang + the universal SDK), so one
     # runner produces the lipo'd universal binary. macOS needs no apt-style
     # native deps — libusb is vendored static (LIBUSB_STATIC=1), Metal and
     # the rest are system frameworks. Free runner minutes for public repos.
-    runs-on: macos-14
+    # macos-26 (Xcode 26) is used so make-app.sh can render the Liquid Glass
+    # AppIcon via Icon Composer's `ictool` (bundled in Xcode 26); if it is ever
+    # unavailable, make-app.sh falls back to the committed misc/macos/AppIcon.icns.
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
       - name: Install Rust (toolchain pinned by rust-toolchain.toml)
-        # rustup is preinstalled on macos-14; `rustup show` triggers the
+        # rustup is preinstalled on the macOS runner; `rustup show` triggers the
         # toml-driven 1.95.0 install, then add both Mac targets so
         # make-app.sh can lipo a universal binary.
         run: |
@@ -473,23 +476,37 @@ jobs:
           if-no-files-found: error
 
   test-macos:
-    # macOS native test gate — distinct from the universal packaging job so
-    # validation can run in parallel with the slower two-slice release build.
-    name: Test macos_arm64
-    runs-on: macos-14
+    # macOS test gate — distinct from the universal packaging job so validation
+    # can run in parallel with the slower two-slice release build. Both Mac
+    # slices of the universal binary are tested natively: arm64 on macos-26 and
+    # x86_64 on macos-26-intel. (macos-26 = the Apple Silicon image; the bare
+    # `macos-26` label is arm64. macos-26-intel = the standard x64 image —
+    # macos-26-large is the separate "larger" x64 runner.) Standard runners are
+    # free for public repos.
+    name: Test macos_${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: arm64,  runner: macos-26,       target: aarch64-apple-darwin }
+          - { arch: x86_64, runner: macos-26-intel, target: x86_64-apple-darwin }
     steps:
       - uses: actions/checkout@v6
 
       - name: Install Rust (toolchain pinned by rust-toolchain.toml)
-        # rustup is preinstalled on macos-14; `rustup show` triggers the
-        # toml-driven 1.95.0 install for the native Apple Silicon host.
-        run: rustup show
+        # rustup is preinstalled on the macOS runner; `rustup show` triggers the
+        # toml-driven 1.95.0 install. `rustup target add` is a no-op for the
+        # host arch but keeps the step identical across both legs.
+        run: |
+          rustup show
+          rustup target add ${{ matrix.target }}
 
       - name: Cargo source cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cargo-sources-${{ runner.os }}-${{ runner.arch }}
+          shared-key: cargo-sources-macos-${{ matrix.arch }}
           cache-targets: false
           cache-bin: false
 
@@ -498,11 +515,13 @@ jobs:
 
       - name: cargo clippy (native macOS)
         # Lints the cfg(target_os = "macos") paths that the Windows-targeted
-        # clippy job never sees.
+        # clippy job never sees. The cfg is identical for both Apple targets,
+        # so linting once on the arm64 leg is enough.
+        if: ${{ matrix.arch == 'arm64' }}
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
       - name: cargo test --workspace
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --target ${{ matrix.target }}
 
   test:
     # Cross-built .exes can't execute on the Linux build runners
