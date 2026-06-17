@@ -74,25 +74,15 @@ fn pal_of(t: &Theme) -> Palette {
 /// Upper bound on `App.log_lines` — keeps memory flat over long sessions.
 const LOG_MAX_LINES: usize = 500;
 
-/// Image handle for the title-bar brand icon. Built once, cheap to clone
-/// (ref-counted). macOS builds show the Liquid Glass app icon so the custom
-/// title bar matches the bundle icon; other platforms keep the 32×32 RGBA mark.
+/// 32×32 RGBA image handle for the custom title-bar brand icon. Built once,
+/// cheap to clone (ref-counted). Only used by the custom borderless title bar
+/// (Windows / Linux); macOS uses the native system title bar (see
+/// [`SYSTEM_WINDOW_CHROME`]).
 static TITLE_BAR_ICON_HANDLE: std::sync::LazyLock<iced::widget::image::Handle> =
-    std::sync::LazyLock::new(build_title_bar_icon);
-
-/// macOS: the Liquid Glass mark, rendered from `misc/macos/AppIcon.icon`
-/// (regenerate `assets/icon_macos.png` with `misc/macos/render-icon.sh`).
-#[cfg(target_os = "macos")]
-fn build_title_bar_icon() -> iced::widget::image::Handle {
-    iced::widget::image::Handle::from_bytes(include_bytes!("../assets/icon_macos.png").as_slice())
-}
-
-/// Windows / Linux: the 32×32 RGBA brand mark.
-#[cfg(not(target_os = "macos"))]
-fn build_title_bar_icon() -> iced::widget::image::Handle {
-    let bytes: &'static [u8] = include_bytes!("../assets/icon_32.bin");
-    iced::widget::image::Handle::from_rgba(32, 32, bytes.to_vec())
-}
+    std::sync::LazyLock::new(|| {
+        let bytes: &'static [u8] = include_bytes!("../assets/icon_32.bin");
+        iced::widget::image::Handle::from_rgba(32, 32, bytes.to_vec())
+    });
 
 /// Reverse-DNS app id. Becomes Wayland `app_id` / X11 `WM_CLASS` via
 /// iced `Settings::id`; matches the shipped `.desktop`'s
@@ -109,6 +99,12 @@ const DEFAULT_WINDOW_HEIGHT: f32 = 620.0;
 /// out cleanly — wizard cards overlap, sidebar tween jumps.
 const MIN_WINDOW_WIDTH: f32 = 820.0;
 const MIN_WINDOW_HEIGHT: f32 = 620.0;
+/// macOS uses the native window chrome (system title bar + traffic lights +
+/// native resize edges); Windows / Linux keep LTBox's custom borderless title
+/// bar and the 8 overlaid resize handles. Gates both the
+/// `window::Settings::decorations` flag and the custom-chrome widgets in
+/// `view::chrome`, so the two stay in lockstep.
+pub(crate) const SYSTEM_WINDOW_CHROME: bool = cfg!(target_os = "macos");
 /// Minimum interval between window-size persistence writes. Cursor-drag
 /// resize fires `Event::Window(Resized)` continuously; throttling to
 /// ~250 ms keeps the JSON file from being rewritten 60 times per second
@@ -419,16 +415,19 @@ fn main() -> iced::Result {
         size: persisted_size,
         // Cursor-drag resize: `MIN_WINDOW_*` is the floor; anything
         // below is unsupported (sidebar + wizard cards stop laying out
-        // cleanly). The borderless decorations strip native resize
-        // edges off the window, so the GUI overlays 8 invisible resize
-        // handles on the root Stack which emit
+        // cleanly). On Windows / Linux the borderless decorations strip
+        // native resize edges off the window, so the GUI overlays 8 invisible
+        // resize handles on the root Stack which emit
         // `WindowMsg::WindowResize(direction)` and call
-        // `iced::window::drag_resize` on the host window. The user's
-        // resized geometry is persisted to `PersistedSettings::window_size`
-        // and restored above on the next launch.
+        // `iced::window::drag_resize` on the host window. (macOS keeps native
+        // decorations + resize, so those handles are not rendered there.) The
+        // user's resized geometry is persisted to `PersistedSettings::window_size`
+        // and restored above on the next launch on every platform.
         min_size: Some(iced::Size::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)),
         icon: win_icon,
-        decorations: false,
+        // macOS → native decorations (system title bar + resize); other
+        // platforms → borderless + custom chrome (see SYSTEM_WINDOW_CHROME).
+        decorations: SYSTEM_WINDOW_CHROME,
         ..Default::default()
     };
     // Bundle Noto Sans CJK at compile time so cosmic-text can fall

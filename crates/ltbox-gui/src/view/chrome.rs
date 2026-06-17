@@ -9,8 +9,12 @@ impl App {
     pub(crate) fn view(&self) -> Element<'_, Message> {
         self.sync_runtime_theme();
         let mut main = column![];
-        main = main.push(self.title_bar());
-        main = main.push(widget::rule::horizontal(1).style(shell_rule_style));
+        if !crate::SYSTEM_WINDOW_CHROME {
+            // Custom borderless title bar (Windows / Linux). macOS uses the
+            // native system title bar, so skip the in-app one.
+            main = main.push(self.title_bar());
+            main = main.push(widget::rule::horizontal(1).style(shell_rule_style));
+        }
         // Sidebar floats in Stack over a fixed rail placeholder so
         // content never reflows during tween.
         let rail_placeholder = container(iced::widget::Space::new())
@@ -23,22 +27,29 @@ impl App {
         main = main.push(row_area);
         main = main.push(self.status_bar());
 
-        // 1-px outline + 1-px inset so children don't overpaint border.
-        let framed = container(main)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(1)
-            .style(|t: &Theme| container::Style {
-                border: iced::Border {
-                    color: pal_of(t).outline_variant,
-                    width: 1.0,
-                    radius: 0.0.into(),
-                },
-                ..Default::default()
-            });
+        // Custom chrome draws a 1-px outline + 1-px inset so children don't
+        // overpaint the borderless window's edge. With native macOS decorations
+        // the system frame bounds the window, so skip the inset/outline.
+        let framed: Element<'_, Message> = if crate::SYSTEM_WINDOW_CHROME {
+            container(main).width(Length::Fill).height(Length::Fill).into()
+        } else {
+            container(main)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(1)
+                .style(|t: &Theme| container::Style {
+                    border: iced::Border {
+                        color: pal_of(t).outline_variant,
+                        width: 1.0,
+                        radius: 0.0.into(),
+                    },
+                    ..Default::default()
+                })
+                .into()
+        };
 
         // Error banner below popups so the scrim dims the banner too.
-        let mut layers: Vec<Element<'_, Message>> = vec![framed.into()];
+        let mut layers: Vec<Element<'_, Message>> = vec![framed];
 
         if let Some(err) = &self.error_msg {
             layers.push(self.error_banner(err));
@@ -81,8 +92,11 @@ impl App {
         // edges and corners sit above every popup/toast — the user can
         // still grab the border while a dialog is open. Events outside
         // each handle's bounding box pass through to the layers below
-        // so normal UI clicks aren't intercepted.
-        layers.push(self.resize_handles());
+        // so normal UI clicks aren't intercepted. macOS uses native resize
+        // edges, so the overlay handles are omitted there.
+        if !crate::SYSTEM_WINDOW_CHROME {
+            layers.push(self.resize_handles());
+        }
 
         iced::widget::Stack::with_children(layers).into()
     }

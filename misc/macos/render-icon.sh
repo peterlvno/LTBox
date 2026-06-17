@@ -66,12 +66,3 @@ gen icon_256x256.png 256; gen icon_256x256@2x.png 512
 gen icon_512x512.png 512; gen icon_512x512@2x.png 1024
 iconutil -c icns "$iconset" -o "$OUT"
 echo "Wrote $OUT"
-
-# Also refresh the GUI title-bar mark (macOS builds show the Liquid Glass icon
-# in the custom title bar — see ltbox-gui/src/main.rs build_title_bar_icon).
-# Downscale the 1024 master to 128 for crisp 16pt rendering at @2x/@3x.
-GUI_ICON="$HERE/../../crates/ltbox-gui/assets/icon_macos.png"
-if [ -d "$(dirname "$GUI_ICON")" ]; then
-    sips -z 128 128 "$tmp/icon_1024.png" --out "$GUI_ICON" >/dev/null
-    echo "Wrote $GUI_ICON"
-fi
