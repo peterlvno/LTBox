@@ -55,17 +55,39 @@ impl App {
     }
 }
 
-/// App icon for the About panel. macOS uses the rounded squircle PNG; other
-/// platforms use the scalable flat SVG logo so it stays crisp at any size.
+// macOS About-panel icon handles. Built once (stable image `Id`): iced's
+// `Handle::from_bytes` mints a fresh unique id on every call, so rebuilding the
+// handle each render re-uploads the texture and makes the icon flicker —
+// caching matches the device-portrait handles in `widgets.rs`.
+#[cfg(target_os = "macos")]
+static ABOUT_ICON_LIGHT: std::sync::LazyLock<iced::widget::image::Handle> =
+    std::sync::LazyLock::new(|| {
+        iced::widget::image::Handle::from_bytes(
+            include_bytes!("../../assets/icon_macos.png").as_slice(),
+        )
+    });
+#[cfg(target_os = "macos")]
+static ABOUT_ICON_DARK: std::sync::LazyLock<iced::widget::image::Handle> =
+    std::sync::LazyLock::new(|| {
+        iced::widget::image::Handle::from_bytes(
+            include_bytes!("../../assets/icon_macos_dark.png").as_slice(),
+        )
+    });
+
+/// App icon for the About panel. macOS uses the rounded squircle PNG —
+/// light or dark variant to match LTBox's current theme; other platforms use
+/// the scalable flat SVG logo so it stays crisp at any size.
 fn about_app_icon(size: f32) -> Element<'static, Message> {
     #[cfg(target_os = "macos")]
     {
-        iced::widget::image(iced::widget::image::Handle::from_bytes(
-            include_bytes!("../../assets/icon_macos.png").as_slice(),
-        ))
-        .width(size)
-        .height(size)
-        .into()
+        // Match the macOS Liquid Glass icon's appearance to the active theme.
+        // Clone a cached handle (cheap, ref-counted) so the id stays stable.
+        let handle = if theme::runtime_dark() {
+            ABOUT_ICON_DARK.clone()
+        } else {
+            ABOUT_ICON_LIGHT.clone()
+        };
+        iced::widget::image(handle).width(size).height(size).into()
     }
     #[cfg(not(target_os = "macos"))]
     {

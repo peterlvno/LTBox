@@ -66,3 +66,19 @@ gen icon_256x256.png 256; gen icon_256x256@2x.png 512
 gen icon_512x512.png 512; gen icon_512x512@2x.png 1024
 iconutil -c icns "$iconset" -o "$OUT"
 echo "Wrote $OUT"
+
+# Also refresh the GUI About-panel marks: macOS shows the Liquid Glass icon PNG
+# in the About panel (ltbox-gui/src/view/about.rs::about_app_icon, displayed at
+# 88pt), light or dark to match LTBox's theme. Downscale to 256 for crisp
+# Retina rendering; the Default master covers light, and a Dark-appearance
+# render covers dark.
+GUI_DIR="$HERE/../../crates/ltbox-gui/assets"
+if [ -d "$GUI_DIR" ]; then
+    sips -z 256 256 "$tmp/icon_1024.png" --out "$GUI_DIR/icon_macos.png" >/dev/null
+    echo "Wrote $GUI_DIR/icon_macos.png"
+    "$ICT" "$ICON_DIR" --export-image --output-file "$tmp/icon_dark_1024.png" \
+        --platform macOS --rendition Dark --width 1024 --height 1024 --scale 1
+    [ -f "$tmp/icon_dark_1024.png" ] || { echo "ictool produced no Dark PNG" >&2; exit 1; }
+    sips -z 256 256 "$tmp/icon_dark_1024.png" --out "$GUI_DIR/icon_macos_dark.png" >/dev/null
+    echo "Wrote $GUI_DIR/icon_macos_dark.png"
+fi

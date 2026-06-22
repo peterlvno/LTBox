@@ -411,6 +411,12 @@ fn runtime_theme() -> RuntimeTheme {
     )
 }
 
+/// Current runtime dark-mode flag (kept in sync by `sync_runtime_theme`). Lets
+/// view code pick light/dark assets without an `&iced::Theme` in hand.
+pub fn runtime_dark() -> bool {
+    runtime_theme().dark_mode
+}
+
 /// Active palette for the current dark-mode flag.
 pub const fn palette(dark_mode: bool) -> &'static Palette {
     if dark_mode { &DARK } else { &LIGHT }
