@@ -1,5 +1,6 @@
 //! View tree, extracted from `main.rs` into per-domain `impl App` blocks.
 
+mod about;
 mod advanced;
 mod chrome;
 pub(crate) mod components;

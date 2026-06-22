@@ -1,4 +1,8 @@
 {
+  "about_description": "Набор полезных инструментов для некоторых планшетов Lenovo на чипах Qualcomm",
+  "about_github": "Репозиторий GitHub",
+  "about_license": "Лицензия",
+  "about_wiki": "Wiki / документация",
   "adv_arb_inspect_boot": "boot.img",
   "adv_arb_inspect_subtitle": "Считаны из выбранной папки прошивки. На следующем шаге укажите новое целевое значение.",
   "adv_arb_inspect_title": "Текущие индексы отката",
@@ -661,6 +665,7 @@
   "log_sysupdate_starting": "Запуск: {action}",
   "log_unroot_lun_resolved": "{boot_label} (LUN {boot_lun}) / {vbm_label} (LUN {vbm_lun}) определены по карте разделов",
   "model_unsupported": "Не поддерживается на {model}",
+  "nav_about": "О программе",
   "nav_advanced": "Дополнительно",
   "nav_dashboard": "Панель",
   "nav_flash": "Прошивка",

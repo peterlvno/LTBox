@@ -63,3 +63,8 @@ history           = "history"
 # Settings default-loader inline icon buttons (18 px)
 settings_browse   = "square-pen"
 settings_clear    = "eraser"
+
+# About panel
+nav_about         = "info"
+about_github      = "github"
+about_wiki        = "book-open"

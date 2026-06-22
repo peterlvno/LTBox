@@ -13,6 +13,9 @@ pub(crate) enum Message {
     /// No-op for click-blocker mouse_area widgets.
     Noop,
     Navigate(View),
+    /// Open an external URL (About panel links) in the host's default
+    /// browser via `open::that_detached` — no in-app webview.
+    OpenUrl(&'static str),
     SetTheme(ThemeChoice),
     ToggleLogPopup(bool),
     SelectCountry(String),

@@ -512,6 +512,7 @@ enum View {
     Reboot,
     Advanced,
     Settings,
+    About,
 }
 
 impl View {
@@ -525,6 +526,7 @@ impl View {
             Self::Reboot => "nav_reboot",
             Self::Advanced => "nav_advanced",
             Self::Settings => "nav_settings",
+            Self::About => "nav_about",
         }
     }
 
@@ -545,6 +547,7 @@ impl View {
             Self::Reboot => icon::nav_reboot(),
             Self::Advanced => icon::nav_advanced(),
             Self::Settings => icon::nav_settings(),
+            Self::About => icon::nav_about(),
         }
     }
 }
@@ -2746,7 +2749,7 @@ impl App {
             View::Root => self.root.is_in_exec(),
             View::Unroot => self.unroot.is_in_exec(),
             View::Advanced => self.advanced_inline_exec_surface_active(),
-            View::Dashboard | View::Reboot | View::Settings => false,
+            View::Dashboard | View::Reboot | View::Settings | View::About => false,
         }
     }
 
@@ -3182,6 +3185,10 @@ impl App {
     }
 
     fn is_nav_enabled(&self, view: View) -> bool {
+        // About is informational and device/platform-independent — always on.
+        if matches!(view, View::About) {
+            return true;
+        }
         if self.platform_supported == Some(false) {
             return matches!(view, View::Dashboard | View::SystemUpdate | View::Settings);
         }

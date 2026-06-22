@@ -1,4 +1,8 @@
 {
+  "about_description": "为搭载高通芯片的部分联想平板提供实用功能的工具箱",
+  "about_github": "GitHub 仓库",
+  "about_license": "许可证",
+  "about_wiki": "Wiki / 文档",
   "adv_arb_inspect_boot": "boot.img",
   "adv_arb_inspect_subtitle": "从所选固件文件夹读取。下一步将输入新的目标值。",
   "adv_arb_inspect_title": "当前回滚索引",
@@ -661,6 +665,7 @@
   "log_sysupdate_starting": "开始: {action}",
   "log_unroot_lun_resolved": "{boot_label} (LUN {boot_lun}) / {vbm_label} (LUN {vbm_lun}) 通过分区映射解析",
   "model_unsupported": "{model} 不支持",
+  "nav_about": "关于",
   "nav_advanced": "高级",
   "nav_dashboard": "仪表盘",
   "nav_flash": "刷写固件",

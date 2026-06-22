@@ -1,4 +1,8 @@
 {
+  "about_description": "A toolbox of handy utilities for select Lenovo tablets with Qualcomm chipsets",
+  "about_github": "GitHub repository",
+  "about_license": "License",
+  "about_wiki": "Wiki / documentation",
   "adv_arb_inspect_boot": "boot.img",
   "adv_arb_inspect_subtitle": "Read from the picked firmware folder. The next step asks for the new target value.",
   "adv_arb_inspect_title": "Current Rollback Indices",
@@ -661,6 +665,7 @@
   "log_sysupdate_starting": "Starting: {action}",
   "log_unroot_lun_resolved": "{boot_label} (LUN {boot_lun}) / {vbm_label} (LUN {vbm_lun}) resolved via partition map",
   "model_unsupported": "Not supported on {model}",
+  "nav_about": "About",
   "nav_advanced": "Advanced",
   "nav_dashboard": "Dashboard",
   "nav_flash": "Flash Firmware",

@@ -1,4 +1,8 @@
 {
+  "about_description": "Qualcommチップを搭載した一部のLenovoタブレット向けの便利な機能を集めたツールボックス",
+  "about_github": "GitHub リポジトリ",
+  "about_license": "ライセンス",
+  "about_wiki": "Wiki / ドキュメント",
   "adv_arb_inspect_boot": "boot.img",
   "adv_arb_inspect_subtitle": "選択したファームウェアフォルダから読み込みます。次のステップで新しいターゲット値を入力します。",
   "adv_arb_inspect_title": "現在のロールバックインデックス",
@@ -661,6 +665,7 @@
   "log_sysupdate_starting": "開始: {action}",
   "log_unroot_lun_resolved": "{boot_label} (LUN {boot_lun}) / {vbm_label} (LUN {vbm_lun}) がパーティションマップ経由で解決されました",
   "model_unsupported": "{model}ではサポートされていません",
+  "nav_about": "情報",
   "nav_advanced": "高度な機能",
   "nav_dashboard": "ダッシュボード",
   "nav_flash": "ファームウェアをフラッシュ",

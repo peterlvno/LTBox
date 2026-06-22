@@ -702,6 +702,13 @@ impl App {
                     |e| (String::new(), String::new(), Err(e)),
                 );
             }
+            Message::OpenUrl(url) => {
+                // Same rationale as OtaOpenDownload: hand the URL to the host's
+                // default browser rather than render an in-app webview.
+                if let Err(e) = open::that_detached(url) {
+                    tracing::warn!("failed to open URL {url}: {e}");
+                }
+            }
             Message::OtaOpenDownload(url) => {
                 // `open::that_detached` hands the URL to the host's
                 // default URL handler — Edge / Firefox / GNOME's
