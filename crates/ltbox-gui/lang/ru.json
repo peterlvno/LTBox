@@ -1,6 +1,8 @@
 {
   "about_description": "Набор полезных инструментов для некоторых планшетов Lenovo на чипах Qualcomm",
+  "about_disclaimer": "Только для образовательных целей · используйте на свой риск",
   "about_github": "Репозиторий GitHub",
+  "about_issue": "Сообщить о проблеме",
   "about_license": "Лицензия",
   "about_wiki": "Wiki / документация",
   "adv_arb_inspect_boot": "boot.img",

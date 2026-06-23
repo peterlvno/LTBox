@@ -5,6 +5,11 @@ fn main() {
     // entry. Rerun only when the TOML changes.
     println!("cargo:rerun-if-changed=fonts/lucide.toml");
     iced_lucide::build("fonts/lucide.toml").expect("Failed to generate Lucide icon module");
+
+    // Short git commit for the About panel's build identifier. Empty outside a
+    // git checkout (e.g. a source tarball) — the About panel then shows the
+    // version alone.
+    emit_git_hash();
     // iced_lucide is written against iced's git HEAD where
     // `Font::new(&'static str)` exists. iced 0.14 on crates.io
     // renamed that ctor to `Font::with_name`, so patch the generated
@@ -41,6 +46,65 @@ fn main() {
         // confirm step pushes the app into the exec view.
         println!("cargo:rustc-link-arg=/STACK:8388608");
     }
+}
+
+/// Emit `LTBOX_GIT_HASH` (short commit) for the About panel. The crate sits two
+/// levels below the repo root; rerun when `HEAD` or the refs move so the
+/// embedded hash stays current. Empty when this is not the LTBox checkout
+/// (e.g. a source tarball, possibly unpacked inside an unrelated repo), which
+/// the About panel renders as the bare version.
+fn emit_git_hash() {
+    match ltbox_git_hash() {
+        Some(hash) => {
+            // Watch the *resolved* HEAD / refs / packed-refs so a commit or
+            // checkout retriggers the script. `git rev-parse --git-path`
+            // handles worktrees / submodules, where `.git` is a file pointing
+            // elsewhere and the literal `../../.git/HEAD` would never change.
+            for spec in ["HEAD", "packed-refs", "refs"] {
+                if let Some(p) = run_git(&["rev-parse", "--git-path", spec]) {
+                    let p = p.trim();
+                    if !p.is_empty() {
+                        println!("cargo:rerun-if-changed={p}");
+                    }
+                }
+            }
+            println!("cargo:rustc-env=LTBOX_GIT_HASH={hash}");
+        }
+        None => {
+            // Not the LTBox checkout (tarball / no git). Watch the conventional
+            // path so a later `git init` retriggers, and emit no hash.
+            println!("cargo:rerun-if-changed=../../.git/HEAD");
+            println!("cargo:rustc-env=LTBOX_GIT_HASH=");
+        }
+    }
+}
+
+/// Short `HEAD` commit, but only when git's toplevel is exactly this LTBox
+/// checkout. A tarball nested under another Git repo would otherwise report the
+/// parent repo's commit (`git rev-parse` walks upward), embedding an unrelated
+/// build identifier.
+fn ltbox_git_hash() -> Option<String> {
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").ok()?;
+    // <repo>/crates/ltbox-gui → <repo>.
+    let expected_root = std::path::Path::new(&manifest).parent()?.parent()?;
+    let expected_root = std::fs::canonicalize(expected_root).ok()?;
+
+    let toplevel = run_git(&["rev-parse", "--show-toplevel"])?;
+    if std::fs::canonicalize(toplevel.trim()).ok()? != expected_root {
+        return None;
+    }
+    let hash = run_git(&["rev-parse", "--short", "HEAD"])?
+        .trim()
+        .to_string();
+    (!hash.is_empty()).then_some(hash)
+}
+
+/// Run `git <args>` from the crate dir; `None` on spawn failure or non-zero exit.
+fn run_git(args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new("git").args(args).output().ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// Compile + link the Windows resource (icon + version metadata).

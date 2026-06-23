@@ -7,6 +7,7 @@ use theme::mix_color;
 
 const GITHUB_URL: &str = "https://github.com/miner7222/LTBox";
 const WIKI_URL: &str = "https://github.com/miner7222/LTBox/wiki";
+const ISSUES_URL: &str = "https://github.com/miner7222/LTBox/issues";
 
 impl App {
     pub(crate) fn view_about(&self) -> Element<'_, Message> {
@@ -19,15 +20,26 @@ impl App {
             .size(12)
             .style(muted_style)
             .center();
-        let version = text(concat!("v", env!("CARGO_PKG_VERSION")))
-            .size(13)
-            .style(muted_style);
+        // Append the build commit (set by build.rs) so bug reports can pin the
+        // exact build; omitted for a tarball build with no git checkout.
+        let version_label = match option_env!("LTBOX_GIT_HASH") {
+            Some(hash) if !hash.is_empty() => {
+                format!("v{} · {hash}", env!("CARGO_PKG_VERSION"))
+            }
+            _ => format!("v{}", env!("CARGO_PKG_VERSION")),
+        };
+        let version = text(version_label).size(13).style(muted_style);
 
         let links = row![
             about_link_button(
                 icon::about_github(),
                 GITHUB_URL,
                 self.t("about_github").to_string(),
+            ),
+            about_link_button(
+                icon::about_issue(),
+                ISSUES_URL,
+                self.t("about_issue").to_string(),
             ),
             about_link_button(
                 icon::about_wiki(),
@@ -38,11 +50,20 @@ impl App {
         .spacing(12)
         .align_y(iced::Alignment::Center);
 
+        // License + disclaimer read as one fine-print footer block (tighter
+        // spacing than the panel's), set apart from the main content above.
         let license = text(format!("{}: GPL-3.0-or-later", self.t("about_license")))
             .size(12)
             .style(muted_style);
+        let disclaimer = text(self.t("about_disclaimer").to_string())
+            .size(11)
+            .style(muted_style)
+            .center();
+        let footer = column![license, disclaimer]
+            .spacing(4)
+            .align_x(iced::Alignment::Center);
 
-        let col = column![app_icon, title, description, version, links, license]
+        let col = column![app_icon, title, description, version, links, footer]
             .spacing(14)
             .align_x(iced::Alignment::Center);
 
