@@ -420,6 +420,7 @@
   "live_dumpparts_scan_start": "Scanning partition tables...",
   "live_dumpparts_stabilizing": "Stabilizing USB endpoint ({seconds}s)...",
   "live_edl_already": "Device already in EDL — skipping reboot",
+  "live_edl_detected_skip_adb": "EDL mode detected — skipping the ADB wait",
   "live_edl_loader_missing": "xbl_s_devprg_ns.melf not found in firmware folder",
   "live_edl_not_found": "EDL not found: {error}",
   "live_edl_open_failed_reboot_notice": "The device rebooted to EDL mode and the PC found its port, but opening a session failed (the Sahara/Firehose handshake did not complete).\nNothing has been written yet, so the device isn't bricked (unless it was already bricked before you started).\nHold Volume Down and Power to force a reboot.",

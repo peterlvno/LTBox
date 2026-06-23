@@ -420,6 +420,7 @@
   "live_dumpparts_scan_start": "パーティションテーブルをスキャン中...",
   "live_dumpparts_stabilizing": "USBエンドポイントを安定化中 ({seconds}秒)...",
   "live_edl_already": "デバイスはすでにEDLモードです — 再起動をスキップします",
+  "live_edl_detected_skip_adb": "EDL モードを検出 — ADB 待機をスキップ",
   "live_edl_loader_missing": "ファームウェアフォルダに xbl_s_devprg_ns.melf が見つかりません",
   "live_edl_not_found": "EDLが見つかりません: {error}",
   "live_edl_open_failed_reboot_notice": "端末が EDL モードに入り PC がポートを検出しましたが、セッションのオープンに失敗しました（Sahara/Firehose ハンドシェイク未完了）。\nまだ書き込みは行われていないため、デバイスが文鎮化することはありません（開始前から文鎮状態だった場合を除く）。\n音量ダウンと電源ボタンを長押しして、デバイスを強制的に再起動してください。",

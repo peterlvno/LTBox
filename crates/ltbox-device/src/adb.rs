@@ -336,14 +336,28 @@ impl AdbManager {
     /// or the device got stuck in `unauthorized` state that will never
     /// promote without user action.
     pub fn wait_for_device(&mut self) -> Result<()> {
+        self.wait_for_device_or(|| false).map(|_| ())
+    }
+
+    /// Like [`wait_for_device`](Self::wait_for_device), but abandon the wait
+    /// early (returning `Ok(false)`) the moment `bail` returns true. Used to
+    /// drop the post-fastboot ADB wait as soon as the device jumps straight to
+    /// the EDL/9008 port, instead of blocking for the full timeout when ADB will
+    /// never come up. `Ok(true)` = ADB device ready; `Err(Timeout)` = neither
+    /// appeared in time. `bail` is checked before each device probe so EDL
+    /// detection takes priority over a transient ADB probe error.
+    pub fn wait_for_device_or<F: FnMut() -> bool>(&mut self, mut bail: F) -> Result<bool> {
         if self.skip_adb {
             return Err(AdbError::DeviceNotFound);
         }
         let deadline = std::time::Instant::now() + WAIT_TIMEOUT;
         loop {
+            if bail() {
+                return Ok(false);
+            }
             if self.check_device()? {
                 self.connected_once = true;
-                return Ok(());
+                return Ok(true);
             }
             if std::time::Instant::now() >= deadline {
                 return Err(AdbError::Timeout);

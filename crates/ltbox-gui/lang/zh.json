@@ -420,6 +420,7 @@
   "live_dumpparts_scan_start": "正在扫描分区表...",
   "live_dumpparts_stabilizing": "稳定 USB 端点 ({seconds} 秒)...",
   "live_edl_already": "设备已在 EDL 状态 — 跳过重启",
+  "live_edl_detected_skip_adb": "检测到 EDL 模式 — 跳过 ADB 等待",
   "live_edl_loader_missing": "固件文件夹中找不到 xbl_s_devprg_ns.melf",
   "live_edl_not_found": "未找到 EDL: {error}",
   "live_edl_open_failed_reboot_notice": "设备已进入 EDL 模式且电脑已找到其端口，但打开会话失败（Sahara/Firehose 握手未完成）。\n尚未开始写入，因此设备没有变砖（除非开始前就已经是砖）。\n长按音量减和电源键可强制重启设备。",

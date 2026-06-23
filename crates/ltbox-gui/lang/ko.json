@@ -420,6 +420,7 @@
   "live_dumpparts_scan_start": "파티션 테이블 스캔 중...",
   "live_dumpparts_stabilizing": "USB 엔드포인트 안정화 중 ({seconds}초)...",
   "live_edl_already": "기기가 이미 EDL 상태 — 재부팅 생략",
+  "live_edl_detected_skip_adb": "EDL 모드 감지됨 — ADB 대기 건너뜀",
   "live_edl_loader_missing": "펌웨어 폴더에서 xbl_s_devprg_ns.melf를 찾을 수 없음",
   "live_edl_not_found": "EDL을 찾을 수 없음: {error}",
   "live_edl_open_failed_reboot_notice": "기기가 EDL 모드로 진입하고 PC가 포트를 찾았지만, 세션 열기에 실패했습니다(Sahara/Firehose 핸드셰이크 미완료).\n아직 쓰기가 시작되지 않아 기기는 벽돌 상태가 아닙니다(이미 벽돌 상태에서 시작한 경우는 예외).\n볼륨 다운과 전원 버튼을 길게 눌러 기기를 강제로 재부팅하세요.",

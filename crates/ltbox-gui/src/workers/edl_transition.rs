@@ -178,19 +178,32 @@ pub(crate) fn fastboot_reboot_then_adb_edl(tag: &str, log: &mut Vec<String>) -> 
         ltbox_core::i18n::tr("live_adb_wait_after_fastboot")
     );
     let mut mgr = ltbox_device::adb::AdbManager::new();
-    if let Err(e) = mgr.wait_for_device() {
-        ltbox_core::live!(
-            log,
-            "[{tag}] {}",
-            tr_args!("live_adb_wait_after_fastboot_failed", error = e.to_string())
-        );
-        return wait_for_manual_edl(tag, log);
+    // Some devices reboot straight into EDL/9008 and never bring ADB up. Poll
+    // the EDL port alongside the ADB wait so the moment 9008 appears we skip the
+    // (otherwise full-timeout) ADB wait and go straight to EDL.
+    match mgr.wait_for_device_or(ltbox_device::edl::check_device) {
+        // ADB device came up — reuse the same `mgr` (it already holds the
+        // cached `ADBUSBDevice`) for `reboot_adb_to_edl` instead of opening a
+        // second one — see that fn's doc comment for the USB-claim race.
+        Ok(true) => reboot_adb_to_edl(tag, log, &mut mgr),
+        // EDL appeared before ADB — skip the ADB wait entirely.
+        Ok(false) => {
+            ltbox_core::live!(
+                log,
+                "[{tag}] {}",
+                ltbox_core::i18n::tr("live_edl_detected_skip_adb")
+            );
+            wait_for_edl_ready(tag, log)
+        }
+        Err(e) => {
+            ltbox_core::live!(
+                log,
+                "[{tag}] {}",
+                tr_args!("live_adb_wait_after_fastboot_failed", error = e.to_string())
+            );
+            wait_for_manual_edl(tag, log)
+        }
     }
-    // Hand the same `mgr` (which already holds the cached
-    // `ADBUSBDevice` from `wait_for_device`) to `reboot_adb_to_edl`
-    // instead of letting it open a second one — see the doc comment
-    // on `reboot_adb_to_edl` for the USB-claim race rationale.
-    reboot_adb_to_edl(tag, log, &mut mgr)
 }
 
 pub(crate) fn ensure_edl(
