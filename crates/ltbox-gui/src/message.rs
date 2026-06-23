@@ -161,6 +161,9 @@ pub(crate) enum FlashMsg {
     FlashNext,
     FlashBack,
     FlashSelectFolder,
+    /// Pick a standalone EDL loader when the firmware folder ships none.
+    FlashSelectLoader,
+    FlashLoaderChosen(Option<String>),
     FlashExecStart,
     FlashExecDone(Vec<String>),
 }

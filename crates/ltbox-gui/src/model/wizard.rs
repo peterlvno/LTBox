@@ -571,6 +571,15 @@ pub(crate) struct FlashWizard {
     pub(crate) target: Option<FlashTarget>,
     pub(crate) data_mode: Option<DataMode>,
     pub(crate) firmware_folder: Option<String>,
+    /// `true` when the selected firmware folder ships no EDL loader, so the
+    /// folder step requires a separately-picked loader before advancing.
+    pub(crate) loader_required: bool,
+    /// User-picked EDL loader (or the resolved Settings default) used when the
+    /// firmware folder has none. `None` + `loader_required` blocks Next.
+    pub(crate) loader_override: Option<String>,
+    /// Reason the last picked loader was rejected (e.g. a standalone `.melf` on
+    /// TB323FU), shown in the folder step.
+    pub(crate) loader_error: Option<String>,
 }
 
 pub(crate) const FLASH_STEPS: &[&str] = &[
@@ -597,7 +606,11 @@ impl Wizard for FlashWizard {
             0 => self.device_region.is_some(),
             1 => self.target.is_some(),
             2 => self.data_mode.is_some(),
-            3 => self.firmware_folder.is_some(),
+            // Folder picked, and — when it ships no loader — a loader provided.
+            3 => {
+                self.firmware_folder.is_some()
+                    && (!self.loader_required || self.loader_override.is_some())
+            }
             4 => true,
             _ => false,
         }

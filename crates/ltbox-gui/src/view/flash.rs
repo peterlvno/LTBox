@@ -241,7 +241,7 @@ impl App {
             "picker_recents",
             false,
         );
-        let col = column![
+        let mut col = column![
             text(self.t("flash_folder_title").to_string())
                 .size(theme::text_size::WIZARD_STEP_TITLE)
                 .center(),
@@ -257,12 +257,73 @@ impl App {
                 })
                 .center()
                 .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
-            chips,
         ]
         .spacing(14)
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
+
+        // The picked firmware folder ships no EDL loader — require a
+        // separately-picked loader (or the configured default) before Next.
+        if selected && self.flash.loader_required {
+            let has = self.flash.loader_override.is_some();
+            let notice = text(
+                self.t(if has {
+                    "flash_loader_provided"
+                } else {
+                    "flash_loader_missing"
+                })
+                .to_string(),
+            )
+            .size(12)
+            .style(move |t: &Theme| iced::widget::text::Style {
+                color: Some(if has {
+                    pal_of(t).success
+                } else {
+                    pal_of(t).warning
+                }),
+            })
+            .center()
+            .wrapping(iced::widget::text::Wrapping::WordOrGlyph);
+            let browse = button(
+                text(
+                    self.t(if has {
+                        "flash_loader_change"
+                    } else {
+                        "flash_loader_browse"
+                    })
+                    .to_string(),
+                )
+                .size(13),
+            )
+            .on_press(Message::Flash(FlashMsg::FlashSelectLoader))
+            .padding([8, 16])
+            .style(md_text_btn_style);
+            let mut loader_col = column![notice].spacing(6).align_x(iced::Alignment::Center);
+            if let Some(p) = &self.flash.loader_override {
+                loader_col = loader_col.push(
+                    text(p.clone())
+                        .size(11)
+                        .style(muted_style)
+                        .center()
+                        .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+                );
+            }
+            if let Some(err) = &self.flash.loader_error {
+                loader_col = loader_col.push(
+                    text(err.clone())
+                        .size(11)
+                        .style(|t: &Theme| iced::widget::text::Style {
+                            color: Some(pal_of(t).error),
+                        })
+                        .center()
+                        .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+                );
+            }
+            col = col.push(loader_col.push(browse));
+        }
+
+        col = col.push(chips);
         container(col)
             .width(Length::Fill)
             .height(Length::Fill)

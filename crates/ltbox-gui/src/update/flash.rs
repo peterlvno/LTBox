@@ -77,6 +77,33 @@ impl App {
                 );
                 Task::none()
             }
+            FlashMsg::FlashSelectLoader => {
+                // Always open the picker (don't auto-reuse the Settings default
+                // via `pick_loader_with_default`) so the Change button can pick
+                // a different loader — the default was already applied when the
+                // loader-less folder was selected.
+                return pickers::pick_file_for(
+                    loader_file_spec("picker_target_edl_loader"),
+                    &self.recent_paths,
+                    |v| Message::Flash(FlashMsg::FlashLoaderChosen(v)),
+                );
+                Task::none()
+            }
+            FlashMsg::FlashLoaderChosen(path) => {
+                if let Some(p) = path {
+                    // Model-aware resolve: upgrades a `.melf` to a sibling Sahara
+                    // manifest on TB323FU (and rejects a standalone `.melf`
+                    // there), validates the extension, and records the recent.
+                    match self.resolve_loader_input(&p) {
+                        Ok(loader) => {
+                            self.flash.loader_override = Some(loader);
+                            self.flash.loader_error = None;
+                        }
+                        Err(msg) => self.flash.loader_error = Some(msg),
+                    }
+                }
+                Task::none()
+            }
             FlashMsg::FlashExecStart => {
                 self.begin_op(View::Flash);
                 self.op_steps = self.derive_flash_op_steps();
@@ -85,6 +112,7 @@ impl App {
                 let conn = self.connection;
                 let device_model = self.device_model.clone();
                 let fw_folder = self.flash.firmware_folder.clone().unwrap_or_default();
+                let loader_override = self.flash.loader_override.clone();
                 let rollback_label = self.t(cfg.modify_rollback.label_key()).to_string();
                 // Split the old single "Starting: modify_region=… rollback=…
                 // wipe=…" line into three labelled, translated lines — the
@@ -122,7 +150,15 @@ impl App {
                     async move {
                         tokio::task::spawn_blocking(move || {
                             ltbox_core::runtime::run_heavy(move || {
-                                flash_worker(cfg, conn, device_model, fw_folder, rb_mode, ll)
+                                flash_worker(
+                                    cfg,
+                                    conn,
+                                    device_model,
+                                    fw_folder,
+                                    loader_override,
+                                    rb_mode,
+                                    ll,
+                                )
                             })
                             .and_then(|r| r)
                         })

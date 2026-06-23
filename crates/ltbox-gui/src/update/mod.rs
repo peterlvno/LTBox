@@ -198,7 +198,7 @@ impl App {
                     self.remember_recent(self.picker_target.kind(), &p);
                     match self.picker_target {
                         PickerTarget::UnrootFolder => self.unroot.folder_path = Some(p),
-                        PickerTarget::FlashFolder => self.flash.firmware_folder = Some(p),
+                        PickerTarget::FlashFolder => self.set_flash_firmware_folder(p),
                         _ => {}
                     }
                 }
@@ -224,7 +224,7 @@ impl App {
                 self.remember_recent(target.kind(), &path);
                 match target {
                     PickerTarget::UnrootFolder => self.unroot.folder_path = Some(path),
-                    PickerTarget::FlashFolder => self.flash.firmware_folder = Some(path),
+                    PickerTarget::FlashFolder => self.set_flash_firmware_folder(path),
                     _ => {}
                 }
             }

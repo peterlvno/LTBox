@@ -5,6 +5,7 @@ pub(crate) fn flash_worker(
     conn: ConnectionStatus,
     mut device_model: String,
     fw_folder: String,
+    loader_override: Option<String>,
     mut rb_mode: ltbox_patch::rollback::RollbackMode,
     ll: LiveLabels,
 ) -> Result<Vec<String>, String> {
@@ -612,18 +613,22 @@ pub(crate) fn flash_worker(
         }
     }
 
-    // 8. EDL flash
-    let loader = find_edl_loader(fw_dir).or_else(|| fw_dir.parent().and_then(find_edl_loader));
-    let loader = match loader {
-        Some(l) => l,
-        None => {
-            ltbox_core::live!(
-                log,
-                "[EDL] {}",
-                ltbox_core::i18n::tr("live_edl_loader_missing")
-            );
-            return Ok(log);
-        }
+    // 8. EDL flash. A user-picked loader (the firmware folder shipped none) wins
+    // over the in-folder lookup.
+    let loader = match loader_override {
+        Some(p) => std::path::PathBuf::from(p),
+        None => match find_edl_loader(fw_dir).or_else(|| fw_dir.parent().and_then(find_edl_loader))
+        {
+            Some(l) => l,
+            None => {
+                ltbox_core::live!(
+                    log,
+                    "[EDL] {}",
+                    ltbox_core::i18n::tr("live_edl_loader_missing")
+                );
+                return Ok(log);
+            }
+        },
     };
 
     live!(log, "[Flash] {}", phase_marker(2, 4, &ll.op_flash_phase[1]));

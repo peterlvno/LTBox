@@ -2903,6 +2903,24 @@ impl App {
         )
     }
 
+    /// Record the picked flash firmware folder and flag whether it ships an EDL
+    /// loader (mirroring the worker's dir-then-parent lookup). When it does not,
+    /// pre-fill a configured Settings default loader if it fits the model; the
+    /// folder step otherwise requires the user to pick one before advancing.
+    fn set_flash_firmware_folder(&mut self, path: String) {
+        let dir = std::path::Path::new(&path);
+        let has_loader =
+            find_edl_loader(dir).is_some() || dir.parent().and_then(find_edl_loader).is_some();
+        self.flash.loader_required = !has_loader;
+        self.flash.loader_override = if self.flash.loader_required {
+            self.resolved_default_loader()
+        } else {
+            None
+        };
+        self.flash.loader_error = None;
+        self.flash.firmware_folder = Some(path);
+    }
+
     /// Map cached PTSTPD `SaleArea` for the connected device → `DeviceRegion`.
     /// `"CN"` → PRC, JSON null → ROW, anything else → `None`. Cache-only.
     fn inferred_flash_region(&self) -> Option<DeviceRegion> {
