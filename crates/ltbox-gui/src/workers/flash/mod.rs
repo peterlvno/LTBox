@@ -435,6 +435,151 @@ fn decrypt_rawprogram_x_files(
     Ok(decrypted)
 }
 
+/// Recursively collect `*.zst` files under `dir` (bounded depth so a symlink
+/// loop can't spin), appending to `out`. A firmware tree is shallow; the depth
+/// cap is a safety net, not a real limit.
+fn collect_zst_files(
+    dir: &std::path::Path,
+    depth: u32,
+    out: &mut Vec<std::path::PathBuf>,
+) -> std::result::Result<(), String> {
+    const MAX_DEPTH: u32 = 8;
+    if depth > MAX_DEPTH {
+        return Ok(());
+    }
+    let entries = std::fs::read_dir(dir).map_err(|e| {
+        tr_args!(
+            "err_read_dir_failed",
+            path = dir.display().to_string(),
+            error = e.to_string()
+        )
+    })?;
+    for path in entries.filter_map(|r| r.ok().map(|e| e.path())) {
+        if path.is_dir() {
+            collect_zst_files(&path, depth + 1, out)?;
+        } else if path.is_file()
+            && path
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("zst"))
+                .unwrap_or(false)
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Decompress any `*.zst` partition images in place so the rawprogram
+/// references resolve. Ported ROMs ship e.g. `super.img.zst` (zstd-compressed)
+/// while the rawprogram XML names `super.img`. The scan recurses into
+/// subdirectories because a rawprogram can reference an image through a relative
+/// subdir (`images/super.img`). A `*.zst` whose decompressed target already
+/// exists is skipped, and the source `.zst` is kept (LTBox never deletes user
+/// files). Streamed — the output can be tens of GB — with periodic progress in
+/// the live log. Returns the number of files decompressed.
+fn decompress_zst_images(
+    fw_dir: &std::path::Path,
+    log: &mut Vec<String>,
+) -> std::result::Result<usize, String> {
+    let mut zst_entries: Vec<std::path::PathBuf> = Vec::new();
+    collect_zst_files(fw_dir, 0, &mut zst_entries)?;
+    if zst_entries.is_empty() {
+        return Ok(0);
+    }
+    let mut count = 0usize;
+    for src in &zst_entries {
+        // `super.img.zst` → `super.img` (drop the trailing `.zst`).
+        let target = src.with_extension("");
+        if target.exists() {
+            continue;
+        }
+        let name = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
+        live!(
+            log,
+            "[Flash] {}",
+            tr_args!("live_flash_zst_decompress", name = &name)
+        );
+        decompress_zst_file(src, &target, &name, log).map_err(|e| {
+            tr_args!(
+                "err_flash_zst_decompress_failed",
+                path = src.display().to_string(),
+                error = e
+            )
+        })?;
+        count += 1;
+    }
+    Ok(count)
+}
+
+/// Stream-decompress one zstd file, logging progress every ~1 GiB written.
+///
+/// Writes to a temporary sibling and renames onto `dst` only after a clean
+/// flush, so an interrupted run (kill / power loss) never leaves a
+/// complete-looking but truncated `*.img` that a later run would skip
+/// (`target.exists()`) and then flash.
+fn decompress_zst_file(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+    name: &str,
+    log: &mut Vec<String>,
+) -> std::result::Result<(), String> {
+    use std::io::{Read, Write};
+    // `<dst>.ltbox-zst-tmp`, a sibling so the rename stays on one filesystem.
+    let tmp = {
+        let mut s = dst.as_os_str().to_owned();
+        s.push(".ltbox-zst-tmp");
+        std::path::PathBuf::from(s)
+    };
+    let result = (|| -> std::result::Result<(), String> {
+        let input = std::fs::File::open(src).map_err(|e| e.to_string())?;
+        // `Decoder::new` wraps the reader in its own `BufReader`.
+        let mut decoder = zstd::stream::Decoder::new(input).map_err(|e| e.to_string())?;
+        let mut out =
+            std::io::BufWriter::new(std::fs::File::create(&tmp).map_err(|e| e.to_string())?);
+        let mut buf = vec![0u8; 4 * 1024 * 1024];
+        let mut total: u64 = 0;
+        let mut next_mark: u64 = 1 << 30; // 1 GiB
+        loop {
+            let n = decoder.read(&mut buf).map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+            total += n as u64;
+            if total >= next_mark {
+                live!(
+                    log,
+                    "[Flash] {}",
+                    tr_args!(
+                        "live_flash_zst_progress",
+                        name = name,
+                        gb = format!("{:.1}", total as f64 / 1_073_741_824.0)
+                    )
+                );
+                next_mark += 1 << 30;
+            }
+        }
+        // Drain the buffer, then fsync the data BEFORE publishing the name —
+        // `flush` only reaches the OS cache, so without `sync_all` a crash after
+        // the rename could leave `dst` pointing at unflushed (truncated) bytes
+        // that a later run would `target.exists()`-skip and then flash.
+        let file = out.into_inner().map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        drop(file);
+        // Atomic publish: the final name only ever appears fully written.
+        std::fs::rename(&tmp, dst).map_err(|e| e.to_string())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
+}
+
 /// Country-code partitions to dump/patch/flash for a model. TB320FC / TB323FU
 /// keep the code ONLY in `oemowninfo` (LUN 0); every other model keeps it in
 /// `devinfo` + `persist`. The model is matched against the vendor_boot AVB

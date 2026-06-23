@@ -1637,6 +1637,9 @@ pub fn collect_firmware_xmls_for_flash(
     let mut patch_xmls = Vec::new();
     let mut persist_xmls = Vec::new();
     let mut devinfo_xmls = Vec::new();
+    // Plain `rawprogram0.xml`, deferred: used as the LUN0 source only when no
+    // persist/`_unsparse0` variant supersedes it (see below).
+    let mut rawprogram0: Option<PathBuf> = None;
     let entries = std::fs::read_dir(dir)?;
 
     for entry in entries.flatten() {
@@ -1655,6 +1658,12 @@ pub fn collect_firmware_xmls_for_flash(
                 continue;
             }
             if name == "rawprogram0.xml" {
+                // Lenovo stock ships a persist/`_unsparse0` LUN0 variant that
+                // supersedes the plain `rawprogram0.xml`, so defer it and use it
+                // only as a fallback when no such variant exists — ported ROMs
+                // ship only `rawprogram0.xml`, with `super` (the OS) on LUN0, so
+                // dropping it unconditionally left `super` unflashed.
+                rawprogram0 = Some(path);
                 continue;
             }
             match rawprogram_family(&lower) {
@@ -1667,8 +1676,16 @@ pub fn collect_firmware_xmls_for_flash(
         }
     }
 
-    if let Some(path) = select_persist_xml(persist_xmls, allow_dp_filenames) {
-        raw_xmls.push(path);
+    // LUN0 source: prefer the persist/`_unsparse0` variant; otherwise fall back
+    // to the plain `rawprogram0.xml`. Either way `flash_rawprogram_with_wipe`'s
+    // per-label keep/wipe skip still preserves userdata/metadata.
+    match select_persist_xml(persist_xmls, allow_dp_filenames) {
+        Some(path) => raw_xmls.push(path),
+        None => {
+            if let Some(path) = rawprogram0 {
+                raw_xmls.push(path);
+            }
+        }
     }
     if let Some(path) = select_devinfo_xml(devinfo_xmls, allow_dp_filenames) {
         raw_xmls.push(path);
@@ -2118,5 +2135,38 @@ mod tests {
             10
         );
         assert!(wipe_plan.iter().any(|entry| entry.label == "frp"));
+    }
+
+    #[test]
+    fn rawprogram0_is_lun0_fallback_only_without_persist_variant() {
+        let base = std::env::temp_dir().join(format!(
+            "ltbox_xmlsel_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        let has = |raw: &[PathBuf], n: &str| raw.iter().any(|p| p.file_name().unwrap() == n);
+        let prog = |lun: u32, file: &str| {
+            format!(
+                r#"<data><program physical_partition_number="{lun}" start_sector="0" filename="{file}"/></data>"#
+            )
+        };
+        std::fs::write(base.join("rawprogram0.xml"), prog(0, "super.img")).unwrap();
+        std::fs::write(base.join("rawprogram1.xml"), prog(1, "xbl.img")).unwrap();
+
+        // No persist / `_unsparse0` variant → rawprogram0.xml is the LUN0 source
+        // (the ported-ROM case where `super` would otherwise never flash).
+        let (raw, _) = collect_firmware_xmls_for_flash(&base, false).unwrap();
+        assert!(has(&raw, "rawprogram0.xml"));
+
+        // A persist variant supersedes the plain rawprogram0.xml (Lenovo stock).
+        std::fs::write(base.join("rawprogram_unsparse0.xml"), prog(0, "super.img")).unwrap();
+        let (raw2, _) = collect_firmware_xmls_for_flash(&base, false).unwrap();
+        assert!(!has(&raw2, "rawprogram0.xml"));
+        assert!(has(&raw2, "rawprogram_unsparse0.xml"));
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

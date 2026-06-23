@@ -41,6 +41,9 @@ ureq = { version = "3", features = ["rustls", "json"] }
 
 # Zip (Qualcomm driver archive extraction)
 zip = { version = "8", default-features = false, features = ["deflate"] }
+# Zstd (decompress ported-ROM `*.img.zst` payloads, e.g. `super.img.zst`).
+# Already linked transitively via kptools, so this adds no new C build surface.
+zstd = "0.13"
 
 # UTF-8-guaranteed paths. `camino::Utf8PathBuf` is a drop-in `PathBuf`
 # replacement that rejects non-UTF-8 byte sequences at construction time,

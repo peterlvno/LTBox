@@ -40,6 +40,11 @@ pub(crate) fn simple_flash_worker(
     //    the firmware as shipped — it is not a content modification.
     decrypt_rawprogram_x_files(fw_dir, &mut log)?;
 
+    // 2b. Decompress any `*.zst` partition images (e.g. `super.img.zst`) so the
+    //     rawprogram references resolve — same as the full flash, and before
+    //     EDL so a multi-GB decompress doesn't hold the session open.
+    decompress_zst_images(fw_dir, &mut log)?;
+
     // 3. Locate the EDL loader inside the firmware folder (or its parent).
     //    A missing loader is a hard error — nothing can be flashed, so the run
     //    must fail rather than report success.

@@ -27,6 +27,14 @@ pub(crate) fn flash_worker(
         tr_args!("live_flash_firmware_folder", path = fw_folder)
     );
 
+    // Decompress any `*.zst` partition images (e.g. a ported ROM's
+    // `super.img.zst`) up front — before any device probe / transition. The
+    // output can be tens of GB and take a while, so do it while the device is
+    // still untouched (rather than leaving it parked in the bootloader), and so
+    // a compressed boot-chain image is present for the scan + region/AVB/ARB
+    // planning below. On failure the device has not been moved, so just return.
+    decompress_zst_images(fw_dir, &mut log)?;
+
     // 2. Device detection
     //
     // Run the ADB device probe BEFORE the

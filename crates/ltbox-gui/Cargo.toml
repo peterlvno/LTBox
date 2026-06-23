@@ -29,6 +29,7 @@ dark-light = { workspace = true }
 sys-locale = { workspace = true }
 semver = { workspace = true }
 open = { workspace = true }
+zstd = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true }
