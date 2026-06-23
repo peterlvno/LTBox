@@ -319,7 +319,9 @@ impl App {
             )
             .width(Length::Fill)
             .style(|t: &Theme| {
-                theme::surface_card_style(t, theme::SurfaceLevel::Default, theme::shape::MD, 0)
+                // Elevation 1 to match its sibling dashboard cards (current-op,
+                // log); it was the only one flat at 0.
+                theme::surface_card_style(t, theme::SurfaceLevel::Default, theme::shape::MD, 1)
             }),
         );
         content = content.push(card(self.t("dash_current_operation"), op_text));

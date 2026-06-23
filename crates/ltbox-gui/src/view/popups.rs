@@ -30,16 +30,14 @@ impl App {
                 .padding(0)
                 .style(|t: &Theme, status| {
                     let p = pal_of(t);
-                    let hovered = matches!(status, button::Status::Hovered);
+                    // `surface_container` base + M3 state layer on hover / press.
+                    let bg = theme::mix_color(
+                        p.surface_container,
+                        p.on_surface,
+                        theme::state_alpha(status),
+                    );
                     button::Style {
-                        background: Some(
-                            if hovered {
-                                p.surface_container_high
-                            } else {
-                                p.surface_container
-                            }
-                            .into(),
-                        ),
+                        background: Some(bg.into()),
                         text_color: p.on_surface,
                         border: iced::Border {
                             radius: 6.0.into(),
@@ -354,14 +352,17 @@ impl App {
                     .width(Length::Fill)
                     .style(move |t: &Theme, status| {
                         let p = pal_of(t);
-                        let hover = matches!(status, button::Status::Hovered);
                         button::Style {
                             background: Some(if skipped {
                                 p.primary.into()
-                            } else if hover {
-                                p.surface_container_high.into()
                             } else {
-                                iced::Color::TRANSPARENT.into()
+                                // M3 list-item state layer on hover / press.
+                                let a = theme::state_alpha(status);
+                                if a > 0.0 {
+                                    with_alpha(p.on_surface, a).into()
+                                } else {
+                                    iced::Color::TRANSPARENT.into()
+                                }
                             }),
                             text_color: if skipped { p.on_primary } else { p.on_surface },
                             ..Default::default()
@@ -385,7 +386,6 @@ impl App {
                 .width(Length::Fill)
                 .style(move |t: &Theme, status| {
                     let p = pal_of(t);
-                    let hover = matches!(status, button::Status::Hovered);
                     if disabled {
                         return button::Style {
                             background: Some(iced::Color::TRANSPARENT.into()),
@@ -396,10 +396,14 @@ impl App {
                     button::Style {
                         background: Some(if selected {
                             p.primary.into()
-                        } else if hover {
-                            p.surface_container_high.into()
                         } else {
-                            iced::Color::TRANSPARENT.into()
+                            // M3 list-item state layer on hover / press.
+                            let a = theme::state_alpha(status);
+                            if a > 0.0 {
+                                with_alpha(p.on_surface, a).into()
+                            } else {
+                                iced::Color::TRANSPARENT.into()
+                            }
                         }),
                         text_color: if selected { p.on_primary } else { p.on_surface },
                         ..Default::default()

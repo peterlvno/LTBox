@@ -50,8 +50,9 @@ fn m3_dialog_layers(inner: Element<'_, Message>) -> Element<'_, Message> {
     let scrim = container(Space::new().width(Length::Fill).height(Length::Fill))
         .width(Length::Fill)
         .height(Length::Fill)
-        .style(|_t: &Theme| container::Style {
-            background: Some(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.45).into()),
+        // M3 modal scrim: the `scrim` role (black) at 32%, not a hardcoded 45%.
+        .style(|t: &Theme| container::Style {
+            background: Some(with_alpha(pal_of(t).scrim, 0.32).into()),
             ..Default::default()
         });
     let centered = container(card)

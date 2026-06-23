@@ -12,10 +12,13 @@ pub(crate) fn muted_style(t: &Theme) -> iced::widget::text::Style {
     }
 }
 
-/// `outline` — captions and sidebar section headers.
+/// `on_surface_variant` — captions and sidebar section headers. M3 reserves
+/// `outline` for borders; used as text it falls below AA contrast in light mode
+/// (~4.3:1), so secondary text uses `on_surface_variant` and the quieter tier
+/// comes from size / weight instead.
 pub(crate) fn label_style(t: &Theme) -> iced::widget::text::Style {
     iced::widget::text::Style {
-        color: Some(pal_of(t).outline),
+        color: Some(pal_of(t).on_surface_variant),
     }
 }
 
@@ -62,10 +65,13 @@ pub(crate) fn error_container_text_style(t: &Theme) -> iced::widget::text::Style
     }
 }
 
-pub(crate) fn neutral_pill_btn_style(t: &Theme, _s: button::Status) -> button::Style {
+pub(crate) fn neutral_pill_btn_style(t: &Theme, status: button::Status) -> button::Style {
     let p = pal_of(t);
+    // Tonal pill (`on_surface @ 8%`) with the M3 state layer added on
+    // hover / press instead of staying flat across every status.
+    let alpha = 0.08 + theme::state_alpha(status);
     button::Style {
-        background: Some(with_alpha(p.on_surface, 0.08).into()),
+        background: Some(with_alpha(p.on_surface, alpha).into()),
         border: iced::Border {
             radius: 4.0.into(),
             ..Default::default()
@@ -83,12 +89,15 @@ pub(crate) fn m3_text_input_style(t: &Theme, status: text_input::Status) -> text
         text_input::Status::Hovered | text_input::Status::Focused { is_hovered: true }
     );
     let disabled = matches!(status, text_input::Status::Disabled);
+    // M3 outlined field: resting `outline`, hover `on_surface`, focus `primary`.
+    // `outline_variant` (used before) is a divider tone ~1.5:1 on surface — the
+    // resting control edge could vanish.
     let border_color = if focused {
         p.primary
     } else if hovered {
-        p.outline
+        p.on_surface
     } else {
-        p.outline_variant
+        p.outline
     };
     text_input::Style {
         background: if disabled {
@@ -127,8 +136,10 @@ pub(crate) fn m3_pick_list_style(t: &Theme, status: pick_list::Status) -> pick_l
         placeholder_color: with_alpha(p.on_surface, 0.62),
         handle_color: p.on_surface_variant,
         background: p.surface_container_lowest.into(),
+        // `outline` (not the ~1.5:1 `outline_variant` divider tone) so the
+        // resting control edge clears the 3:1 UI-contrast threshold.
         border: iced::Border {
-            color: p.outline_variant,
+            color: p.outline,
             width: 1.0,
             radius: theme::shape::SM.into(),
         },

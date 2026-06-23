@@ -663,7 +663,7 @@ pub fn surface_card_style(
     elevation_level: u8,
 ) -> iced::widget::container::Style {
     use iced::widget::container;
-    let dark = t.palette().background.r < 0.5;
+    let dark = is_dark(t);
     let p = active_palette_for(t);
     container::Style {
         background: Some(level.bg(&p).into()),
@@ -680,8 +680,12 @@ pub fn surface_card_style(
 /// M3 elevation → `iced::Shadow`. `0` = none, `5` = modal-dialog.
 pub fn elevation(level: u8, dark_mode: bool) -> iced::Shadow {
     use iced::{Color, Shadow, Vector};
+    // Dark M3 conveys elevation mainly through tonal surface containers, so
+    // shadows stay subtle — a gentle ramp by level (0.20..0.36) rather than a
+    // flat, heavy 0.6 black. Light theme keeps one soft key shadow.
     let shadow_color = if dark_mode {
-        Color::from_rgba(0.0, 0.0, 0.0, 0.6)
+        let alpha = 0.20 + 0.04 * f32::from(level.min(5).saturating_sub(1));
+        Color::from_rgba(0.0, 0.0, 0.0, alpha)
     } else {
         Color::from_rgba(0.0, 0.0, 0.0, 0.15)
     };
