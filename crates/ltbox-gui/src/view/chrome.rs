@@ -605,6 +605,33 @@ impl App {
         .into()
     }
 
+    /// The active driver banner for the current `driver_status` /
+    /// `driver_update`, or `None` when drivers are fine. The missing-driver
+    /// warning and the optional update prompt are mutually exclusive (a missing
+    /// driver has no version to compare). Shared by the dashboard and Settings
+    /// so switching driver mode surfaces the install/update prompt in both
+    /// places, not only after navigating back to the dashboard.
+    pub(crate) fn driver_install_banner(&self) -> Option<Element<'_, Message>> {
+        use ltbox_device::driver::DriverStatus;
+        if matches!(
+            self.driver_status,
+            Some(
+                DriverStatus::Missing(_)
+                    | DriverStatus::UdevRulesMissing
+                    | DriverStatus::UdevRulesStale
+                    | DriverStatus::UdevRulesNoPermission
+                    | DriverStatus::KernelDriverMissing
+                    | DriverStatus::KernelDriverUnsupported
+            )
+        ) {
+            Some(self.driver_warning_banner())
+        } else if self.driver_update.is_some() {
+            Some(self.driver_update_banner())
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn driver_warning_banner(&self) -> Element<'_, Message> {
         use ltbox_device::driver::DriverStatus;
         let installing = self.installing_drivers;

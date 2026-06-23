@@ -162,23 +162,8 @@ impl App {
             );
         }
 
-        if matches!(
-            self.driver_status,
-            Some(
-                ltbox_device::driver::DriverStatus::Missing(_)
-                    | ltbox_device::driver::DriverStatus::UdevRulesMissing
-                    | ltbox_device::driver::DriverStatus::UdevRulesStale
-                    | ltbox_device::driver::DriverStatus::UdevRulesNoPermission
-                    | ltbox_device::driver::DriverStatus::KernelDriverMissing
-                    | ltbox_device::driver::DriverStatus::KernelDriverUnsupported
-            )
-        ) {
-            content = content.push(self.driver_warning_banner());
-        } else if self.driver_update.is_some() {
-            // Driver present but outdated — optional update prompt. Mutually
-            // exclusive with the missing banner above (a missing driver has
-            // no version to compare).
-            content = content.push(self.driver_update_banner());
+        if let Some(banner) = self.driver_install_banner() {
+            content = content.push(banner);
         }
 
         // Dual-USB-C port advisory — independent of the driver banners, so a

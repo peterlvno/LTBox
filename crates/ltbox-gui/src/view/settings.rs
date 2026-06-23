@@ -353,13 +353,17 @@ impl App {
             }
         });
 
-        column![
+        let mut col = column![
             text(self.t("settings_title").to_string()).size(theme::text_size::TITLE_LARGE),
             widget::rule::horizontal(1),
-            prefs_card,
         ]
         .spacing(14)
-        .width(Length::Fill)
-        .into()
+        .width(Length::Fill);
+        // Surface the driver install / update banner here too, so switching the
+        // driver mode above shows the prompt without a trip to the dashboard.
+        if let Some(banner) = self.driver_install_banner() {
+            col = col.push(banner);
+        }
+        col.push(prefs_card).into()
     }
 }
