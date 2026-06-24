@@ -3,8 +3,8 @@
 
 use crate::pickers;
 use crate::{
-    AdvAction, Family, LOADER_PICKER_EXTS, NightlySource, Provider, RootMode, VerChoice,
-    is_loader_file,
+    AdvAction, Family, LOADER_PICKER_EXTS, NightlySource, Provider, RootMode, SkrootFlavor,
+    VerChoice, is_loader_file,
 };
 
 // Internal steps: 0=Family, 1=Mode, 2=Provider, 3=Version,
@@ -17,6 +17,7 @@ pub(crate) struct RootWizard {
     pub(crate) step: usize,
     pub(crate) family: Option<Family>,
     pub(crate) mode: Option<RootMode>,
+    pub(crate) skroot_flavor: Option<SkrootFlavor>,
     pub(crate) provider: Option<Provider>,
     pub(crate) version: Option<VerChoice>,
     pub(crate) nightly_source: Option<NightlySource>,
@@ -117,6 +118,13 @@ pub(crate) const ROOT_STEPS_APATCH_NIGHTLY: &[&str] = &[
     "root_step_confirm",
     "root_step_flash",
 ];
+pub(crate) const ROOT_STEPS_SKROOT: &[&str] = &[
+    "root_step_type",
+    "root_step_skroot_flavor",
+    "root_step_folder",
+    "root_step_confirm",
+    "root_step_flash",
+];
 
 impl RootWizard {
     pub(crate) fn reset(&mut self) {
@@ -146,6 +154,9 @@ impl RootWizard {
     pub(crate) fn is_apatch(&self) -> bool {
         self.family == Some(Family::APatch)
     }
+    pub(crate) fn is_skroot(&self) -> bool {
+        self.family == Some(Family::Skroot)
+    }
 
     pub(crate) fn is_ksu_lkm(&self) -> bool {
         self.family == Some(Family::KernelSU) && self.mode == Some(RootMode::Lkm)
@@ -156,6 +167,9 @@ impl RootWizard {
     }
 
     pub(crate) fn active_steps(&self) -> &'static [&'static str] {
+        if self.is_skroot() {
+            return ROOT_STEPS_SKROOT;
+        }
         if self.is_gki() {
             return ROOT_STEPS_GKI;
         }
@@ -184,6 +198,17 @@ impl RootWizard {
         // Map internal step index into the position within the active
         // route's label array. Comments at each branch show the mapping.
         let has_modes = self.family.map(|f| f.has_modes()).unwrap_or(false);
+        if self.is_skroot() {
+            // 0,1,5,6,7 → 0..4
+            return match self.step {
+                0 => 0,
+                1 => 1,
+                5 => 2,
+                6 => 3,
+                7 => 4,
+                _ => self.step,
+            };
+        }
         if self.is_gki() {
             // 0,1,2,5,6,7 → 0..5
             return match self.step {
@@ -284,7 +309,13 @@ impl RootWizard {
                 }
                 self.step = 1;
             }
-            1 => self.step = 2,
+            1 => {
+                if self.is_skroot() {
+                    self.step = 5;
+                    return;
+                }
+                self.step = 2;
+            }
             2 => {
                 if self.is_gki() {
                     self.step = 5;
@@ -338,6 +369,10 @@ impl RootWizard {
             4 => self.step = 3,
             5 => {
                 // Folder → whichever sub-step populated the source.
+                if self.is_skroot() {
+                    self.step = 1;
+                    return;
+                }
                 if self.is_gki() {
                     self.step = 2;
                     return;
@@ -368,7 +403,12 @@ impl RootWizard {
     pub(crate) fn can_next(&self) -> bool {
         match self.step {
             0 => self.family.is_some(),
-            1 => self.mode.is_some(),
+            1 => {
+                if self.is_skroot() {
+                    return self.skroot_flavor == Some(SkrootFlavor::Lite);
+                }
+                self.mode.is_some()
+            }
             2 => {
                 if self.is_gki() {
                     self.file_path.is_some()

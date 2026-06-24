@@ -93,6 +93,39 @@ fn download_ksu_manager_apk_nightly(
     Ok(run_id)
 }
 
+fn select_skroot_manager_asset(assets: &[(String, String)]) -> Option<(String, String)> {
+    let is_lite_apk = |name: &str| {
+        let lower = name.to_ascii_lowercase();
+        lower.ends_with(".apk") && lower.contains("lite") && !lower.contains("pro")
+    };
+
+    select_manager_asset(assets, &["skroot_lite", "skroot-lite", "lite"])
+        .filter(|(name, _)| is_lite_apk(name))
+        .or_else(|| assets.iter().find(|(name, _)| is_lite_apk(name)).cloned())
+}
+
+fn download_skroot_manager_apk(
+    work_dir: &Path,
+    manager_apk: &Path,
+    log: &mut Vec<String>,
+) -> Result<String> {
+    let repo = provider_repo(RootProvider::Skroot)
+        .ok_or_else(|| LtboxError::Patch("SKRoot provider repo missing".into()))?;
+    let client = GitHubClient::new(repo)?;
+    let (tag, assets) = client.latest_release_assets()?;
+    let (name, url) = select_skroot_manager_asset(&assets)
+        .ok_or_else(|| LtboxError::Download(format!("No SKRoot Lite APK on latest {repo}")))?;
+    ltbox_core::live!(
+        log,
+        "[SKRoot] {repo} {}",
+        tr_args!("log_release_latest_asset", tag = tag, name = name)
+    );
+    let asset_path = work_dir.join(&name);
+    download_to_file(&url, &asset_path, log)?;
+    stage_manager_from_downloaded_asset(&asset_path, manager_apk, "SKRoot", log)?;
+    Ok(tag)
+}
+
 /// Stage the manager APK used for post-root control into `work_dir/manager.apk`.
 pub fn stage_root_manager_apk(
     cfg: &RootPipelineConfig,
@@ -177,6 +210,9 @@ pub fn stage_root_manager_apk(
                 "[APatch] {}",
                 tr_args!("log_staged_manager_apk", path = manager_apk.display())
             );
+        }
+        RootFamily::Skroot => {
+            download_skroot_manager_apk(&cfg.work_dir, &manager_apk, log)?;
         }
     }
 
@@ -473,6 +509,7 @@ mod tests {
         RootProvider, download_ksu_manager_apk_nightly, download_ksu_manager_apk_stable,
         download_ksu_payload, download_ksu_payload_nightly, ksu_ko_kver_matches,
         normalize_ksu_kernel_version, select_ksu_nightly_ko_artifact, select_ksu_release_ko_asset,
+        select_skroot_manager_asset,
     };
 
     #[test]
@@ -586,6 +623,33 @@ mod tests {
         );
         // No 4.x in this artifact set.
         assert_eq!(select_ksu_nightly_ko_artifact(&artifacts, "4.14"), None);
+    }
+
+    #[test]
+    fn skroot_manager_asset_selection_picks_lite_not_pro() {
+        let assets = vec![
+            (
+                "SKRoot_Pro.2026-6-1.apk".to_string(),
+                "https://example.invalid/pro.apk".to_string(),
+            ),
+            (
+                "notes.txt".to_string(),
+                "https://example.invalid/notes.txt".to_string(),
+            ),
+            (
+                "SKRoot_Lite.2026-6-1.apk".to_string(),
+                "https://example.invalid/lite.apk".to_string(),
+            ),
+        ];
+
+        let picked = select_skroot_manager_asset(&assets).expect("lite asset");
+        assert_eq!(picked.0, "SKRoot_Lite.2026-6-1.apk");
+
+        let pro_only = vec![(
+            "SKRoot_Pro.2026-6-1.apk".to_string(),
+            "https://example.invalid/pro.apk".to_string(),
+        )];
+        assert!(select_skroot_manager_asset(&pro_only).is_none());
     }
 
     /// Network-dependent end-to-end probe of every LKM provider's

@@ -19,6 +19,7 @@ pub mod apatch;
 pub mod apk;
 pub mod ksu;
 pub mod magisk;
+pub mod skroot;
 
 // Re-exports preserving the pre-split flat public API:
 // `ltbox_patch::root_pipeline::stage_root_manager_apk` etc. continue to
@@ -73,6 +74,8 @@ pub enum RootFamily {
     KernelSU,
     /// APatch — boot image via kptools + kpimg.
     APatch,
+    /// SKRoot Lite — direct kernel binary patch inside boot.img.
+    Skroot,
 }
 
 /// Provider inside the family to fetch from.
@@ -86,6 +89,7 @@ pub enum RootProvider {
     ReSukiSU,
     APatch,
     FolkPatch,
+    Skroot,
 }
 
 /// Release channel.
@@ -142,6 +146,7 @@ fn provider_workflow(provider: RootProvider) -> Option<(&'static str, &'static s
         RootProvider::ReSukiSU => ("build-manager.yml", "main"),
         RootProvider::APatch => ("build.yml", "main"),
         RootProvider::FolkPatch => ("build.yml", "main"),
+        RootProvider::Skroot => return None,
     })
 }
 
@@ -240,7 +245,7 @@ pub(super) fn nightly_artifact_url(repo: &str, run_id: u64, artifact_name: &str)
 /// `"boot"` for GKI + APatch/FolkPatch (kernel-blob patching),
 /// `"init_boot"` for Magisk / KSU (ramdisk injection).
 pub fn boot_partition_base(family: RootFamily, gki_mode: bool) -> &'static str {
-    if gki_mode || matches!(family, RootFamily::APatch) {
+    if gki_mode || matches!(family, RootFamily::APatch | RootFamily::Skroot) {
         "boot"
     } else {
         "init_boot"
@@ -260,6 +265,7 @@ pub fn provider_repo(provider: RootProvider) -> Option<&'static str> {
         RootProvider::ReSukiSU => "ReSukiSU/ReSukiSU",
         RootProvider::APatch => "bmax121/APatch",
         RootProvider::FolkPatch => "LyraVoid/FolkPatch",
+        RootProvider::Skroot => "abcz316/SKRoot-linuxKernelRoot",
     })
 }
 
@@ -357,6 +363,10 @@ pub fn stage_root_payload(cfg: &RootPipelineConfig, log: &mut Vec<String>) -> Re
             // APK and extracts kpimg via download_apatch_payload — no
             // additional payload fetch needed here.
         }
+        RootFamily::Skroot => {
+            // SKRoot Lite patches the dumped kernel directly. The manager
+            // APK is fetched by stage_root_manager_apk; no extra payload.
+        }
     }
     Ok(())
 }
@@ -449,6 +459,7 @@ pub fn build_patched_artifacts(
                 );
                 crate::apatch::patch_boot(&cfg.work_dir, &cfg.kpm_paths, &cfg.superkey, log)?
             }
+            RootFamily::Skroot => skroot::patch_boot(&cfg.work_dir, log)?,
         }
     };
 

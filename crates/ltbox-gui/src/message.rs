@@ -4,8 +4,8 @@
 use crate::{
     AdvAction, DataMode, DevicePollResult, DeviceRegion, DumpPartsScanResult, Family,
     FlashPartsScanResult, FlashTarget, Language, NightlySource, PartsSortColumn, PickerTarget,
-    Provider, RebootTarget, RescueRegion, RootMode, SysUpdateAction, ThemeChoice, ThemeSeed,
-    UnrootType, VerChoice, View,
+    Provider, RebootTarget, RescueRegion, RootMode, SkrootFlavor, SysUpdateAction, ThemeChoice,
+    ThemeSeed, UnrootType, VerChoice, View,
 };
 
 #[derive(Debug, Clone)]
@@ -174,6 +174,7 @@ pub(crate) enum RootMsg {
     RootFamily(Family),
     RootProvider(Provider),
     RootMode(RootMode),
+    RootSkrootFlavor(SkrootFlavor),
     RootVersion(VerChoice),
     RootNightlySource(NightlySource),
     RootSelectFile,

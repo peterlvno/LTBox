@@ -19,8 +19,13 @@ impl App {
                 self.root.family = Some(f);
                 self.root.provider = None;
                 self.root.mode = None;
+                self.root.skroot_flavor = None;
+                self.root.version = None;
+                self.root.nightly_source = None;
                 self.root.file_path = None;
                 self.root.kernel_version = None;
+                self.root.run_id = None;
+                self.root.run_id_buffer.clear();
                 Task::none()
             }
             RootMsg::RootProvider(p) => {
@@ -55,6 +60,16 @@ impl App {
                 self.root.mode = Some(m);
                 self.root.file_path = None;
                 self.root.kernel_version = None;
+                Task::none()
+            }
+            RootMsg::RootSkrootFlavor(flavor) => {
+                // Pro stays visible in the UI to set expectations, but
+                // stale messages must not advance the wizard into a route
+                // with no patch implementation.
+                if flavor == SkrootFlavor::Pro {
+                    return Task::none();
+                }
+                self.root.skroot_flavor = Some(flavor);
                 Task::none()
             }
             RootMsg::RootVersion(v) => {

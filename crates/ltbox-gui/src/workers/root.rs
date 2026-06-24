@@ -36,9 +36,14 @@ pub(crate) fn root_worker(
     // no provider / version / GitHub fetch.
     let is_gki_route = mode == Some(RootMode::Gki);
     let family = family.ok_or_else(|| "No root family selected".to_string())?;
+    let is_skroot_route = family == Family::Skroot;
     let (provider, version) = if is_gki_route {
         // `Magisk` stand-in — picks magiskboot as
         // the backend for unpack/repack.
+        (Provider::Magisk, VerChoice::Stable)
+    } else if is_skroot_route {
+        // SKRoot has no provider/version picker; the pipeline always uses
+        // the latest Lite release manager APK and direct boot.img patching.
         (Provider::Magisk, VerChoice::Stable)
     } else {
         let prov = provider.ok_or_else(|| "No provider selected".to_string())?;
@@ -55,16 +60,21 @@ pub(crate) fn root_worker(
         Family::Magisk => RootFamily::Magisk,
         Family::KernelSU => RootFamily::KernelSU,
         Family::APatch => RootFamily::APatch,
+        Family::Skroot => RootFamily::Skroot,
     };
-    let pipe_provider = match provider {
-        Provider::Magisk => RootProvider::Magisk,
-        Provider::MagiskForks => RootProvider::MagiskFork,
-        Provider::KernelSU => RootProvider::KernelSU,
-        Provider::KernelSUNext => RootProvider::KernelSUNext,
-        Provider::SukiSU => RootProvider::SukiSU,
-        Provider::ReSukiSU => RootProvider::ReSukiSU,
-        Provider::APatch => RootProvider::APatch,
-        Provider::FolkPatch => RootProvider::FolkPatch,
+    let pipe_provider = if is_skroot_route {
+        RootProvider::Skroot
+    } else {
+        match provider {
+            Provider::Magisk => RootProvider::Magisk,
+            Provider::MagiskForks => RootProvider::MagiskFork,
+            Provider::KernelSU => RootProvider::KernelSU,
+            Provider::KernelSUNext => RootProvider::KernelSUNext,
+            Provider::SukiSU => RootProvider::SukiSU,
+            Provider::ReSukiSU => RootProvider::ReSukiSU,
+            Provider::APatch => RootProvider::APatch,
+            Provider::FolkPatch => RootProvider::FolkPatch,
+        }
     };
     let pipe_version = match version {
         VerChoice::Stable => RootVersion::Stable,

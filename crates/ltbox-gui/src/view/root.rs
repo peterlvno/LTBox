@@ -21,7 +21,13 @@ impl App {
         let step_bar = wizard_step_bar(&step_labels, self.root.display_step());
         let body = match self.root.step {
             0 => self.root_family_step(),
-            1 => self.root_mode_step(),
+            1 => {
+                if self.root.is_skroot() {
+                    self.root_skroot_flavor_step()
+                } else {
+                    self.root_mode_step()
+                }
+            }
             2 => {
                 if self.root.is_gki() {
                     self.root_file_step(self.t("root_kernel_title"), self.t("root_kernel_subtitle"))
@@ -327,24 +333,70 @@ impl App {
         let tb320fc = self.is_tb320fc();
         let unsupported_tb320fc = tr_args!("model_unsupported", model = "TB320FC");
         let mk = |f: Family| -> Element<'_, Message> {
-            if tb320fc && f == Family::Magisk {
-                icon_option_card_sub_disabled(
-                    f.icon_disabled(),
-                    self.t(f.label_key()),
-                    &unsupported_tb320fc,
-                )
+            let disabled = tb320fc && f == Family::Magisk;
+            let selected = self.root.family == Some(f);
+            let icon = if disabled {
+                f.icon_disabled()
             } else {
-                icon_option_card_sub(
-                    f.icon(),
-                    self.t(f.label_key()),
-                    self.t(f.desc_key()),
-                    self.root.family == Some(f),
-                    Message::Root(RootMsg::RootFamily(f)),
+                f.icon()
+            };
+            let desc = if disabled {
+                unsupported_tb320fc.clone()
+            } else {
+                self.t(f.desc_key()).to_string()
+            };
+            let text_style = if disabled {
+                muted_style
+            } else {
+                on_surface_style
+            };
+            let body = row![
+                icon_tile(icon),
+                container(
+                    column![
+                        text(self.t(f.label_key()).to_string())
+                            .size(16)
+                            .style(text_style),
+                        text(desc).size(12).style(muted_style),
+                    ]
+                    .spacing(4)
+                    .width(Length::Fill),
                 )
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .center_y(Length::Fill),
+            ]
+            .spacing(16)
+            .align_y(iced::Alignment::Center);
+
+            let btn = button(
+                container(body)
+                    .padding([16, 20])
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+                    .center_y(Length::Fill)
+                    .style(move |t: &Theme| sel_card_style(t, selected)),
+            )
+            .padding(0)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
+            if disabled {
+                btn.into()
+            } else {
+                btn.on_press(Message::Root(RootMsg::RootFamily(f))).into()
             }
         };
 
-        let cards = row![mk(Family::Magisk), mk(Family::KernelSU), mk(Family::APatch),].spacing(12);
+        let cards = column![
+            mk(Family::Magisk),
+            mk(Family::KernelSU),
+            mk(Family::APatch),
+            mk(Family::Skroot),
+        ]
+        .spacing(10)
+        .width(Length::Fill)
+        .height(Length::Fill);
 
         let col = column![
             text(self.t("root_type_title").to_string())
@@ -359,12 +411,12 @@ impl App {
         .spacing(14)
         .padding(28)
         .width(Length::Fill)
+        .height(Length::Fill)
         .align_x(iced::Alignment::Center);
         container(col)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x(Length::Fill)
-            .center_y(Length::Fill)
             .into()
     }
 
@@ -711,6 +763,42 @@ impl App {
             .into()
     }
 
+    pub(crate) fn root_skroot_flavor_step(&self) -> Element<'_, Message> {
+        let lite = icon_option_card_sub(
+            SkrootFlavor::Lite.icon(),
+            self.t(SkrootFlavor::Lite.label_key()),
+            self.t(SkrootFlavor::Lite.desc_key()),
+            self.root.skroot_flavor == Some(SkrootFlavor::Lite),
+            Message::Root(RootMsg::RootSkrootFlavor(SkrootFlavor::Lite)),
+        );
+        let pro = icon_option_card_sub_disabled(
+            SkrootFlavor::Pro.icon_disabled(),
+            self.t(SkrootFlavor::Pro.label_key()),
+            self.t(SkrootFlavor::Pro.desc_key()),
+        );
+
+        let col = column![
+            text(self.t("root_skroot_flavor_title").to_string())
+                .size(theme::text_size::WIZARD_STEP_TITLE)
+                .center(),
+            text(self.t("root_skroot_flavor_subtitle").to_string())
+                .size(13)
+                .style(muted_style)
+                .center(),
+            row![lite, pro].spacing(12),
+        ]
+        .spacing(14)
+        .padding(28)
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+        container(col)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
+    }
+
     pub(crate) fn root_version_step(&self) -> Element<'_, Message> {
         let mk = |choice: VerChoice| -> Element<'_, Message> {
             icon_option_card_sub(
@@ -829,16 +917,24 @@ impl App {
             .family
             .map(|f| self.t(f.label_key()).to_string())
             .unwrap_or_else(|| dash.clone());
-        let mode = self
-            .root
-            .mode
-            .map(|m| self.t(m.label_key()).to_string())
-            .unwrap_or_else(|| dash.clone());
 
-        let mut rows = vec![
-            info_kv_center(self.t("root_step_type"), &fam),
-            info_kv_center(self.t("root_step_mode"), &mode),
-        ];
+        let mut rows = vec![info_kv_center(self.t("root_step_type"), &fam)];
+
+        if self.root.is_skroot() {
+            let flavor = self
+                .root
+                .skroot_flavor
+                .map(|f| self.t(f.label_key()).to_string())
+                .unwrap_or_else(|| dash.clone());
+            rows.push(info_kv_center(self.t("root_step_skroot_flavor"), &flavor));
+        } else {
+            let mode = self
+                .root
+                .mode
+                .map(|m| self.t(m.label_key()).to_string())
+                .unwrap_or_else(|| dash.clone());
+            rows.push(info_kv_center(self.t("root_step_mode"), &mode));
+        }
 
         if self.root.is_gki() {
             let path = self.root.file_path.clone().unwrap_or_else(|| dash.clone());
@@ -850,7 +946,7 @@ impl App {
                 self.t("provider_magisk_forks"),
             ));
             rows.push(info_kv_center(self.t("root_step_apk"), &path));
-        } else {
+        } else if !self.root.is_skroot() {
             let prov = self
                 .root
                 .provider

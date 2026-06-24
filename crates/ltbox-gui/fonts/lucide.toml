@@ -30,6 +30,9 @@ root_gki          = "layers"
 ver_stable        = "badge-check"
 ver_nightly       = "moon"
 
+# SKRoot edition choice (72 px)
+skroot_lite       = "shield-check"
+
 # Nightly source (72 px)
 nightly_auto      = "wand-sparkles"
 nightly_manual    = "pencil-line"

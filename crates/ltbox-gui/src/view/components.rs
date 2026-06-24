@@ -322,6 +322,21 @@ pub(crate) fn svg_icon_disabled(bytes: &'static [u8], size: f32) -> Element<'sta
         .into()
 }
 
+static SKROOT_ICON_HANDLE: std::sync::LazyLock<iced::widget::image::Handle> =
+    std::sync::LazyLock::new(|| {
+        iced::widget::image::Handle::from_bytes(
+            include_bytes!("../../assets/icons/skroot.png").as_slice(),
+        )
+    });
+
+pub(crate) fn skroot_icon(size: f32) -> Element<'static, Message> {
+    widget::image(SKROOT_ICON_HANDLE.clone())
+        .width(size)
+        .height(size)
+        .content_fit(iced::ContentFit::ScaleDown)
+        .into()
+}
+
 /// Primary-coloured Lucide icon sized to `size`. Matches the colour
 /// role the old per-asset SVG glyphs used for wizard tiles, status
 /// markers, and confirm-step eyebrows.
@@ -517,6 +532,7 @@ impl Family {
             Self::Magisk => include_bytes!("../../assets/icons/magisk.svg"),
             Self::KernelSU => include_bytes!("../../assets/icons/kernelsu.svg"),
             Self::APatch => include_bytes!("../../assets/icons/apatch.svg"),
+            Self::Skroot => return skroot_icon(72.0),
         };
         svg_icon(bytes, 72.0)
     }

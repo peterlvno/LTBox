@@ -831,6 +831,7 @@ enum Family {
     Magisk,
     KernelSU,
     APatch,
+    Skroot,
 }
 impl Family {
     fn label_key(&self) -> &'static str {
@@ -838,6 +839,7 @@ impl Family {
             Self::Magisk => "family_magisk",
             Self::KernelSU => "family_ksu",
             Self::APatch => "family_apatch",
+            Self::Skroot => "family_skroot",
         }
     }
     fn desc_key(&self) -> &'static str {
@@ -845,18 +847,21 @@ impl Family {
             Self::Magisk => "family_magisk_desc",
             Self::KernelSU => "family_ksu_desc",
             Self::APatch => "family_apatch_desc",
+            Self::Skroot => "family_skroot_desc",
         }
     }
     fn icon_disabled(self) -> Element<'static, Message> {
-        let bytes: &'static [u8] = match self {
-            Self::Magisk => include_bytes!("../assets/icons/magisk.svg"),
-            Self::KernelSU => include_bytes!("../assets/icons/kernelsu.svg"),
-            Self::APatch => include_bytes!("../assets/icons/apatch.svg"),
-        };
-        svg_icon_disabled(bytes, 72.0)
+        match self {
+            Self::Magisk => svg_icon_disabled(include_bytes!("../assets/icons/magisk.svg"), 72.0),
+            Self::KernelSU => {
+                svg_icon_disabled(include_bytes!("../assets/icons/kernelsu.svg"), 72.0)
+            }
+            Self::APatch => svg_icon_disabled(include_bytes!("../assets/icons/apatch.svg"), 72.0),
+            Self::Skroot => skroot_icon(72.0),
+        }
     }
     fn has_modes(&self) -> bool {
-        matches!(self, Self::KernelSU)
+        matches!(self, Self::KernelSU | Self::Skroot)
     }
     fn providers(&self) -> &'static [Provider] {
         match self {
@@ -868,6 +873,7 @@ impl Family {
                 Provider::ReSukiSU,
             ],
             Self::APatch => &[Provider::APatch, Provider::FolkPatch],
+            Self::Skroot => &[],
         }
     }
 }
@@ -931,6 +937,40 @@ impl RootMode {
         let glyph = match self {
             Self::Lkm => icon::root_lkm(),
             Self::Gki => icon::root_gki(),
+        };
+        lucide_disabled(glyph, 57.6)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkrootFlavor {
+    Lite,
+    Pro,
+}
+impl SkrootFlavor {
+    fn label_key(&self) -> &'static str {
+        match self {
+            Self::Lite => "skroot_flavor_lite",
+            Self::Pro => "skroot_flavor_pro",
+        }
+    }
+    fn desc_key(&self) -> &'static str {
+        match self {
+            Self::Lite => "skroot_flavor_lite_desc",
+            Self::Pro => "skroot_flavor_pro_desc",
+        }
+    }
+    fn icon(self) -> Element<'static, Message> {
+        let glyph = match self {
+            Self::Lite => icon::skroot_lite(),
+            Self::Pro => icon::root_lkm(),
+        };
+        lucide_primary(glyph, 57.6)
+    }
+    fn icon_disabled(self) -> Element<'static, Message> {
+        let glyph = match self {
+            Self::Lite => icon::skroot_lite(),
+            Self::Pro => icon::root_lkm(),
         };
         lucide_disabled(glyph, 57.6)
     }
@@ -3818,6 +3858,26 @@ mod tests {
         };
         w.next(); // 0 → 2 directly (Magisk has no modes)
         assert_eq!(w.step, 2);
+    }
+
+    #[test]
+    fn root_wizard_skroot_lite_skips_provider_version() {
+        let mut w = RootWizard {
+            family: Some(Family::Skroot),
+            ..RootWizard::default()
+        };
+        w.next(); // 0 → 1 (Lite / Pro)
+        assert_eq!(w.step, 1);
+        assert!(!w.can_next());
+        w.skroot_flavor = Some(SkrootFlavor::Pro);
+        assert!(!w.can_next());
+        w.skroot_flavor = Some(SkrootFlavor::Lite);
+        assert!(w.can_next());
+        w.next(); // 1 → 5 (Loader)
+        assert_eq!(w.step, 5);
+        assert_eq!(w.display_step(), 2);
+        w.back(); // 5 → 1
+        assert_eq!(w.step, 1);
     }
 
     #[test]
