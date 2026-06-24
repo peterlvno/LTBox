@@ -18,4 +18,5 @@
 
 pub mod asm;
 pub mod insn;
+pub mod kallsyms;
 pub mod version;
