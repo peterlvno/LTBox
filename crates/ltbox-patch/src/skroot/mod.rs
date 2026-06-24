@@ -17,6 +17,7 @@
 //! `version` (kernel version) → kallsyms → symbols → offsets → patches.
 
 pub mod asm;
+pub mod func_end;
 pub mod insn;
 pub mod kallsyms;
 pub mod version;

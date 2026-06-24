@@ -218,6 +218,29 @@ pub fn is_pac_or_bti(insn: u32) -> bool {
     is_paciaz(insn) || is_paciasp(insn) || is_pacibz(insn) || is_pacibsp(insn) || is_bti(insn)
 }
 
+/// Sign-extend the low `bits` of `value` to `i32` (upstream `sign_extend32`).
+#[inline]
+fn sign_extend32(value: u32, bits: u32) -> i32 {
+    let shift = 32 - bits;
+    ((value << shift) as i32) >> shift
+}
+
+/// PC-relative byte displacement of an unconditional `b`/`bl` (`imm26 << 2`).
+pub fn branch_b_displacement(insn: u32) -> i32 {
+    sign_extend32((insn & 0x03FF_FFFF) << 2, 28)
+}
+
+/// PC-relative byte displacement of `b.cond` / `cbz` / `cbnz` and other
+/// `imm19`-form branches (`imm19 << 2`).
+pub fn branch_cond_displacement(insn: u32) -> i32 {
+    sign_extend32(((insn >> 5) & 0x7_FFFF) << 2, 21)
+}
+
+/// PC-relative byte displacement of `tbz` / `tbnz` (`imm14 << 2`).
+pub fn branch_tbz_displacement(insn: u32) -> i32 {
+    sign_extend32(((insn >> 5) & 0x3FFF) << 2, 16)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
