@@ -11,6 +11,7 @@
 //!
 //! With the variable unset the test is a no-op so CI stays green.
 
+use ltbox_patch::skroot::init_cred;
 use ltbox_patch::skroot::kallsyms;
 use ltbox_patch::skroot::offsets;
 use ltbox_patch::skroot::symbol_analyze::SymbolAnalyze;
@@ -105,11 +106,22 @@ fn decodes_real_kernels() {
         assert!(cred < seccomp, "{path}: cred should precede seccomp");
         assert!(uid == 4 || uid == 8, "{path}: unexpected uid offset {uid}");
 
+        // init_cred must be located so the hook can copy a root credential.
+        let ic = init_cred::find_init_cred(&buf, uid)
+            .unwrap_or_else(|| panic!("{path}: init_cred not found"));
+        assert_eq!(
+            ic.atomic_usage_size, uid as usize,
+            "{path}: init_cred usage width disagrees with uid offset"
+        );
+        assert!(ic.cap_ability_max != 0, "{path}: empty capability set");
+
         eprintln!(
-            "ok {path}: v{} — {} symbols, _stext@0x{stext:x}, \
-             cred@0x{cred:x} uid@{uid} seccomp@0x{seccomp:x}",
+            "ok {path}: v{} — {} symbols, _stext@0x{stext:x}, cred@0x{cred:x} \
+             uid@{uid} seccomp@0x{seccomp:x} init_cred@0x{:x} cap=0x{:x}",
             ver.raw(),
-            syms.len()
+            syms.len(),
+            ic.offset,
+            ic.cap_ability_max,
         );
         checked += 1;
     }

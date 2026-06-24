@@ -18,8 +18,10 @@
 
 pub mod asm;
 pub mod func_end;
+pub mod init_cred;
 pub mod insn;
 pub mod kallsyms;
 pub mod offsets;
+pub mod patch_bytes;
 pub mod symbol_analyze;
 pub mod version;
