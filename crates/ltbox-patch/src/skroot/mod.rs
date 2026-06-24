@@ -16,4 +16,5 @@
 //! Layered bottom-up: [`insn`] (instruction predicates) → `asm` (encoder) →
 //! `version` (kernel version) → kallsyms → symbols → offsets → patches.
 
+pub mod asm;
 pub mod insn;
