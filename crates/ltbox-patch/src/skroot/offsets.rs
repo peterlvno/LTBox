@@ -177,6 +177,15 @@ fn current_task_loads(buf: &[u8], start: usize, end: usize) -> Vec<TrackedLoad> 
     }
 }
 
+/// `(dest_reg, byte_offset)` pairs loaded off `current` in `[start, end)`.
+/// Used by the `THREAD_INFO_IN_TASK` heuristic in the patch layer.
+pub(crate) fn current_task_field_loads(buf: &[u8], start: usize, end: usize) -> Vec<(u32, i64)> {
+    current_task_loads(buf, start, end)
+        .into_iter()
+        .map(|t| (t.dest, t.offset))
+        .collect()
+}
+
 /// Resolve the `cred` pointer offset inside `task_struct` from `sys_getuid`:
 /// the first field loaded off `current` past `0x400`.
 pub fn find_cred_offset(buf: &[u8], start: u64, size: u64) -> Option<u64> {
