@@ -18,3 +18,4 @@
 
 pub mod asm;
 pub mod insn;
+pub mod version;
