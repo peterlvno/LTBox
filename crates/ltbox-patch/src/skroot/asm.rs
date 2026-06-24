@@ -263,6 +263,10 @@ impl Asm {
     pub fn stp_x_pre(&mut self, rt: u32, rt2: u32, rn: u32, imm: i32) {
         self.word(0xA980_0000 | (u32_imm7_scaled8(imm) << 15) | (rt2 << 10) | (rn << 5) | rt);
     }
+    /// `stp xt, xt2, [xn], #imm` (post-index, `imm` a multiple of 8).
+    pub fn stp_x_post(&mut self, rt: u32, rt2: u32, rn: u32, imm: i32) {
+        self.word(0xA880_0000 | (u32_imm7_scaled8(imm) << 15) | (rt2 << 10) | (rn << 5) | rt);
+    }
     /// `ldp xt, xt2, [xn], #imm` (post-index).
     pub fn ldp_x_post(&mut self, rt: u32, rt2: u32, rn: u32, imm: i32) {
         self.word(0xA8C0_0000 | (u32_imm7_scaled8(imm) << 15) | (rt2 << 10) | (rn << 5) | rt);

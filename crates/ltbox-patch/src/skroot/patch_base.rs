@@ -25,7 +25,7 @@ const MRS_SP_EL0_THRESHOLD: usize = 5000;
 
 /// How this kernel materializes `current`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CurrentMode {
+pub(crate) enum CurrentMode {
     /// `CONFIG_THREAD_INFO_IN_TASK`: `sp_el0` *is* the `task_struct`.
     SpEl0IsTask,
     /// `sp_el0` is the `thread_info`; load `task` from it.
@@ -67,6 +67,17 @@ impl<'a> PatchBase<'a> {
 
     pub fn is_huawei(&self) -> bool {
         self.huawei_kti.is_some()
+    }
+
+    /// The kernel image being patched.
+    pub(crate) fn buf(&self) -> &[u8] {
+        self.buf
+    }
+
+    /// How this kernel obtains `current` (consumed by the seccomp-flag clear in
+    /// the do_execve hook).
+    pub(crate) fn current_mode(&self) -> CurrentMode {
+        self.current_mode
     }
 
     /// Set the absolute file address at which the routine currently being
@@ -158,7 +169,7 @@ impl<'a> PatchBase<'a> {
 
     /// On Huawei kernels, add the KTI randomization base to `Xx` (the pointer
     /// obfuscation Huawei applies to `current`). No-op otherwise.
-    fn emit_huawei_kti_add(&self, a: &mut Asm, x: u32) {
+    pub(crate) fn emit_huawei_kti_add(&self, a: &mut Asm, x: u32) {
         let Some(kti) = self.huawei_kti else {
             return;
         };

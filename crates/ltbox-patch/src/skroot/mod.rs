@@ -24,5 +24,6 @@ pub mod kallsyms;
 pub mod offsets;
 pub mod patch_base;
 pub mod patch_bytes;
+pub mod patch_do_execve;
 pub mod symbol_analyze;
 pub mod version;
