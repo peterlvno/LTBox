@@ -12,6 +12,7 @@
 //! With the variable unset the test is a no-op so CI stays green.
 
 use ltbox_patch::skroot::kallsyms;
+use ltbox_patch::skroot::symbol_analyze::SymbolAnalyze;
 use ltbox_patch::skroot::version::KernelVersion;
 
 /// Function symbols every in-scope kernel exports; used to sanity-check that
@@ -70,8 +71,16 @@ fn decodes_real_kernels() {
             );
         }
 
+        // The full symbol resolver must gather everything the patcher needs.
+        let offs = SymbolAnalyze::new(&buf, &syms).analyze();
+        assert!(
+            offs.is_complete(),
+            "{path} (v{}): symbol analysis incomplete",
+            ver.raw()
+        );
+
         eprintln!(
-            "ok {path}: v{} — {} symbols, _stext@0x{stext:x}",
+            "ok {path}: v{} — {} symbols, _stext@0x{stext:x}, analysis complete",
             ver.raw(),
             syms.len()
         );
