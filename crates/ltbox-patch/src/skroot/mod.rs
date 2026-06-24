@@ -3,10 +3,10 @@
 //! SKRoot patches the **kernel binary** (the image extracted from `boot.img`)
 //! directly — locating functions from the embedded kallsyms with no kernel
 //! source, symbol table, or rebuild — a different mechanism from the existing
-//! root providers. It assembles and writes a `do_execve` hook plus SELinux /
-//! audit / `filldir64` patches into spare kernel regions; a process that
-//! `execve`s the embedded 48-character root key is then granted full
-//! capabilities.
+//! root providers. The port is landing bottom-up: the core analysis layers,
+//! patch-emission helpers, `do_execve` hook, and SELinux `avc_denied` hook are
+//! present; audit / `filldir64` patches and public root-pipeline wiring remain
+//! future work.
 //!
 //! Ported from `abcz316/SKRoot-linuxKernelRoot`
 //! (`Lite_version/src/patch_kernel_root`), C++ → safe Rust with no C
@@ -22,8 +22,10 @@ pub mod init_cred;
 pub mod insn;
 pub mod kallsyms;
 pub mod offsets;
+pub mod patch_avc_denied;
 pub mod patch_base;
 pub mod patch_bytes;
+pub mod patch_current_avc_check;
 pub mod patch_do_execve;
 pub mod symbol_analyze;
 pub mod version;

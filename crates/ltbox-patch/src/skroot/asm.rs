@@ -194,6 +194,14 @@ impl Asm {
     pub fn add_imm_x(&mut self, rd: u32, rn: u32, imm12: u32) {
         self.word(0x9100_0000 | ((imm12 & 0xFFF) << 10) | (rn << 5) | rd);
     }
+    /// `sub xd, xn, #imm12` (no shift, `imm12 <= 0xFFF`).
+    pub fn sub_imm_x(&mut self, rd: u32, rn: u32, imm12: u32) {
+        self.word(0xD100_0000 | ((imm12 & 0xFFF) << 10) | (rn << 5) | rd);
+    }
+    /// `subs xd, xn, #imm12` (no shift, `imm12 <= 0xFFF`).
+    pub fn subs_imm_x(&mut self, rd: u32, rn: u32, imm12: u32) {
+        self.word(0xF100_0000 | ((imm12 & 0xFFF) << 10) | (rn << 5) | rd);
+    }
     /// `add xd, xn, xm`.
     pub fn add_reg_x(&mut self, rd: u32, rn: u32, rm: u32) {
         self.word(0x8B00_0000 | (rm << 16) | (rn << 5) | rd);
@@ -235,6 +243,10 @@ impl Asm {
     pub fn ldr_x_uoff(&mut self, rt: u32, rn: u32, imm: u32) {
         self.word(0xF940_0000 | (((imm / 8) & 0xFFF) << 10) | (rn << 5) | rt);
     }
+    /// `ldr wt, [xn, #imm]` (unsigned offset, `imm` a multiple of 4).
+    pub fn ldr_w_uoff(&mut self, rt: u32, rn: u32, imm: u32) {
+        self.word(0xB940_0000 | (((imm / 4) & 0xFFF) << 10) | (rn << 5) | rt);
+    }
     /// `str xt, [xn, #imm]` (unsigned offset).
     pub fn str_x_uoff(&mut self, rt: u32, rn: u32, imm: u32) {
         self.word(0xF900_0000 | (((imm / 8) & 0xFFF) << 10) | (rn << 5) | rt);
@@ -247,9 +259,17 @@ impl Asm {
     pub fn str_x_post(&mut self, rt: u32, rn: u32, imm: i32) {
         self.word(0xF800_0400 | ((u32_imm9(imm)) << 12) | (rn << 5) | rt);
     }
+    /// `ldr xt, [xn], #imm` (post-index, signed 9-bit).
+    pub fn ldr_x_post(&mut self, rt: u32, rn: u32, imm: i32) {
+        self.word(0xF840_0400 | ((u32_imm9(imm)) << 12) | (rn << 5) | rt);
+    }
     /// `str wt, [xn], #imm` (post-index).
     pub fn str_w_post(&mut self, rt: u32, rn: u32, imm: i32) {
         self.word(0xB800_0400 | ((u32_imm9(imm)) << 12) | (rn << 5) | rt);
+    }
+    /// `ldr wt, [xn], #imm` (post-index).
+    pub fn ldr_w_post(&mut self, rt: u32, rn: u32, imm: i32) {
+        self.word(0xB840_0400 | ((u32_imm9(imm)) << 12) | (rn << 5) | rt);
     }
     /// `ldrb wt, [xn], #imm` (post-index).
     pub fn ldrb_w_post(&mut self, rt: u32, rn: u32, imm: i32) {
@@ -600,6 +620,10 @@ mod tests {
         assert_eq!(one(|a| a.movk_x(5, 0xABCD, 16)), 0xF2B5_79A5);
         // add x14, x14, #8
         assert_eq!(one(|a| a.add_imm_x(14, 14, 8)), 0x9100_21CE);
+        // sub sp, sp, #0x50
+        assert_eq!(one(|a| a.sub_imm_x(SP, SP, 0x50)), 0xD101_43FF);
+        // subs x13, x13, #1
+        assert_eq!(one(|a| a.subs_imm_x(13, 13, 1)), 0xF100_05AD);
         // cmp w14, w15  (subs wzr, w14, w15)
         assert_eq!(one(|a| a.cmp_reg_w(14, 15)), 0x6B0F_01DF);
         // cmp x12, #48
@@ -610,6 +634,12 @@ mod tests {
     fn loads_stores() {
         // str xzr, [x14], #8
         assert_eq!(one(|a| a.str_x_post(ZR, 14, 8)), 0xF800_85DF);
+        // ldr x14, [x11], #8
+        assert_eq!(one(|a| a.ldr_x_post(14, 11, 8)), 0xF840_856E);
+        // ldr w12, [x11, #24]
+        assert_eq!(one(|a| a.ldr_w_uoff(12, 11, 24)), 0xB940_196C);
+        // ldr w13, [x11], #8
+        assert_eq!(one(|a| a.ldr_w_post(13, 11, 8)), 0xB840_856D);
         // ldrb w14, [x11], #1
         assert_eq!(one(|a| a.ldrb_w_post(14, 11, 1)), 0x3840_156E);
         // stp x29, x30, [sp, #-16]!
