@@ -20,5 +20,6 @@ pub mod asm;
 pub mod func_end;
 pub mod insn;
 pub mod kallsyms;
+pub mod offsets;
 pub mod symbol_analyze;
 pub mod version;

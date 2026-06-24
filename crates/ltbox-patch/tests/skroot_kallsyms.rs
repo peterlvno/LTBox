@@ -12,6 +12,7 @@
 //! With the variable unset the test is a no-op so CI stays green.
 
 use ltbox_patch::skroot::kallsyms;
+use ltbox_patch::skroot::offsets;
 use ltbox_patch::skroot::symbol_analyze::SymbolAnalyze;
 use ltbox_patch::skroot::version::KernelVersion;
 
@@ -79,8 +80,34 @@ fn decodes_real_kernels() {
             ver.raw()
         );
 
+        // task_struct/cred field offsets must resolve to sane values.
+        let cred = offsets::find_cred_offset(&buf, offs.sys_getuid.offset, offs.sys_getuid.size)
+            .unwrap_or_else(|| panic!("{path}: no cred offset"));
+        let seccomp = offsets::find_seccomp_offset(
+            &buf,
+            offs.prctl_get_seccomp.offset,
+            offs.prctl_get_seccomp.size,
+        )
+        .unwrap_or_else(|| panic!("{path}: no seccomp offset"));
+        let min_off = offsets::cred_uid_min_off(ver.triple());
+        let uid = offsets::find_cred_uid_offset(
+            &buf,
+            offs.sys_getuid.offset,
+            offs.sys_getuid.size,
+            cred,
+            min_off,
+        )
+        .unwrap_or_else(|| panic!("{path}: no cred uid offset"));
+        assert!(
+            cred > 0x400 && seccomp > 0x400,
+            "{path}: cred/seccomp too small"
+        );
+        assert!(cred < seccomp, "{path}: cred should precede seccomp");
+        assert!(uid == 4 || uid == 8, "{path}: unexpected uid offset {uid}");
+
         eprintln!(
-            "ok {path}: v{} — {} symbols, _stext@0x{stext:x}, analysis complete",
+            "ok {path}: v{} — {} symbols, _stext@0x{stext:x}, \
+             cred@0x{cred:x} uid@{uid} seccomp@0x{seccomp:x}",
             ver.raw(),
             syms.len()
         );
