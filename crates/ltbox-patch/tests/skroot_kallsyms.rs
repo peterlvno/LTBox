@@ -14,6 +14,7 @@
 use ltbox_patch::skroot::init_cred;
 use ltbox_patch::skroot::kallsyms;
 use ltbox_patch::skroot::offsets;
+use ltbox_patch::skroot::patch_plan::{self, SpareRegionStrategy};
 use ltbox_patch::skroot::symbol_analyze::SymbolAnalyze;
 use ltbox_patch::skroot::version::KernelVersion;
 
@@ -115,13 +116,74 @@ fn decodes_real_kernels() {
         );
         assert!(ic.cap_ability_max != 0, "{path}: empty capability set");
 
+        // The pre-GUI patch plan should now emit all ported SKRoot core hooks
+        // as one write list, without needing GUI/root-pipeline wiring.
+        let plan = patch_plan::build_core_patch_plan(&buf)
+            .unwrap_or_else(|e| panic!("{path} (v{}): patch plan failed: {e}", ver.raw()));
+        assert_eq!(plan.version_triple, ver.triple(), "{path}: plan version");
+        assert_eq!(plan.offsets.cred_offset, cred, "{path}: plan cred offset");
+        assert_eq!(plan.offsets.cred_uid_offset, uid, "{path}: plan uid offset");
+        assert_eq!(
+            plan.offsets.seccomp_offset, seccomp,
+            "{path}: plan seccomp offset"
+        );
+        assert_eq!(
+            plan.offsets.init_cred_offset, ic.offset,
+            "{path}: plan init_cred offset"
+        );
+        assert!(
+            (plan.root_key_addr as usize) + 48 <= buf.len(),
+            "{path}: root key placeholder out of image"
+        );
+        match plan.strategy {
+            SpareRegionStrategy::EarlyImageSlot | SpareRegionStrategy::CfiCheck => {
+                assert!(
+                    ver.is_less_than((6, 1, 0)),
+                    "{path}: old strategy on new kernel"
+                );
+            }
+            SpareRegionStrategy::DieAndDrmPrintfCoredump => {
+                assert!(
+                    ver.is_at_least((6, 1, 0)),
+                    "{path}: new strategy on old kernel"
+                );
+            }
+        }
+        assert!(
+            plan.writes.len() >= 3,
+            "{path}: expected multiple patch writes"
+        );
+        for write in &plan.writes {
+            assert!(!write.bytes.is_empty(), "{path}: empty patch write");
+            assert_eq!(write.addr % 4, 0, "{path}: unaligned patch write");
+            assert!(
+                (write.addr as usize) + write.bytes.len() <= buf.len(),
+                "{path}: patch write 0x{:x}+{} out of image",
+                write.addr,
+                write.bytes.len()
+            );
+        }
+        let root_stub = plan
+            .writes
+            .iter()
+            .find(|write| write.addr == plan.root_key_addr)
+            .unwrap_or_else(|| panic!("{path}: missing root-key stub write"));
+        assert!(
+            root_stub.bytes[..48].iter().all(|&b| b == 0),
+            "{path}: root key placeholder is not zero-filled"
+        );
+
         eprintln!(
             "ok {path}: v{} — {} symbols, _stext@0x{stext:x}, cred@0x{cred:x} \
-             uid@{uid} seccomp@0x{seccomp:x} init_cred@0x{:x} cap=0x{:x}",
+             uid@{uid} seccomp@0x{seccomp:x} init_cred@0x{:x} cap=0x{:x} \
+             plan={:?} writes={} root_key@0x{:x}",
             ver.raw(),
             syms.len(),
             ic.offset,
             ic.cap_ability_max,
+            plan.strategy,
+            plan.writes.len(),
+            plan.root_key_addr,
         );
         checked += 1;
     }

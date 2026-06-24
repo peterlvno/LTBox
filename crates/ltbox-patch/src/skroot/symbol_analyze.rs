@@ -24,7 +24,7 @@ impl SymbolRegion {
     pub fn valid(&self) -> bool {
         self.offset != 0
     }
-    fn consume(&mut self, n: u64) {
+    pub(crate) fn consume(&mut self, n: u64) {
         self.offset += n;
         self.size = self.size.saturating_sub(n);
     }
