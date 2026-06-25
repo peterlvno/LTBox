@@ -388,15 +388,27 @@ impl App {
             }
         };
 
-        let cards = column![
-            mk(Family::Magisk),
-            mk(Family::KernelSU),
-            mk(Family::APatch),
-            mk(Family::Skroot),
-        ]
-        .spacing(10)
-        .width(Length::Fill)
-        .height(Length::Fill);
+        // 2×2 grid — four families split the space two-up per row.
+        let families = [
+            Family::Magisk,
+            Family::KernelSU,
+            Family::APatch,
+            Family::Skroot,
+        ];
+        let mut cards = column![]
+            .spacing(10)
+            .width(Length::Fill)
+            .height(Length::Fill);
+        for chunk in families.chunks(2) {
+            let mut r = row![].spacing(10).width(Length::Fill).height(Length::Fill);
+            for &f in chunk {
+                r = r.push(mk(f));
+            }
+            if chunk.len() == 1 {
+                r = r.push(Space::new().width(Length::Fill));
+            }
+            cards = cards.push(r);
+        }
 
         let col = column![
             text(self.t("root_type_title").to_string())
@@ -423,9 +435,10 @@ impl App {
     pub(crate) fn root_provider_step(&self) -> Element<'_, Message> {
         let family = self.root.family.unwrap_or(Family::KernelSU);
         let providers = family.providers();
-        // KernelSU has 4 providers — 2×2 grid clipped at 620 px default
-        // window. Switch to a list layout only for that route.
-        let is_ksu_lkm_list = family == Family::KernelSU && !self.root.is_gki();
+        // KernelSU has 4 providers — render them as a 2×2 grid of the
+        // wider horizontal cards (full-height route), distinct from the
+        // 2-up grid_card layout the 2-provider families use.
+        let is_ksu_grid = family == Family::KernelSU && !self.root.is_gki();
 
         let grid_card = |p: Provider, selected: bool| -> Element<'_, Message> {
             let sub = p.desc_key().map(|k| self.t(k)).unwrap_or("");
@@ -481,15 +494,23 @@ impl App {
             .into()
         };
 
-        let tiles: Element<'_, Message> = if is_ksu_lkm_list {
-            let mut list = column![]
+        let tiles: Element<'_, Message> = if is_ksu_grid {
+            // 2×2 grid of horizontal cards — four KSU LKM providers.
+            let mut grid = column![]
                 .spacing(10)
                 .width(Length::Fill)
                 .height(Length::Fill);
-            for &p in providers {
-                list = list.push(list_card(p, self.root.provider == Some(p)));
+            for chunk in providers.chunks(2) {
+                let mut r = row![].spacing(10).width(Length::Fill).height(Length::Fill);
+                for &p in chunk {
+                    r = r.push(list_card(p, self.root.provider == Some(p)));
+                }
+                if chunk.len() == 1 {
+                    r = r.push(Space::new().width(Length::Fill));
+                }
+                grid = grid.push(r);
             }
-            list.into()
+            grid.into()
         } else {
             // 2-col grid — Magisk / APatch (2 providers each).
             let mut grid = column![].spacing(10).width(Length::Fill);
@@ -510,7 +531,7 @@ impl App {
             "root_provider_title_tmpl",
             family = self.t(family.label_key())
         );
-        // KSU list claims full height; other grids stay Shrink so the
+        // KSU grid claims full height; other grids stay Shrink so the
         // outer container vertical-centres them like other wizard steps.
         let col = column![
             text(title)
@@ -526,7 +547,7 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        let col = if is_ksu_lkm_list {
+        let col = if is_ksu_grid {
             col.height(Length::Fill)
         } else {
             col
@@ -535,7 +556,7 @@ impl App {
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x(Length::Fill);
-        if is_ksu_lkm_list {
+        if is_ksu_grid {
             outer.into()
         } else {
             outer.center_y(Length::Fill).into()
