@@ -86,7 +86,7 @@ pub fn build_core_patch_plan(kernel: &[u8]) -> Result<SkrootCorePatchPlan, Skroo
 
     patch_existing_bypasses(kernel, &mut symbols, &mut writes);
     let (root_key_addr, strategy) =
-        patch_core_hooks(kernel, &version, &mut base, &symbols, &offsets, &mut writes)?;
+        patch_core_hooks(&version, &mut base, &symbols, &offsets, &mut writes)?;
 
     Ok(SkrootCorePatchPlan {
         version: version.raw().to_string(),
@@ -187,7 +187,6 @@ fn patch_existing_bypasses(
 }
 
 fn patch_core_hooks(
-    kernel: &[u8],
     version: &KernelVersion,
     base: &mut PatchBase<'_>,
     symbols: &KernelSymbolOffset,
@@ -205,9 +204,7 @@ fn patch_core_hooks(
         return patch_pre_6_1(base, symbols, offsets, writes, execve, filldir, audit);
     }
 
-    patch_6_1_plus(
-        kernel, base, symbols, offsets, writes, execve, filldir, audit,
-    )
+    patch_6_1_plus(base, symbols, offsets, writes, execve, filldir, audit)
 }
 
 fn patch_pre_6_1(
@@ -277,7 +274,6 @@ fn patch_pre_6_1(
 }
 
 fn patch_6_1_plus(
-    kernel: &[u8],
     base: &mut PatchBase<'_>,
     symbols: &KernelSymbolOffset,
     offsets: &SkrootKernelOffsets,
@@ -301,11 +297,11 @@ fn patch_6_1_plus(
     }
 
     let mut avc_region = symbols.drm_printfn_coredump;
-    let n = patch_bytes::patch_ret(kernel, avc_region.offset, writes);
+    let n = patch_bytes::patch_ret(base.buf(), avc_region.offset, writes);
     consume_region(&mut avc_region, n, "__drm_printfn_coredump entry guard")?;
 
     let mut filldir_region = symbols.drm_puts_coredump;
-    let n = patch_bytes::patch_ret(kernel, filldir_region.offset, writes);
+    let n = patch_bytes::patch_ret(base.buf(), filldir_region.offset, writes);
     consume_region(&mut filldir_region, n, "__drm_puts_coredump entry guard")?;
 
     let mut exec_region = symbols.die;
