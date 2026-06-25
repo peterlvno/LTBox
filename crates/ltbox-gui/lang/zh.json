@@ -890,7 +890,7 @@
   "unroot_step_loader": "加载器",
   "unroot_step_method": "方式",
   "unroot_step_restore": "恢复",
-  "unroottype_apatch_gki": "APatch / GKI",
+  "unroottype_apatch_gki": "GKI / APatch / SKRoot",
   "unroottype_apatch_gki_desc": "从备份恢复 boot 分区",
   "unroottype_apatch_gki_folderdesc": "选择包含 boot.img 与 vbmeta.img 的文件夹",
   "unroottype_magisk_lkm": "Magisk / LKM",
