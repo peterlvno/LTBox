@@ -1,18 +1,19 @@
 //! Pre-GUI SKRoot patch orchestration.
 //!
 //! This module resolves the kernel facts that the ported SKRoot Lite patches
-//! need and emits one byte-write plan for the currently ported core: the
-//! `do_execve` root hook plus the SELinux `avc_denied` allow hook. It
-//! intentionally stops before boot-image/root-pipeline or GUI wiring.
+//! need and emits one byte-write plan for the SKRoot Lite core: the `do_execve`
+//! root hook, `filldir64` directory hiding, and the SELinux/audit allow hooks.
 #![allow(dead_code)]
 
 use super::kallsyms::{self, KallsymsError};
 use super::offsets;
+use super::patch_audit_log_start::PatchAuditLogStart;
 use super::patch_avc_denied::PatchAvcDenied;
 use super::patch_base::PatchBase;
 use super::patch_bytes::{self, PatchBytes};
 use super::patch_current_avc_check::PatchCurrentAvcCheck;
 use super::patch_do_execve::PatchDoExecve;
+use super::patch_filldir64::PatchFilldir64;
 use super::symbol_analyze::{KernelSymbolOffset, SymbolAnalyze, SymbolRegion};
 use super::version::KernelVersion;
 
@@ -34,8 +35,8 @@ pub enum SpareRegionStrategy {
     EarlyImageSlot,
     /// A consumed `__cfi_check` region was larger than the fixed slot.
     CfiCheck,
-    /// 6.1+ path: `die` for the root key/execve hook and
-    /// `__drm_printfn_coredump` for the SELinux helper/hook.
+    /// 6.1+ path: `die` for the root key/execve hook, `__drm_puts_coredump`
+    /// for `filldir64`, and `__drm_printfn_coredump` for SELinux/audit hooks.
     DieAndDrmPrintfCoredump,
 }
 
@@ -110,6 +111,12 @@ fn resolve_offsets(
     }
     if !symbols.avc_denied.valid() {
         return Err(SkrootPatchPlanError::MissingSymbol("avc_denied"));
+    }
+    if symbols.audit_log_start == 0 {
+        return Err(SkrootPatchPlanError::MissingSymbol("audit_log_start"));
+    }
+    if symbols.filldir64 == 0 {
+        return Err(SkrootPatchPlanError::MissingSymbol("filldir64"));
     }
     if !symbols.sys_getuid.valid() {
         return Err(SkrootPatchPlanError::MissingSymbol("sys_getuid"));
@@ -189,12 +196,18 @@ fn patch_core_hooks(
 ) -> Result<(u64, SpareRegionStrategy), SkrootPatchPlanError> {
     let execve = PatchDoExecve::new(base, symbols, version.triple())
         .ok_or(SkrootPatchPlanError::MissingSymbol("do_execve*"))?;
+    let filldir = PatchFilldir64::new(base, symbols.filldir64, version.is_less_than((6, 1, 0)))
+        .ok_or(SkrootPatchPlanError::MissingSymbol("filldir64"))?;
+    let audit = PatchAuditLogStart::new(base, symbols.audit_log_start)
+        .ok_or(SkrootPatchPlanError::MissingSymbol("audit_log_start"))?;
 
     if version.is_less_than((6, 1, 0)) {
-        return patch_pre_6_1(base, symbols, offsets, writes, execve);
+        return patch_pre_6_1(base, symbols, offsets, writes, execve, filldir, audit);
     }
 
-    patch_6_1_plus(kernel, base, symbols, offsets, writes, execve)
+    patch_6_1_plus(
+        kernel, base, symbols, offsets, writes, execve, filldir, audit,
+    )
 }
 
 fn patch_pre_6_1(
@@ -203,6 +216,8 @@ fn patch_pre_6_1(
     offsets: &SkrootKernelOffsets,
     writes: &mut Vec<PatchBytes>,
     execve: PatchDoExecve,
+    filldir: PatchFilldir64,
+    audit: PatchAuditLogStart,
 ) -> Result<(u64, SpareRegionStrategy), SkrootPatchPlanError> {
     let mut region = SymbolRegion {
         offset: 0x200,
@@ -227,6 +242,12 @@ fn patch_pre_6_1(
     );
     consume_region(&mut region, n, "do_execve hook")?;
 
+    let n = filldir.patch_filldir64_root_key_guide(base, root_key_addr, &region, writes);
+    consume_region(&mut region, n, "filldir64 root-key guide")?;
+
+    let n = filldir.patch_filldir64_core(base, &region, writes);
+    consume_region(&mut region, n, "filldir64 core hook")?;
+
     let current_avc_check_addr = region.offset;
     let n = PatchCurrentAvcCheck::new().patch_current_avc_check_bl_func(
         base,
@@ -244,6 +265,9 @@ fn patch_pre_6_1(
     );
     consume_region(&mut region, n, "avc_denied hook")?;
 
+    let n = audit.patch_audit_log_start(base, &region, current_avc_check_addr, writes);
+    consume_region(&mut region, n, "audit_log_start hook")?;
+
     let n = base.patch_jump(start_branch_addr, region.offset, writes);
     if n == 0 {
         return Err(SkrootPatchPlanError::PatchFailed("pre-6.1 branch guard"));
@@ -259,15 +283,30 @@ fn patch_6_1_plus(
     offsets: &SkrootKernelOffsets,
     writes: &mut Vec<PatchBytes>,
     execve: PatchDoExecve,
+    filldir: PatchFilldir64,
+    audit: PatchAuditLogStart,
 ) -> Result<(u64, SpareRegionStrategy), SkrootPatchPlanError> {
     if !symbols.die.valid() {
         return Err(SkrootPatchPlanError::NoSpareRegion("missing die".into()));
+    }
+    if !symbols.drm_puts_coredump.valid() {
+        return Err(SkrootPatchPlanError::NoSpareRegion(
+            "missing __drm_puts_coredump".into(),
+        ));
     }
     if !symbols.drm_printfn_coredump.valid() {
         return Err(SkrootPatchPlanError::NoSpareRegion(
             "missing __drm_printfn_coredump".into(),
         ));
     }
+
+    let mut avc_region = symbols.drm_printfn_coredump;
+    let n = patch_bytes::patch_ret(kernel, avc_region.offset, writes);
+    consume_region(&mut avc_region, n, "__drm_printfn_coredump entry guard")?;
+
+    let mut filldir_region = symbols.drm_puts_coredump;
+    let n = patch_bytes::patch_ret(kernel, filldir_region.offset, writes);
+    consume_region(&mut filldir_region, n, "__drm_puts_coredump entry guard")?;
 
     let mut exec_region = symbols.die;
     let root_key_addr = exec_region.offset;
@@ -280,9 +319,14 @@ fn patch_6_1_plus(
     );
     consume_region(&mut exec_region, n, "do_execve hook")?;
 
-    let mut avc_region = symbols.drm_printfn_coredump;
-    let n = patch_bytes::patch_ret(kernel, avc_region.offset, writes);
-    consume_region(&mut avc_region, n, "__drm_printfn_coredump entry guard")?;
+    let n = filldir.patch_filldir64_root_key_guide(base, root_key_addr, &exec_region, writes);
+    consume_region(&mut exec_region, n, "filldir64 root-key guide")?;
+
+    let n = base.patch_jump(exec_region.offset, filldir_region.offset, writes);
+    consume_region(&mut exec_region, n, "die to __drm_puts_coredump branch")?;
+
+    let n = filldir.patch_filldir64_core(base, &filldir_region, writes);
+    consume_region(&mut filldir_region, n, "filldir64 core hook")?;
 
     let current_avc_check_addr = avc_region.offset;
     let n = PatchCurrentAvcCheck::new().patch_current_avc_check_bl_func(
@@ -300,6 +344,9 @@ fn patch_6_1_plus(
         writes,
     );
     consume_region(&mut avc_region, n, "avc_denied hook")?;
+
+    let n = audit.patch_audit_log_start(base, &avc_region, current_avc_check_addr, writes);
+    consume_region(&mut avc_region, n, "audit_log_start hook")?;
 
     Ok((root_key_addr, SpareRegionStrategy::DieAndDrmPrintfCoredump))
 }

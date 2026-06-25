@@ -129,7 +129,7 @@ impl PatchDoExecve {
         a.mov_reg_x(0, 0);
 
         // IS_ERR(filename) guard.
-        a.mov_imm_x(11, MAX_ERRNO.wrapping_neg());
+        a.mov_imm_x_asmjit(11, MAX_ERRNO.wrapping_neg());
         a.cmp_reg_x(p.filename_reg, 11);
         a.b_cond(Cond::Cs, end);
 
@@ -163,7 +163,7 @@ impl PatchDoExecve {
         // zero securebits.
         a.str_w_post(ZR, 14, ic.securebits_size as i32);
         // write the full capability set.
-        a.mov_imm_x(13, ic.cap_ability_max);
+        a.mov_imm_x_asmjit(13, ic.cap_ability_max);
         a.stp_x_post(13, 13, 14, 16);
         a.stp_x_post(13, 13, 14, 16);
         if cap_cnt >= 5 {
@@ -171,7 +171,7 @@ impl PatchDoExecve {
         }
 
         // clear TIF_SECCOMP in thread_info.flags (atomically).
-        a.mov_imm_x(15, 1u64 << TIF_SECCOMP);
+        a.mov_imm_x_asmjit(15, 1u64 << TIF_SECCOMP);
         let flags_reg = match base.current_mode() {
             CurrentMode::SpEl0IsTask => 12,
             CurrentMode::SpEl0IsThreadInfo => {

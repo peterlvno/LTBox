@@ -52,15 +52,15 @@ impl PatchCurrentAvcCheck {
         a.add_imm_x(11, 11, ic.atomic_usage_size as u32 + CRED_UID_INFO_SIZE);
         a.ldr_w_post(13, 11, ic.securebits_size as i32);
         a.cbnz_w(13, end);
-        a.mov_imm_x(12, ic.cap_ability_max);
-        a.mov_imm_x(13, ic.cap_cnt as u64);
+        a.mov_imm_x_asmjit(12, ic.cap_ability_max);
+        a.mov_imm_x_asmjit(13, ic.cap_cnt as u64);
         a.bind(cycle_cap);
         a.ldr_x_post(14, 11, 8);
         a.cmp_reg_x(14, 12);
         a.b_cond(Cond::Cc, end);
         a.subs_imm_x(13, 13, 1);
         a.b_cond(Cond::Ne, cycle_cap);
-        a.mov_imm_x(10, 1);
+        a.mov_imm_x_asmjit(10, 1);
         a.bind(end);
         a.ret();
 

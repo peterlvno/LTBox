@@ -123,11 +123,17 @@ impl Asm {
     pub fn movk_x(&mut self, rd: u32, imm16: u16, shift: u32) {
         self.word(0xF280_0000 | ((shift / 16) << 21) | (u32::from(imm16) << 5) | rd);
     }
+    pub fn movn_x(&mut self, rd: u32, imm16: u16, shift: u32) {
+        self.word(0x9280_0000 | ((shift / 16) << 21) | (u32::from(imm16) << 5) | rd);
+    }
     pub fn movz_w(&mut self, rd: u32, imm16: u16, shift: u32) {
         self.word(0x5280_0000 | ((shift / 16) << 21) | (u32::from(imm16) << 5) | rd);
     }
     pub fn movk_w(&mut self, rd: u32, imm16: u16, shift: u32) {
         self.word(0x7280_0000 | ((shift / 16) << 21) | (u32::from(imm16) << 5) | rd);
+    }
+    pub fn movn_w(&mut self, rd: u32, imm16: u16, shift: u32) {
+        self.word(0x1280_0000 | ((shift / 16) << 21) | (u32::from(imm16) << 5) | rd);
     }
 
     /// `mov xd, #value` via movz/movk (mirrors upstream `aarch64_asm_mov_x`).
@@ -147,6 +153,23 @@ impl Asm {
         }
         if !inited {
             self.movz_x(rd, 0, 0);
+        }
+    }
+
+    /// `mov xd, #value` as asmjit lowers the generic `mov(GpX, Imm)` alias:
+    /// prefer one MOVN/MOVZ instruction, then a logical-immediate ORR alias,
+    /// then the full MOVN/MOVZ+MOVK sequence.
+    pub fn mov_imm_x_asmjit(&mut self, rd: u32, value: u64) {
+        let seq = encode_mov_sequence64(value, rd, true);
+        if seq.len() == 1 && rd != SP {
+            self.word(seq[0]);
+            return;
+        }
+        if rd != ZR && self.orr_imm_x(rd, ZR, value) {
+            return;
+        }
+        for word in seq {
+            self.word(word);
         }
     }
 
@@ -231,6 +254,17 @@ impl Asm {
         match encode_logical_imm64(imm) {
             Some((n, immr, imms)) => {
                 self.word(0x9200_0000 | (n << 22) | (immr << 16) | (imms << 10) | (rn << 5) | rd);
+                true
+            }
+            None => false,
+        }
+    }
+    /// `orr xd, xn, #imm` (64-bit logical immediate). The `mov #imm` alias uses
+    /// this with `xn = xzr` when the immediate is encodable as a bitmask.
+    pub fn orr_imm_x(&mut self, rd: u32, rn: u32, imm: u64) -> bool {
+        match encode_logical_imm64(imm) {
+            Some((n, immr, imms)) => {
+                self.word(0xB200_0000 | (n << 22) | (immr << 16) | (imms << 10) | (rn << 5) | rd);
                 true
             }
             None => false,
@@ -509,6 +543,80 @@ fn u32_imm7_scaled8(imm: i32) -> u32 {
     ((imm / 8) as u32) & 0x7F
 }
 
+fn count_zero_half_words64(imm: u64) -> u32 {
+    u32::from((imm & 0x0000_0000_0000_FFFF) == 0)
+        + u32::from((imm & 0x0000_0000_FFFF_0000) == 0)
+        + u32::from((imm & 0x0000_FFFF_0000_0000) == 0)
+        + u32::from((imm & 0xFFFF_0000_0000_0000) == 0)
+}
+
+fn encode_mov_sequence32(imm: u32, rd: u32, x: bool) -> Vec<u32> {
+    let k_movz = 0x5280_0000 | (u32::from(x) << 31);
+    let k_movn = 0x1280_0000;
+    let k_movk = 0x7280_0000;
+
+    if (imm & 0xFFFF_0000) == 0 {
+        return vec![k_movz | ((imm & 0xFFFF) << 5) | rd];
+    }
+    if (imm & 0xFFFF_0000) == 0xFFFF_0000 {
+        return vec![k_movn | (((!imm) & 0xFFFF) << 5) | rd];
+    }
+    if (imm & 0x0000_FFFF) == 0 {
+        return vec![k_movz | (1 << 21) | ((imm >> 16) << 5) | rd];
+    }
+    if (imm & 0x0000_FFFF) == 0x0000_FFFF {
+        return vec![k_movn | (1 << 21) | (((!imm >> 16) & 0xFFFF) << 5) | rd];
+    }
+
+    vec![
+        k_movz | ((imm & 0xFFFF) << 5) | rd,
+        k_movk | (1 << 21) | ((imm >> 16) << 5) | rd,
+    ]
+}
+
+fn encode_mov_sequence64(mut imm: u64, rd: u32, x: bool) -> Vec<u32> {
+    let k_movz = 0xD280_0000;
+    let k_movn = 0x9280_0000;
+    let k_movk = 0xF280_0000;
+
+    if imm <= 0xFFFF_FFFF {
+        return encode_mov_sequence32(imm as u32, rd, x);
+    }
+
+    let zhw = count_zero_half_words64(imm);
+    let ohw = count_zero_half_words64(!imm);
+    let mut out = Vec::with_capacity(4);
+
+    if zhw >= ohw {
+        let mut op = k_movz;
+        for hw_index in 0..4u32 {
+            let hw_imm = (imm & 0xFFFF) as u32;
+            if hw_imm != 0 {
+                out.push(op | (hw_index << 21) | (hw_imm << 5) | rd);
+                op = k_movk;
+            }
+            imm >>= 16;
+        }
+    } else {
+        let mut op = k_movn;
+        let mut neg_mask = 0xFFFFu32;
+        for hw_index in 0..4u32 {
+            let hw_imm = (imm & 0xFFFF) as u32;
+            if hw_imm != 0xFFFF {
+                out.push(op | (hw_index << 21) | ((hw_imm ^ neg_mask) << 5) | rd);
+                op = k_movk;
+                neg_mask = 0;
+            }
+            imm >>= 16;
+        }
+        if out.is_empty() {
+            out.push(k_movn | ((0xFFFF ^ neg_mask) << 5) | rd);
+        }
+    }
+
+    out
+}
+
 /// Encode a 64-bit value as an AArch64 logical (bitmask) immediate
 /// `(N, immr, imms)`, or `None` when it is not representable. Standard
 /// element-size / rotation algorithm (per the ARM ARM `DecodeBitMasks`).
@@ -618,6 +726,16 @@ mod tests {
         assert_eq!(one(|a| a.movz_x(5, 0x1234, 0)), 0xD282_4685);
         // movk x5, #0xABCD, lsl #16
         assert_eq!(one(|a| a.movk_x(5, 0xABCD, 16)), 0xF2B5_79A5);
+        // asmjit mov x11, #-4095 chooses a single movn.
+        assert_eq!(
+            one(|a| a.mov_imm_x_asmjit(11, 4095u64.wrapping_neg())),
+            0x9281_FFCB
+        );
+        // asmjit mov x13, #0x1ffffffffff chooses an ORR logical immediate.
+        assert_eq!(
+            one(|a| a.mov_imm_x_asmjit(13, 0x1FF_FFFF_FFFF)),
+            0xB240_A3ED
+        );
         // add x14, x14, #8
         assert_eq!(one(|a| a.add_imm_x(14, 14, 8)), 0x9100_21CE);
         // sub sp, sp, #0x50

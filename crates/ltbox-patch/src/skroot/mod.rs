@@ -4,9 +4,9 @@
 //! directly — locating functions from the embedded kallsyms with no kernel
 //! source, symbol table, or rebuild — a different mechanism from the existing
 //! root providers. The port is landing bottom-up: the core analysis layers,
-//! patch-emission helpers, `do_execve` hook, SELinux `avc_denied` hook, and
-//! pre-GUI core patch-plan orchestration are present; audit / `filldir64`
-//! patches and public root-pipeline wiring remain future work.
+//! patch-emission helpers, the `do_execve` root hook, directory hiding through
+//! `filldir64`, SELinux `avc_denied` / `audit_log_start` hooks, and root
+//! pipeline wiring are present.
 //!
 //! Ported from `abcz316/SKRoot-linuxKernelRoot`
 //! (`Lite_version/src/patch_kernel_root`), C++ → safe Rust with no C
@@ -22,11 +22,13 @@ pub mod init_cred;
 pub mod insn;
 pub mod kallsyms;
 pub mod offsets;
+pub mod patch_audit_log_start;
 pub mod patch_avc_denied;
 pub mod patch_base;
 pub mod patch_bytes;
 pub mod patch_current_avc_check;
 pub mod patch_do_execve;
+pub mod patch_filldir64;
 pub mod patch_plan;
 pub mod symbol_analyze;
 pub mod version;
