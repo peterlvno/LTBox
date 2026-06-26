@@ -93,12 +93,15 @@ const APP_ID: &str = "io.github.miner7222.LTBox";
 /// by `main`'s `window::Settings::size` fallback and by `App::new` when
 /// no persisted size exists yet — they must stay in lockstep.
 const DEFAULT_WINDOW_WIDTH: f32 = 820.0;
-const DEFAULT_WINDOW_HEIGHT: f32 = 620.0;
+const DEFAULT_WINDOW_HEIGHT: f32 = 720.0;
 /// Floor for cursor-drag resize and for the launch-time geometry
-/// (`window::Settings::min_size`). Anything below this stops laying
-/// out cleanly — wizard cards overlap, sidebar tween jumps.
+/// (`window::Settings::min_size`). Anything below the width stops laying
+/// out cleanly — wizard cards overlap, sidebar tween jumps. The height fits
+/// the common Flash-confirm step (keep-data flow, editable override rows)
+/// without scrolling while staying within a 1366×768 work area; the taller
+/// wipe-flow confirm (extra country row) still scrolls inside its panel.
 const MIN_WINDOW_WIDTH: f32 = 820.0;
-const MIN_WINDOW_HEIGHT: f32 = 620.0;
+const MIN_WINDOW_HEIGHT: f32 = 720.0;
 /// macOS uses the native window chrome (system title bar + traffic lights +
 /// native resize edges); Windows / Linux keep LTBox's custom borderless title
 /// bar and the 8 overlaid resize handles. Gates both the
