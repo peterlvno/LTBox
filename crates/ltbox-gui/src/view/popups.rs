@@ -499,6 +499,157 @@ impl App {
         m3_dialog(popup_content)
     }
 
+    /// Flash-confirm "hidden dropdown" editor. A small radio popup (same
+    /// shape as `region_target_popup_view`) listing the alternatives for
+    /// whichever confirm row was clicked. Each pick writes straight to
+    /// `wf_config`. `Country` is handled by the country popup, so it never
+    /// reaches here.
+    pub(crate) fn flash_confirm_edit_popup(&self, field: ConfirmField) -> Element<'_, Message> {
+        // (label, selected, on_press, disabled)
+        let cfg = &self.wf_config;
+        let tb322 = self.is_tb322fc();
+        let opts: Vec<(String, bool, Message, bool)> = match field {
+            ConfirmField::Region => [DeviceRegion::Prc, DeviceRegion::Row]
+                .into_iter()
+                .map(|r| {
+                    (
+                        self.t(r.label_key()).to_string(),
+                        cfg.device_region == Some(r),
+                        Message::Flash(FlashMsg::FlashConfirmSetRegion(r)),
+                        tb322 && r == DeviceRegion::Row,
+                    )
+                })
+                .collect(),
+            ConfirmField::Target => [FlashTarget::OtherRegion, FlashTarget::SameRegion]
+                .into_iter()
+                .map(|t| {
+                    (
+                        self.t(t.label_key()).to_string(),
+                        cfg.modify_region == (t == FlashTarget::OtherRegion),
+                        Message::Flash(FlashMsg::FlashConfirmSetTarget(t)),
+                        tb322 && t == FlashTarget::OtherRegion,
+                    )
+                })
+                .collect(),
+            ConfirmField::Data => [DataMode::Keep, DataMode::Wipe]
+                .into_iter()
+                .map(|d| {
+                    (
+                        self.t(if d == DataMode::Wipe {
+                            "flash_confirm_data_wipe"
+                        } else {
+                            "flash_confirm_data_keep"
+                        })
+                        .to_string(),
+                        cfg.wipe == (d == DataMode::Wipe),
+                        Message::Flash(FlashMsg::FlashConfirmSetData(d)),
+                        false,
+                    )
+                })
+                .collect(),
+            ConfirmField::RegionEdit => [true, false]
+                .into_iter()
+                .map(|on| {
+                    (
+                        self.t(if on {
+                            "flash_confirm_rb_on"
+                        } else {
+                            "flash_confirm_rb_off"
+                        })
+                        .to_string(),
+                        cfg.modify_region == on,
+                        Message::Flash(FlashMsg::FlashConfirmSetRegionEdit(on)),
+                        // PRC-only TB322FC can't cross regions — disable "On"
+                        // to match the Target editor's OtherRegion gate.
+                        tb322 && on,
+                    )
+                })
+                .collect(),
+            ConfirmField::Rollback => [
+                RollbackSetting::On,
+                RollbackSetting::Auto,
+                RollbackSetting::Off,
+            ]
+            .into_iter()
+            .map(|s| {
+                (
+                    self.t(match s {
+                        RollbackSetting::On => "flash_confirm_rb_on",
+                        RollbackSetting::Auto => "flash_confirm_rb_auto",
+                        RollbackSetting::Off => "flash_confirm_rb_off",
+                    })
+                    .to_string(),
+                    cfg.modify_rollback == s,
+                    Message::Flash(FlashMsg::FlashConfirmSetRollback(s)),
+                    false,
+                )
+            })
+            .collect(),
+            // Country is routed to the dedicated country popup, never here.
+            ConfirmField::Country => Vec::new(),
+        };
+
+        let mut list = column![].spacing(2);
+        for (label, is_selected, on_press, disabled) in opts {
+            let mut btn = button(text(label).size(13))
+                .padding([6, 14])
+                .width(Length::Fill)
+                .style(move |t: &Theme, status| {
+                    let p = pal_of(t);
+                    if disabled {
+                        return button::Style {
+                            background: Some(iced::Color::TRANSPARENT.into()),
+                            text_color: with_alpha(p.on_surface, 0.38),
+                            ..Default::default()
+                        };
+                    }
+                    let hover = matches!(status, button::Status::Hovered);
+                    button::Style {
+                        background: Some(if is_selected {
+                            p.primary.into()
+                        } else if hover {
+                            with_alpha(p.primary, theme::state::HOVER).into()
+                        } else {
+                            iced::Color::TRANSPARENT.into()
+                        }),
+                        text_color: if is_selected {
+                            p.on_primary
+                        } else {
+                            p.on_surface
+                        },
+                        ..Default::default()
+                    }
+                });
+            if !disabled {
+                btn = btn.on_press(on_press);
+            }
+            list = list.push(btn);
+        }
+
+        let popup_content: Element<'_, Message> = column![
+            row![
+                text(self.t("flash_confirm_edit_title").to_string()).size(16),
+                Space::new().width(Length::Fill),
+                button(
+                    text(self.t("btn_cancel").to_string())
+                        .size(12)
+                        .style(muted_style)
+                )
+                .on_press(Message::Flash(FlashMsg::FlashConfirmClose))
+                .padding([4, 12])
+                .style(neutral_pill_btn_style),
+            ]
+            .align_y(iced::Alignment::Center),
+            widget::rule::horizontal(1),
+            list,
+        ]
+        .spacing(10)
+        .padding(20)
+        .width(320)
+        .into();
+        m3_dialog(popup_content)
+    }
+
     pub(crate) fn rescue_region_popup_view(&self) -> Element<'_, Message> {
         let mk_option = |region: RescueRegion, desc_key: &'static str| {
             let label = self.t(region.label_key()).to_string();

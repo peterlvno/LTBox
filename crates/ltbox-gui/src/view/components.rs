@@ -275,6 +275,95 @@ pub(crate) fn info_kv_center<'a>(label: &str, value: &str) -> Element<'a, Messag
     .into()
 }
 
+/// Like [`info_kv_center`] but the value is a click-to-edit "hidden
+/// dropdown": pixel-identical to the static row until pressed, so casual
+/// users never notice it. When `changed` (the picked option diverges from
+/// the confirm baseline) the row takes an accent background + border and a
+/// hover caution spelling out that this is a power-user override.
+pub(crate) fn info_kv_center_editable<'a>(
+    label: &str,
+    value: &str,
+    changed: bool,
+    caution: &str,
+    on_open: Message,
+) -> Element<'a, Message> {
+    let inner = column![
+        text(label.to_string())
+            .size(11)
+            .style(label_style)
+            .width(Length::Fill)
+            .center(),
+        text(value.to_string())
+            .size(14)
+            .width(Length::Fill)
+            .center()
+            .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+    ]
+    .spacing(3)
+    .width(Length::Fill)
+    .align_x(iced::Alignment::Center);
+
+    let btn = button(inner)
+        .on_press(on_open)
+        .padding([6, 10])
+        .width(Length::Fill)
+        .style(move |t: &Theme, status| {
+            let p = pal_of(t);
+            // Unchanged: no fill even on hover, so the row reads as plain
+            // text. Changed: accent tint that deepens slightly on hover/press.
+            let bg = if changed {
+                with_alpha(p.primary, 0.16 + theme::state_alpha(status))
+            } else {
+                iced::Color::TRANSPARENT
+            };
+            button::Style {
+                background: Some(bg.into()),
+                text_color: p.on_surface,
+                border: iced::Border {
+                    color: if changed {
+                        p.primary
+                    } else {
+                        iced::Color::TRANSPARENT
+                    },
+                    width: if changed { 1.0 } else { 0.0 },
+                    radius: theme::shape::SM.into(),
+                },
+                ..Default::default()
+            }
+        });
+
+    if !changed {
+        return btn.into();
+    }
+
+    iced::widget::tooltip(
+        btn,
+        container(
+            text(caution.to_string())
+                .size(12)
+                .style(warning_style)
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+        )
+        .padding([8, 12])
+        .max_width(280)
+        .style(|t: &Theme| {
+            let p = pal_of(t);
+            container::Style {
+                background: Some(p.surface_container_high.into()),
+                border: iced::Border {
+                    color: p.outline_variant,
+                    width: 1.0,
+                    radius: theme::shape::SM.into(),
+                },
+                ..Default::default()
+            }
+        }),
+        iced::widget::tooltip::Position::Top,
+    )
+    .gap(6)
+    .into()
+}
+
 pub(crate) fn adv_grid_btn<'a>(item: AdvAction, label: &str) -> Element<'a, Message> {
     // Inner container: border-only via `sel_card_style`. Earlier
     // version used `theme::surface_card_style` which paints an opaque

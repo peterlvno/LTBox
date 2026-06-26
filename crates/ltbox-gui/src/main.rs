@@ -2076,6 +2076,13 @@ struct App {
     /// the legacy handlers stay oblivious.
     adv_wizard: AdvWizard,
     wf_config: WorkflowConfig,
+    /// Flash-confirm "hidden dropdown" editor: which row's option picker is
+    /// open (`None` = closed). `Country` reuses `country_popup_open` instead.
+    confirm_edit_field: Option<ConfirmField>,
+    /// Snapshot of `wf_config` taken when the confirm step is first entered.
+    /// A confirm row is rendered as "changed" (accent background + hover
+    /// caution) when its field diverges from this baseline.
+    confirm_baseline: Option<WorkflowConfig>,
     country_popup_open: bool,
     /// Routes `SelectCountry` back to the Advanced wizard instead of
     /// the Flash flow when PatchDevinfo opened the popup.
@@ -2303,6 +2310,8 @@ impl Default for App {
             adv_confirm_path: None,
             adv_wizard: AdvWizard::default(),
             wf_config: WorkflowConfig::default(),
+            confirm_edit_field: None,
+            confirm_baseline: None,
             country_popup_open: false,
             adv_needs_country: false,
             region_target_popup_open: false,

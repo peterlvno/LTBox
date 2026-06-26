@@ -63,6 +63,9 @@ impl App {
         if self.region_target_popup_open {
             layers.push(self.region_target_popup_view());
         }
+        if let Some(field) = self.confirm_edit_field {
+            layers.push(self.flash_confirm_edit_popup(field));
+        }
         if let Some(t) = self.reboot_confirm_target {
             layers.push(self.reboot_confirm_popup(t));
         }

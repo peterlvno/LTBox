@@ -2,10 +2,10 @@
 //! sub-message enums it wraps, dispatched by `App::update`.
 
 use crate::{
-    AdvAction, DataMode, DevicePollResult, DeviceRegion, DumpPartsScanResult, Family,
+    AdvAction, ConfirmField, DataMode, DevicePollResult, DeviceRegion, DumpPartsScanResult, Family,
     FlashPartsScanResult, FlashTarget, Language, NightlySource, PartsSortColumn, PickerTarget,
-    Provider, RebootTarget, RescueRegion, RootMode, SkrootFlavor, SysUpdateAction, ThemeChoice,
-    ThemeSeed, UnrootType, VerChoice, View,
+    Provider, RebootTarget, RescueRegion, RollbackSetting, RootMode, SkrootFlavor, SysUpdateAction,
+    ThemeChoice, ThemeSeed, UnrootType, VerChoice, View,
 };
 
 #[derive(Debug, Clone)]
@@ -164,6 +164,15 @@ pub(crate) enum FlashMsg {
     /// Pick a standalone EDL loader when the firmware folder ships none.
     FlashSelectLoader,
     FlashLoaderChosen(Option<String>),
+    /// Confirm-step "hidden dropdown": open the option editor for a row.
+    FlashConfirmOpen(ConfirmField),
+    /// Dismiss the confirm-step option editor without a change.
+    FlashConfirmClose,
+    FlashConfirmSetRegion(DeviceRegion),
+    FlashConfirmSetTarget(FlashTarget),
+    FlashConfirmSetData(DataMode),
+    FlashConfirmSetRegionEdit(bool),
+    FlashConfirmSetRollback(RollbackSetting),
     FlashExecStart,
     FlashExecDone(Vec<String>),
 }

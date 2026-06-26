@@ -334,48 +334,63 @@ impl App {
 
     pub(crate) fn flash_confirm_step(&self) -> Element<'_, Message> {
         let dash = "—".to_string();
-        let region = self
-            .flash
+        // `wf_config` is the worker's only input, so the summary derives every
+        // editable row from it (not the wizard cards). The values match the
+        // card selections in the normal flow, so the rendered rows are
+        // unchanged until a confirm-step override diverges from the baseline.
+        let cfg = &self.wf_config;
+        let base = self.confirm_baseline.as_ref();
+        let caution = self.t("flash_confirm_override_warning").to_string();
+        let open = |f: ConfirmField| Message::Flash(FlashMsg::FlashConfirmOpen(f));
+
+        let region = cfg
             .device_region
             .map(|r| self.t(r.label_key()).to_string())
             .unwrap_or_else(|| dash.clone());
-        let target = self
-            .flash
-            .target
-            .map(|t| self.t(t.label_key()).to_string())
-            .unwrap_or_else(|| dash.clone());
+        let region_changed = base.is_some_and(|b| b.device_region != cfg.device_region);
+
+        // Target ↔ Region-edit both reflect `modify_region`, so they always
+        // agree and highlight together.
+        let target_kind = if cfg.modify_region {
+            FlashTarget::OtherRegion
+        } else {
+            FlashTarget::SameRegion
+        };
+        let target = self.t(target_kind.label_key()).to_string();
+        let modify_changed = base.is_some_and(|b| b.modify_region != cfg.modify_region);
+
         let data = self
-            .flash
-            .data_mode
-            .map(|d| {
-                self.t(match d {
-                    DataMode::Keep => "flash_confirm_data_keep",
-                    DataMode::Wipe => "flash_confirm_data_wipe",
-                })
-                .to_string()
+            .t(if cfg.wipe {
+                "flash_confirm_data_wipe"
+            } else {
+                "flash_confirm_data_keep"
             })
-            .unwrap_or_else(|| dash.clone());
+            .to_string();
+        let data_changed = base.is_some_and(|b| b.wipe != cfg.wipe);
+
         // Confirm rows use short value labels (Modify / Auto / Ignore)
         // instead of the verbose "… rollback index" strings shown in
         // logs — the review summary is tighter to read that way.
         let modify_region = self
-            .t(if self.wf_config.modify_region {
+            .t(if cfg.modify_region {
                 "flash_confirm_rb_on"
             } else {
                 "flash_confirm_rb_off"
             })
             .to_string();
         let rollback = self
-            .t(match self.wf_config.modify_rollback {
+            .t(match cfg.modify_rollback {
                 RollbackSetting::On => "flash_confirm_rb_on",
                 RollbackSetting::Auto => "flash_confirm_rb_auto",
                 RollbackSetting::Off => "flash_confirm_rb_off",
             })
             .to_string();
+        let rollback_changed = base.is_some_and(|b| b.modify_rollback != cfg.modify_rollback);
+
         // Destructive-op callout, hoisted above the summary so the hazard
         // reads before the device details. Amber `warning` colour — not an
         // error/failure. Wipe vs keep-data show different cautions.
-        let warning_key = if self.wf_config.wipe {
+        let warning_key = if cfg.wipe {
             "flash_confirm_warning_wipe"
         } else {
             "flash_confirm_warning"
@@ -387,24 +402,66 @@ impl App {
                 .center()
                 .into(),
             widget::rule::horizontal(1).into(),
-            info_kv_center(self.t("flash_confirm_region"), &region),
-            info_kv_center(self.t("flash_confirm_target"), &target),
-            info_kv_center(self.t("flash_confirm_data"), &data),
-            info_kv_center(self.t("flash_confirm_region_edit"), &modify_region),
-            info_kv_center(self.t("flash_confirm_rollback"), &rollback),
+            info_kv_center_editable(
+                self.t("flash_confirm_region"),
+                &region,
+                region_changed,
+                &caution,
+                open(ConfirmField::Region),
+            ),
+            info_kv_center_editable(
+                self.t("flash_confirm_target"),
+                &target,
+                modify_changed,
+                &caution,
+                open(ConfirmField::Target),
+            ),
+            info_kv_center_editable(
+                self.t("flash_confirm_data"),
+                &data,
+                data_changed,
+                &caution,
+                open(ConfirmField::Data),
+            ),
+            info_kv_center_editable(
+                self.t("flash_confirm_region_edit"),
+                &modify_region,
+                modify_changed,
+                &caution,
+                open(ConfirmField::RegionEdit),
+            ),
+            info_kv_center_editable(
+                self.t("flash_confirm_rollback"),
+                &rollback,
+                rollback_changed,
+                &caution,
+                open(ConfirmField::Rollback),
+            ),
         ];
-        if let Some(cc) = self.wf_config.country_action.target() {
+        let country_changed = base.is_some_and(|b| b.country_action != cfg.country_action);
+        if let Some(cc) = cfg.country_action.target() {
             let entry = COUNTRY_CODES.iter().find(|e| e.code == cc);
             let label = entry
                 .map(|e| format!("{} — {}", e.code, e.name))
                 .unwrap_or_else(|| cc.to_string());
-            rows.push(info_kv_center(self.t("flash_confirm_country"), &label));
-        } else if self.wf_config.wipe && self.wf_config.country_action.is_skipped() {
-            rows.push(info_kv_center(
+            rows.push(info_kv_center_editable(
+                self.t("flash_confirm_country"),
+                &label,
+                country_changed,
+                &caution,
+                open(ConfirmField::Country),
+            ));
+        } else if cfg.wipe && cfg.country_action.is_skipped() {
+            rows.push(info_kv_center_editable(
                 self.t("flash_confirm_country"),
                 self.t("flash_confirm_country_skip"),
+                country_changed,
+                &caution,
+                open(ConfirmField::Country),
             ));
         }
+        // Folder is picked via the file dialog, not a dropdown — keep it a
+        // plain static row.
         let folder_owned = self
             .flash
             .firmware_folder

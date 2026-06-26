@@ -604,6 +604,19 @@ impl DataMode {
     }
 }
 
+/// Which Flash-confirm summary row the "hidden dropdown" editor targets.
+/// `Country` is special-cased to reuse the existing country popup; the
+/// rest open the shared `flash_confirm_edit_popup`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConfirmField {
+    Region,
+    Target,
+    Data,
+    RegionEdit,
+    Rollback,
+    Country,
+}
+
 #[derive(Default)]
 pub(crate) struct FlashWizard {
     pub(crate) step: usize,

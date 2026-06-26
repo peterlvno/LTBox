@@ -46,6 +46,9 @@ impl App {
                         wipe: self.flash.data_mode == Some(DataMode::Wipe),
                         country_action: CountryAction::Unset,
                     };
+                    // Rebuilding the config invalidates any prior confirm-step
+                    // override baseline; a fresh one is captured on entry below.
+                    self.confirm_baseline = None;
                     if self.wf_config.wipe {
                         self.flash.next();
                         self.country_popup_open = true;
@@ -57,13 +60,24 @@ impl App {
                     return self.update(Message::Flash(FlashMsg::FlashExecStart));
                 }
                 self.flash.next();
+                // Snapshot the baseline only on the FIRST entry to confirm
+                // after a rebuild (it is `None` then). Re-capturing on every
+                // entry would fold a prior override into the baseline, so a
+                // Back→Next round trip would hide a change that Start still
+                // applies. The step-2 rebuild and exec/reset clear it again.
+                if self.flash.step == 4 && self.confirm_baseline.is_none() {
+                    self.confirm_baseline = Some(self.wf_config.clone());
+                }
                 Task::none()
             }
             FlashMsg::FlashBack => {
                 if self.flash.step == 4 {
-                    // Re-arm country patching so the popup's "Do not change"
-                    // selection doesn't survive a Back→Next round trip.
-                    self.wf_config.country_action = CountryAction::Unset;
+                    // Leaving confirm only closes any open editor. The baseline
+                    // and picked overrides persist, so a Back→Next bounce to the
+                    // folder step keeps power-user changes visible and applied.
+                    // Going deeper to the data step rebuilds `wf_config` (and
+                    // re-opens the country popup on wipe), which resets both.
+                    self.confirm_edit_field = None;
                 }
                 self.flash.back();
                 Task::none()
@@ -178,6 +192,76 @@ impl App {
                 self.flush_exec_done_log(lines);
                 self.end_op();
                 self.wf_config = WorkflowConfig::default();
+                self.confirm_baseline = None;
+                self.confirm_edit_field = None;
+                Task::none()
+            }
+            // Confirm-step "hidden dropdown" editors. Country reuses the
+            // existing country popup; everything else opens the shared editor.
+            // Each setter writes straight to `wf_config` (the worker's only
+            // input) — no cascade — so the change is an explicit power-user
+            // override, surfaced by the accent highlight against the baseline.
+            FlashMsg::FlashConfirmOpen(field) => {
+                match field {
+                    ConfirmField::Country => self.country_popup_open = true,
+                    other => self.confirm_edit_field = Some(other),
+                }
+                Task::none()
+            }
+            FlashMsg::FlashConfirmClose => {
+                self.confirm_edit_field = None;
+                Task::none()
+            }
+            FlashMsg::FlashConfirmSetRegion(r) => {
+                // TB322FC is PRC-only; the editor grays out ROW, but drop a
+                // stale dispatch defensively like the region card handler does.
+                if !(self.is_tb322fc() && r == DeviceRegion::Row) {
+                    self.wf_config.device_region = Some(r);
+                }
+                self.confirm_edit_field = None;
+                Task::none()
+            }
+            FlashMsg::FlashConfirmSetTarget(t) => {
+                // Target ↔ region edit both map onto `modify_region`. TB322FC
+                // can't cross regions, so block OtherRegion defensively.
+                if !(self.is_tb322fc() && t == FlashTarget::OtherRegion) {
+                    self.wf_config.modify_region = t == FlashTarget::OtherRegion;
+                }
+                self.confirm_edit_field = None;
+                Task::none()
+            }
+            FlashMsg::FlashConfirmSetData(m) => {
+                let wipe = m == DataMode::Wipe;
+                self.wf_config.wipe = wipe;
+                self.confirm_edit_field = None;
+                // Keep the country choice consistent with the wipe flag, which
+                // the normal wizard couples: a wipe run demands an explicit
+                // country/skip decision, a keep run ignores it entirely. Flip
+                // to wipe → default to "do not change" (still editable via the
+                // country row) so the worker never runs on an `Unset`; flip to
+                // keep → clear it so no stale country row lingers.
+                if wipe {
+                    if matches!(self.wf_config.country_action, CountryAction::Unset) {
+                        self.wf_config.country_action = CountryAction::Skip;
+                    }
+                } else {
+                    self.wf_config.country_action = CountryAction::Unset;
+                }
+                Task::none()
+            }
+            FlashMsg::FlashConfirmSetRegionEdit(on) => {
+                // Region edit drives the same `modify_region` cross-region flag
+                // as the Target row, so apply the TB322FC PRC-only guard here
+                // too — otherwise this path bypasses the disabled Target option.
+                if !(self.is_tb322fc() && on) {
+                    self.wf_config.modify_region = on;
+                }
+                self.confirm_edit_field = None;
+                Task::none()
+            }
+            FlashMsg::FlashConfirmSetRollback(s) => {
+                self.wf_config.modify_rollback = s;
+                self.confirm_edit_field = None;
                 Task::none()
             }
         }
