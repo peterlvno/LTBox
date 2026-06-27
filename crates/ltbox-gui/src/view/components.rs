@@ -476,52 +476,7 @@ pub(crate) fn icon_option_card_sub(
     selected: bool,
     msg: Message,
 ) -> Element<'static, Message> {
-    // Sub text centres vertically inside the fixed box — top-aligning
-    // left long gaps between short descs and the label above.
-    let sub_text: Element<'static, Message> = if sub.is_empty() {
-        text(" ").size(11).width(Length::Fill).center().into()
-    } else {
-        text(sub.to_string())
-            .size(11)
-            .style(muted_style)
-            .width(Length::Fill)
-            .center()
-            .into()
-    };
-    let sub_row = container(sub_text)
-        .width(Length::Fill)
-        .height(Length::Fixed(SUB_ROW_HEIGHT))
-        .align_y(iced::alignment::Vertical::Center);
-    // Explicit icon→label vs label→desc gaps — a single `spacing` read
-    // unbalanced because the centred sub-row adds ~9 px padding.
-    let content = column![
-        icon_tile(icon),
-        Space::new().height(14),
-        text(label.to_string())
-            .size(13)
-            .style(on_surface_style)
-            .width(Length::Fill)
-            .center(),
-        Space::new().height(4),
-        sub_row,
-    ]
-    .spacing(0)
-    .align_x(iced::Alignment::Center);
-
-    button(
-        container(content)
-            .padding([20, 16])
-            .width(Length::Fill)
-            .height(WIZARD_CARD_HEIGHT)
-            .center_x(Length::Fill)
-            .center_y(WIZARD_CARD_HEIGHT)
-            .style(move |t: &Theme| sel_card_style(t, selected)),
-    )
-    .on_press(msg)
-    .padding(0)
-    .width(Length::Fill)
-    .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected))
-    .into()
+    option_card(icon, label, sub, selected, Some(msg), false)
 }
 
 /// Disabled twin of [`icon_option_card_sub`]. Same icon / label / sub
@@ -534,6 +489,51 @@ pub(crate) fn icon_option_card_sub_disabled(
     label: &str,
     sub: &str,
 ) -> Element<'static, Message> {
+    option_card(icon, label, sub, false, None, false)
+}
+
+/// Square (1:1) variant of [`icon_option_card_sub`] for single-row wizard
+/// steps. The fixed `WIZARD_CARD_SQUARE` side makes each option a square and
+/// lets its row shrink-wrap + centre instead of stretching the cards full
+/// width. The icon → title → description stack is unchanged.
+pub(crate) fn icon_option_card_sub_square(
+    icon: Element<'static, Message>,
+    label: &str,
+    sub: &str,
+    selected: bool,
+    msg: Message,
+) -> Element<'static, Message> {
+    option_card(icon, label, sub, selected, Some(msg), true)
+}
+
+/// Disabled twin of [`icon_option_card_sub_square`].
+pub(crate) fn icon_option_card_sub_square_disabled(
+    icon: Element<'static, Message>,
+    label: &str,
+    sub: &str,
+) -> Element<'static, Message> {
+    option_card(icon, label, sub, false, None, true)
+}
+
+/// Shared body for the vertical icon → title → description option card.
+/// `msg = None` renders the disabled affordance; `square` swaps the
+/// full-width × fixed-height box for a fixed 1:1 square.
+fn option_card(
+    icon: Element<'static, Message>,
+    label: &str,
+    sub: &str,
+    selected: bool,
+    msg: Option<Message>,
+    square: bool,
+) -> Element<'static, Message> {
+    let enabled = msg.is_some();
+    let label_style_fn = if enabled {
+        on_surface_style
+    } else {
+        muted_style
+    };
+    // Sub text centres vertically inside the fixed box — top-aligning
+    // left long gaps between short descs and the label above.
     let sub_text: Element<'static, Message> = if sub.is_empty() {
         text(" ").size(11).width(Length::Fill).center().into()
     } else {
@@ -544,16 +544,27 @@ pub(crate) fn icon_option_card_sub_disabled(
             .center()
             .into()
     };
+    // Square cards are narrower (fixed side), so longer localized
+    // descriptions wrap to more lines. The 200px-tall square has vertical
+    // slack below the icon + label, so give it a taller sub-row to absorb
+    // ~4 lines instead of clipping; the standard card keeps its 2-line row.
+    let sub_h = if square {
+        WIZARD_CARD_SQUARE_SUB_HEIGHT
+    } else {
+        SUB_ROW_HEIGHT
+    };
     let sub_row = container(sub_text)
         .width(Length::Fill)
-        .height(Length::Fixed(SUB_ROW_HEIGHT))
+        .height(Length::Fixed(sub_h))
         .align_y(iced::alignment::Vertical::Center);
+    // Explicit icon→label vs label→desc gaps — a single `spacing` read
+    // unbalanced because the centred sub-row adds ~9 px padding.
     let content = column![
         icon_tile(icon),
         Space::new().height(14),
         text(label.to_string())
             .size(13)
-            .style(muted_style)
+            .style(label_style_fn)
             .width(Length::Fill)
             .center(),
         Space::new().height(4),
@@ -562,37 +573,52 @@ pub(crate) fn icon_option_card_sub_disabled(
     .spacing(0)
     .align_x(iced::Alignment::Center);
 
-    button(
-        container(content)
-            .padding([20, 16])
-            .width(Length::Fill)
-            .height(WIZARD_CARD_HEIGHT)
-            .center_x(Length::Fill)
-            .center_y(WIZARD_CARD_HEIGHT)
-            .style(|t: &Theme| sel_card_style(t, false)),
-    )
-    // No `on_press` — iced reports Status::Disabled, the style hook
-    // below renders the faded surface.
-    .padding(0)
-    .width(Length::Fill)
-    .style(|t: &Theme, _status| {
-        let p = pal_of(t);
-        // Stronger M3 disabled affordance: dimmer surface + a thin
-        // outline_variant border so the inert card reads distinctly
-        // against neighbouring active cards (alpha-only fade was
-        // ambiguous on themes with a dim base surface).
-        button::Style {
-            background: Some(with_alpha(p.surface_container_low, 0.5).into()),
-            text_color: with_alpha(p.on_surface, 0.38),
-            border: iced::Border {
-                color: with_alpha(p.outline_variant, 0.6),
-                width: 1.0,
-                radius: theme::shape::MD.into(),
-            },
-            ..Default::default()
-        }
-    })
-    .into()
+    // Square → fixed side both ways so the row shrink-wraps and centres;
+    // otherwise full width × the standard card height.
+    let card_w: Length = if square {
+        Length::Fixed(WIZARD_CARD_SQUARE)
+    } else {
+        Length::Fill
+    };
+    let card_h: f32 = if square {
+        WIZARD_CARD_SQUARE
+    } else {
+        WIZARD_CARD_HEIGHT
+    };
+
+    let inner = container(content)
+        .padding([20, 16])
+        .width(card_w)
+        .height(card_h)
+        .center_x(card_w)
+        .center_y(card_h)
+        .style(move |t: &Theme| sel_card_style(t, selected && enabled));
+
+    let btn = button(inner).padding(0).width(card_w);
+    match msg {
+        Some(m) => btn
+            .on_press(m)
+            .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected))
+            .into(),
+        None => btn
+            // No `on_press` — iced reports Status::Disabled. Stronger M3
+            // disabled affordance: dimmer surface + a thin outline_variant
+            // border so the inert card reads distinctly against active ones.
+            .style(|t: &Theme, _status| {
+                let p = pal_of(t);
+                button::Style {
+                    background: Some(with_alpha(p.surface_container_low, 0.5).into()),
+                    text_color: with_alpha(p.on_surface, 0.38),
+                    border: iced::Border {
+                        color: with_alpha(p.outline_variant, 0.6),
+                        width: 1.0,
+                        radius: theme::shape::MD.into(),
+                    },
+                    ..Default::default()
+                }
+            })
+            .into(),
+    }
 }
 
 /// Wrap a wizard icon. Icons already carry their own rounded-rect bg,
@@ -629,6 +655,13 @@ impl Family {
 
 impl Provider {
     pub(crate) fn icon(self) -> Element<'static, Message> {
+        self.icon_sized(72.0)
+    }
+
+    /// Provider brand logo at an explicit size. The 2-provider square cards
+    /// pass a smaller value so the 72px logo doesn't overflow the fixed
+    /// square; the full-width grid cards keep the default 72px.
+    pub(crate) fn icon_sized(self, size: f32) -> Element<'static, Message> {
         // Provider brand logos — kept as bespoke SVG, not Lucide.
         let bytes: &'static [u8] = match self {
             Self::Magisk => include_bytes!("../../assets/icons/magisk.svg"),
@@ -640,7 +673,7 @@ impl Provider {
             Self::APatch => include_bytes!("../../assets/icons/apatch.svg"),
             Self::FolkPatch => include_bytes!("../../assets/icons/folkpatch.svg"),
         };
-        svg_icon(bytes, 72.0)
+        svg_icon(bytes, size)
     }
 }
 

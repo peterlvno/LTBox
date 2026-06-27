@@ -332,75 +332,38 @@ impl App {
         // remains pickable through GKI, and APatch stays available.
         let tb320fc = self.is_tb320fc();
         let unsupported_tb320fc = tr_args!("model_unsupported", model = "TB320FC");
+        // Vertical icon → title → description cards (not square), arranged
+        // 2×2 — same card style the 2-up provider grid uses.
         let mk = |f: Family| -> Element<'_, Message> {
             let disabled = tb320fc && f == Family::Magisk;
-            let selected = self.root.family == Some(f);
-            let icon = if disabled {
-                f.icon_disabled()
-            } else {
-                f.icon()
-            };
-            let desc = if disabled {
-                unsupported_tb320fc.clone()
-            } else {
-                self.t(f.desc_key()).to_string()
-            };
-            let text_style = if disabled {
-                muted_style
-            } else {
-                on_surface_style
-            };
-            let body = row![
-                icon_tile(icon),
-                container(
-                    column![
-                        text(self.t(f.label_key()).to_string())
-                            .size(16)
-                            .style(text_style),
-                        text(desc).size(12).style(muted_style),
-                    ]
-                    .spacing(4)
-                    .width(Length::Fill),
-                )
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .center_y(Length::Fill),
-            ]
-            .spacing(16)
-            .align_y(iced::Alignment::Center);
-
-            let btn = button(
-                container(body)
-                    .padding([16, 20])
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_y(Length::Fill)
-                    .style(move |t: &Theme| sel_card_style(t, selected)),
-            )
-            .padding(0)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
             if disabled {
-                btn.into()
+                icon_option_card_sub_disabled(
+                    f.icon_disabled(),
+                    self.t(f.label_key()),
+                    &unsupported_tb320fc,
+                )
             } else {
-                btn.on_press(Message::Root(RootMsg::RootFamily(f))).into()
+                icon_option_card_sub(
+                    f.icon(),
+                    self.t(f.label_key()),
+                    self.t(f.desc_key()),
+                    self.root.family == Some(f),
+                    Message::Root(RootMsg::RootFamily(f)),
+                )
             }
         };
 
-        // 2×2 grid — four families split the space two-up per row.
+        // 2×2 grid — four families, two-up per row.
         let families = [
             Family::Magisk,
             Family::KernelSU,
             Family::APatch,
             Family::Skroot,
         ];
-        let mut cards = column![]
-            .spacing(10)
-            .width(Length::Fill)
-            .height(Length::Fill);
+        let mut cards = column![].spacing(10).width(Length::Fill);
         for chunk in families.chunks(2) {
-            let mut r = row![].spacing(10).width(Length::Fill).height(Length::Fill);
+            // Fill-width rows so the (Fill) cards split into equal columns.
+            let mut r = row![].spacing(10).width(Length::Fill);
             for &f in chunk {
                 r = r.push(mk(f));
             }
@@ -423,116 +386,73 @@ impl App {
         .spacing(14)
         .padding(28)
         .width(Length::Fill)
-        .height(Length::Fill)
         .align_x(iced::Alignment::Center);
         container(col)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x(Length::Fill)
+            .center_y(Length::Fill)
             .into()
     }
 
     pub(crate) fn root_provider_step(&self) -> Element<'_, Message> {
         let family = self.root.family.unwrap_or(Family::KernelSU);
         let providers = family.providers();
-        // KernelSU has 4 providers — render them as a 2×2 grid of the
-        // wider horizontal cards (full-height route), distinct from the
-        // 2-up grid_card layout the 2-provider families use.
-        let is_ksu_grid = family == Family::KernelSU && !self.root.is_gki();
 
-        let grid_card = |p: Provider, selected: bool| -> Element<'_, Message> {
+        // KernelSU's four providers form a 2×2 grid (vertical, full-width
+        // cards, per the grid rule); Magisk / APatch have two and render as
+        // a single-row layout, so their options use the 1:1 square cards.
+        let is_grid = providers.len() > 2;
+        let card = |p: Provider, selected: bool| -> Element<'_, Message> {
             let sub = p.desc_key().map(|k| self.t(k)).unwrap_or("");
-            icon_option_card_sub(
-                p.icon(),
-                self.t(p.label_key()),
-                sub,
-                selected,
-                Message::Root(RootMsg::RootProvider(p)),
-            )
+            if is_grid {
+                icon_option_card_sub(
+                    p.icon(),
+                    self.t(p.label_key()),
+                    sub,
+                    selected,
+                    Message::Root(RootMsg::RootProvider(p)),
+                )
+            } else {
+                // Smaller brand logo (52 vs 72) so the 72px SVG doesn't
+                // overflow the fixed 200px square once the label/desc wraps.
+                icon_option_card_sub_square(
+                    p.icon_sized(52.0),
+                    self.t(p.label_key()),
+                    sub,
+                    selected,
+                    Message::Root(RootMsg::RootProvider(p)),
+                )
+            }
         };
 
-        let list_card = |p: Provider, selected: bool| -> Element<'_, Message> {
-            // Icon left + label/desc right; each card Fill height so
-            // N cards split the space evenly.
-            let icon = p.icon();
-            let desc: Element<'_, Message> = match p.desc_key() {
-                Some(dk) => text(self.t(dk).to_string())
-                    .size(12)
-                    .style(muted_style)
-                    .into(),
-                None => text(" ").size(12).into(),
-            };
-            let text_block = container(
-                column![
-                    text(self.t(p.label_key()).to_string())
-                        .size(16)
-                        .style(on_surface_style),
-                    desc,
-                ]
-                .spacing(4)
-                .width(Length::Fill),
-            )
+        // align_x centred so the shrink-wrapped square rows (2-provider
+        // families) sit centred; full-width grid rows (KernelSU) are
+        // unaffected.
+        let mut grid = column![]
+            .spacing(10)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .center_y(Length::Fill);
-            let body = row![icon_tile(icon), text_block]
-                .spacing(16)
-                .align_y(iced::Alignment::Center);
-            button(
-                container(body)
-                    .padding([16, 20])
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .center_y(Length::Fill)
-                    .style(move |t: &Theme| sel_card_style(t, selected)),
-            )
-            .on_press(Message::Root(RootMsg::RootProvider(p)))
-            .padding(0)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected))
-            .into()
-        };
-
-        let tiles: Element<'_, Message> = if is_ksu_grid {
-            // 2×2 grid of horizontal cards — four KSU LKM providers.
-            let mut grid = column![]
-                .spacing(10)
-                .width(Length::Fill)
-                .height(Length::Fill);
-            for chunk in providers.chunks(2) {
-                let mut r = row![].spacing(10).width(Length::Fill).height(Length::Fill);
-                for &p in chunk {
-                    r = r.push(list_card(p, self.root.provider == Some(p)));
-                }
-                if chunk.len() == 1 {
-                    r = r.push(Space::new().width(Length::Fill));
-                }
-                grid = grid.push(r);
+            .align_x(iced::Alignment::Center);
+        for chunk in providers.chunks(2) {
+            // Grid (Fill cards) → Fill rows for equal columns; square
+            // 2-provider rows stay Shrink so align_x can centre them.
+            let mut r = row![].spacing(10);
+            if is_grid {
+                r = r.width(Length::Fill);
             }
-            grid.into()
-        } else {
-            // 2-col grid — Magisk / APatch (2 providers each).
-            let mut grid = column![].spacing(10).width(Length::Fill);
-            for chunk in providers.chunks(2) {
-                let mut r = row![].spacing(10);
-                for &p in chunk {
-                    r = r.push(grid_card(p, self.root.provider == Some(p)));
-                }
-                if chunk.len() == 1 {
-                    r = r.push(Space::new().width(Length::Fill));
-                }
-                grid = grid.push(r);
+            for &p in chunk {
+                r = r.push(card(p, self.root.provider == Some(p)));
             }
-            grid.into()
-        };
+            if chunk.len() == 1 {
+                r = r.push(Space::new().width(Length::Fill));
+            }
+            grid = grid.push(r);
+        }
 
         let title = tr_args!(
             "root_provider_title_tmpl",
             family = self.t(family.label_key())
         );
-        // KSU grid claims full height; other grids stay Shrink so the
-        // outer container vertical-centres them like other wizard steps.
         let col = column![
             text(title)
                 .size(theme::text_size::WIZARD_STEP_TITLE)
@@ -541,26 +461,18 @@ impl App {
                 .size(13)
                 .style(muted_style)
                 .center(),
-            tiles,
+            grid,
         ]
         .spacing(14)
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        let col = if is_ksu_grid {
-            col.height(Length::Fill)
-        } else {
-            col
-        };
-        let outer = container(col)
+        container(col)
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x(Length::Fill);
-        if is_ksu_grid {
-            outer.into()
-        } else {
-            outer.center_y(Length::Fill).into()
-        }
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
     }
 
     pub(crate) fn root_file_step(&self, title: &str, subtitle: &str) -> Element<'_, Message> {
@@ -730,13 +642,13 @@ impl App {
         let unsupported_tb320fc = tr_args!("model_unsupported", model = "TB320FC");
         let unsupported_tb323fu = tr_args!("model_unsupported", model = "TB323FU");
         let lkm_card: Element<'_, Message> = if tb320fc {
-            icon_option_card_sub_disabled(
+            icon_option_card_sub_square_disabled(
                 RootMode::Lkm.icon_disabled(),
                 self.t(RootMode::Lkm.label_key()),
                 &unsupported_tb320fc,
             )
         } else {
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 RootMode::Lkm.icon(),
                 self.t(RootMode::Lkm.label_key()),
                 self.t(RootMode::Lkm.desc_key()),
@@ -748,13 +660,13 @@ impl App {
         // GKI, which corrupts boot on TB323FU. Keep GKI disabled until
         // vbmeta handling is added.
         let gki_card: Element<'_, Message> = if tb323fu {
-            icon_option_card_sub_disabled(
+            icon_option_card_sub_square_disabled(
                 RootMode::Gki.icon_disabled(),
                 self.t(RootMode::Gki.label_key()),
                 &unsupported_tb323fu,
             )
         } else {
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 RootMode::Gki.icon(),
                 self.t(RootMode::Gki.label_key()),
                 self.t(RootMode::Gki.desc_key()),
@@ -785,14 +697,14 @@ impl App {
     }
 
     pub(crate) fn root_skroot_flavor_step(&self) -> Element<'_, Message> {
-        let lite = icon_option_card_sub(
+        let lite = icon_option_card_sub_square(
             SkrootFlavor::Lite.icon(),
             self.t(SkrootFlavor::Lite.label_key()),
             self.t(SkrootFlavor::Lite.desc_key()),
             self.root.skroot_flavor == Some(SkrootFlavor::Lite),
             Message::Root(RootMsg::RootSkrootFlavor(SkrootFlavor::Lite)),
         );
-        let pro = icon_option_card_sub_disabled(
+        let pro = icon_option_card_sub_square_disabled(
             SkrootFlavor::Pro.icon_disabled(),
             self.t(SkrootFlavor::Pro.label_key()),
             self.t(SkrootFlavor::Pro.desc_key()),
@@ -822,7 +734,7 @@ impl App {
 
     pub(crate) fn root_version_step(&self) -> Element<'_, Message> {
         let mk = |choice: VerChoice| -> Element<'_, Message> {
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 choice.icon(),
                 self.t(choice.label_key()),
                 self.t(choice.desc_key()),
@@ -864,7 +776,7 @@ impl App {
 
     pub(crate) fn root_nightly_source_step(&self) -> Element<'_, Message> {
         let mk = |src: NightlySource| -> Element<'_, Message> {
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 src.icon(),
                 self.t(src.label_key()),
                 self.t(src.desc_key()),

@@ -55,13 +55,13 @@ impl App {
         let tb322fc = self.is_tb322fc();
         let unsupported_tb322fc = tr_args!("model_unsupported", model = "TB322FC");
         let row_card: Element<'_, Message> = if tb322fc {
-            icon_option_card_sub_disabled(
+            icon_option_card_sub_square_disabled(
                 lucide_disabled(icon::region_row(), 57.6),
                 self.t("region_row"),
                 &unsupported_tb322fc,
             )
         } else {
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 lucide_primary(icon::region_row(), 57.6),
                 self.t("region_row"),
                 self.t("region_row_name"),
@@ -78,7 +78,7 @@ impl App {
                 .style(muted_style)
                 .center(),
             row![
-                icon_option_card_sub(
+                icon_option_card_sub_square(
                     prc_icon,
                     self.t("region_prc"),
                     self.t("region_prc_name"),
@@ -118,13 +118,13 @@ impl App {
             None => ("flashtarget_same_desc", "flashtarget_other_desc"),
         };
         let other_card: Element<'_, Message> = if tb322fc {
-            icon_option_card_sub_disabled(
+            icon_option_card_sub_square_disabled(
                 lucide_disabled(icon::tile_globe(), 57.6),
                 self.t(FlashTarget::OtherRegion.label_key()),
                 &unsupported_tb322fc,
             )
         } else {
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 lucide_primary(icon::tile_globe(), 57.6),
                 self.t(FlashTarget::OtherRegion.label_key()),
                 self.t(other_desc),
@@ -142,7 +142,7 @@ impl App {
                 .center(),
             row![
                 other_card,
-                icon_option_card_sub(
+                icon_option_card_sub_square(
                     device,
                     self.t(FlashTarget::SameRegion.label_key()),
                     self.t(same_desc),
@@ -176,14 +176,14 @@ impl App {
                 .style(muted_style)
                 .center(),
             row![
-                icon_option_card_sub(
+                icon_option_card_sub_square(
                     shield,
                     self.t(DataMode::Keep.label_key()),
                     self.t("datamode_keep_desc"),
                     self.flash.data_mode == Some(DataMode::Keep),
                     Message::Flash(FlashMsg::FlashDataMode(DataMode::Keep))
                 ),
-                icon_option_card_sub(
+                icon_option_card_sub_square(
                     wipe,
                     self.t(DataMode::Wipe.label_key()),
                     self.t("datamode_wipe_desc"),

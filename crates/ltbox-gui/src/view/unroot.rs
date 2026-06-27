@@ -60,14 +60,14 @@ impl App {
                 .style(muted_style)
                 .center(),
             row![
-                icon_option_card_sub(
+                icon_option_card_sub_square(
                     lkm_icon,
                     self.t(UnrootType::MagiskLkm.label_key()),
                     self.t(UnrootType::MagiskLkm.desc_key()),
                     self.unroot.unroot_type == Some(UnrootType::MagiskLkm),
                     Message::Unroot(UnrootMsg::SetUnrootType(UnrootType::MagiskLkm))
                 ),
-                icon_option_card_sub(
+                icon_option_card_sub_square(
                     gki_icon,
                     self.t(UnrootType::APatchGki.label_key()),
                     self.t(UnrootType::APatchGki.desc_key()),

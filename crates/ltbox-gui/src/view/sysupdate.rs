@@ -79,14 +79,14 @@ impl App {
             lucide_primary(icon::tile_rescue(), 57.6)
         };
         let mut cards = row![
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 off_icon,
                 self.t(SysUpdateAction::Disable.label_key()),
                 self.t(SysUpdateAction::Disable.desc_key()),
                 self.sysupdate.action == Some(SysUpdateAction::Disable),
                 Message::Sys(SysMsg::SysAction(SysUpdateAction::Disable)),
             ),
-            icon_option_card_sub(
+            icon_option_card_sub_square(
                 on_icon,
                 self.t(SysUpdateAction::Enable.label_key()),
                 self.t(SysUpdateAction::Enable.desc_key()),
@@ -123,9 +123,10 @@ impl App {
                 button(
                     container(content)
                         .padding([20, 16])
-                        .width(Length::Fill)
-                        .height(WIZARD_CARD_HEIGHT)
-                        .center_y(WIZARD_CARD_HEIGHT)
+                        .width(Length::Fixed(WIZARD_CARD_SQUARE))
+                        .height(WIZARD_CARD_SQUARE)
+                        .center_x(WIZARD_CARD_SQUARE)
+                        .center_y(WIZARD_CARD_SQUARE)
                         .style(|t: &Theme| {
                             theme::surface_card_style(
                                 t,
@@ -136,7 +137,7 @@ impl App {
                         }),
                 )
                 .padding(0)
-                .width(Length::Fill)
+                .width(Length::Fixed(WIZARD_CARD_SQUARE))
                 .style(|t: &Theme, _s| button::Style {
                     background: None,
                     text_color: pal_of(t).on_surface,
@@ -144,7 +145,7 @@ impl App {
                 }),
             );
         } else {
-            cards = cards.push(icon_option_card_sub(
+            cards = cards.push(icon_option_card_sub_square(
                 rescue_icon,
                 self.t(SysUpdateAction::Rescue.label_key()),
                 self.t(SysUpdateAction::Rescue.desc_key()),
