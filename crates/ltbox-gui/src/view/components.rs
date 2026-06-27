@@ -497,29 +497,6 @@ pub(crate) fn lucide_icon(
         .into()
 }
 
-pub(crate) fn icon_option_card_sub(
-    icon: Element<'static, Message>,
-    label: &str,
-    sub: &str,
-    selected: bool,
-    msg: Message,
-) -> Element<'static, Message> {
-    option_card(icon, label, sub, selected, Some(msg), None)
-}
-
-/// Disabled twin of [`icon_option_card_sub`]. Same icon / label / sub
-/// layout, but rendered without an `on_press` so the button widget
-/// reports `button::Status::Disabled` and the text reads as muted.
-/// Used by the Root wizard to grey out family / mode cards that the
-/// connected device's model doesn't support (e.g. Magisk on TB320FC).
-pub(crate) fn icon_option_card_sub_disabled(
-    icon: Element<'static, Message>,
-    label: &str,
-    sub: &str,
-) -> Element<'static, Message> {
-    option_card(icon, label, sub, false, None, None)
-}
-
 pub(crate) fn icon_option_card_sub_square_sized(
     icon: Element<'static, Message>,
     label: &str,
@@ -528,7 +505,7 @@ pub(crate) fn icon_option_card_sub_square_sized(
     msg: Message,
     side: f32,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, selected, Some(msg), Some(side))
+    option_card(icon, label, sub, selected, Some(msg), Some(side), false)
 }
 
 pub(crate) fn icon_option_card_sub_square_disabled_sized(
@@ -537,7 +514,27 @@ pub(crate) fn icon_option_card_sub_square_disabled_sized(
     sub: &str,
     side: f32,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, false, None, Some(side))
+    option_card(icon, label, sub, false, None, Some(side), false)
+}
+
+pub(crate) fn icon_option_card_sub_square_compact_sized(
+    icon: Element<'static, Message>,
+    label: &str,
+    sub: &str,
+    selected: bool,
+    msg: Message,
+    side: f32,
+) -> Element<'static, Message> {
+    option_card(icon, label, sub, selected, Some(msg), Some(side), true)
+}
+
+pub(crate) fn icon_option_card_sub_square_compact_disabled_sized(
+    icon: Element<'static, Message>,
+    label: &str,
+    sub: &str,
+    side: f32,
+) -> Element<'static, Message> {
+    option_card(icon, label, sub, false, None, Some(side), true)
 }
 
 /// Shared body for the vertical icon → title → description option card.
@@ -550,10 +547,15 @@ fn option_card(
     selected: bool,
     msg: Option<Message>,
     square_side: Option<f32>,
+    compact: bool,
 ) -> Element<'static, Message> {
     let enabled = msg.is_some();
     let square = square_side.is_some();
     let side = square_side.unwrap_or(WIZARD_CARD_SQUARE);
+    let label_size = if compact { 12 } else { 13 };
+    let icon_label_gap = if compact { 8 } else { 14 };
+    let label_sub_gap = if compact { 2 } else { 4 };
+    let inner_padding = if compact { [12, 12] } else { [20, 16] };
     let label_style_fn = if enabled {
         on_surface_style
     } else {
@@ -576,7 +578,11 @@ fn option_card(
     // slack below the icon + label, so give it a taller sub-row to absorb
     // ~4 lines instead of clipping; the standard card keeps its 2-line row.
     let sub_h = if square {
-        WIZARD_CARD_SQUARE_SUB_HEIGHT
+        if compact {
+            ROOT_WIZARD_2X2_CARD_SUB_HEIGHT
+        } else {
+            WIZARD_CARD_SQUARE_SUB_HEIGHT
+        }
     } else {
         SUB_ROW_HEIGHT
     };
@@ -588,13 +594,13 @@ fn option_card(
     // unbalanced because the centred sub-row adds ~9 px padding.
     let content = column![
         icon_tile(icon),
-        Space::new().height(14),
+        Space::new().height(icon_label_gap),
         text(label.to_string())
-            .size(13)
+            .size(label_size)
             .style(label_style_fn)
             .width(Length::Fill)
             .center(),
-        Space::new().height(4),
+        Space::new().height(label_sub_gap),
         sub_row,
     ]
     .spacing(0)
@@ -610,7 +616,7 @@ fn option_card(
     let card_h: f32 = if square { side } else { WIZARD_CARD_HEIGHT };
 
     let inner = container(content)
-        .padding([20, 16])
+        .padding(inner_padding)
         .width(card_w)
         .height(card_h)
         .center_x(card_w)
@@ -663,24 +669,20 @@ impl RebootTarget {
 }
 
 impl Family {
-    pub(crate) fn icon(self) -> Element<'static, Message> {
+    pub(crate) fn icon_sized(self, size: f32) -> Element<'static, Message> {
         // Kept as bundled SVG assets — these are per-brand logos, not
         // monochrome glyphs, so Lucide's icon set doesn't cover them.
         let bytes: &'static [u8] = match self {
             Self::Magisk => include_bytes!("../../assets/icons/magisk.svg"),
             Self::KernelSU => include_bytes!("../../assets/icons/kernelsu.svg"),
             Self::APatch => include_bytes!("../../assets/icons/apatch.svg"),
-            Self::Skroot => return skroot_icon(72.0),
+            Self::Skroot => return skroot_icon(size),
         };
-        svg_icon(bytes, 72.0)
+        svg_icon(bytes, size)
     }
 }
 
 impl Provider {
-    pub(crate) fn icon(self) -> Element<'static, Message> {
-        self.icon_sized(72.0)
-    }
-
     /// Provider brand logo at an explicit size. The 2-provider square cards
     /// pass a smaller value so the 72px logo doesn't overflow the fixed
     /// square; the full-width grid cards keep the default 72px.

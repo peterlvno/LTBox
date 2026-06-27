@@ -853,14 +853,14 @@ impl Family {
             Self::Skroot => "family_skroot_desc",
         }
     }
-    fn icon_disabled(self) -> Element<'static, Message> {
+    fn icon_disabled_sized(self, size: f32) -> Element<'static, Message> {
         match self {
-            Self::Magisk => svg_icon_disabled(include_bytes!("../assets/icons/magisk.svg"), 72.0),
+            Self::Magisk => svg_icon_disabled(include_bytes!("../assets/icons/magisk.svg"), size),
             Self::KernelSU => {
-                svg_icon_disabled(include_bytes!("../assets/icons/kernelsu.svg"), 72.0)
+                svg_icon_disabled(include_bytes!("../assets/icons/kernelsu.svg"), size)
             }
-            Self::APatch => svg_icon_disabled(include_bytes!("../assets/icons/apatch.svg"), 72.0),
-            Self::Skroot => skroot_icon(72.0),
+            Self::APatch => svg_icon_disabled(include_bytes!("../assets/icons/apatch.svg"), size),
+            Self::Skroot => skroot_icon(size),
         }
     }
     fn has_modes(&self) -> bool {

@@ -393,23 +393,27 @@ impl App {
         // remains pickable through GKI, and APatch stays available.
         let tb320fc = self.is_tb320fc();
         let unsupported_tb320fc = tr_args!("model_unsupported", model = "TB320FC");
-        // Vertical icon → title → description cards (not square), arranged
-        // 2×2 — same card style the 2-up provider grid uses.
+        let side = ROOT_WIZARD_2X2_CARD_SIDE;
+        let icon_size = ROOT_WIZARD_2X2_ICON_SIZE;
+        // Compact 1:1 cards keep the 2×2 grid fully visible at the minimum
+        // window height without increasing the shell's min-size contract.
         let mk = |f: Family| -> Element<'_, Message> {
             let disabled = tb320fc && f == Family::Magisk;
             if disabled {
-                icon_option_card_sub_disabled(
-                    f.icon_disabled(),
+                icon_option_card_sub_square_compact_disabled_sized(
+                    f.icon_disabled_sized(icon_size),
                     self.t(f.label_key()),
                     &unsupported_tb320fc,
+                    side,
                 )
             } else {
-                icon_option_card_sub(
-                    f.icon(),
+                icon_option_card_sub_square_compact_sized(
+                    f.icon_sized(icon_size),
                     self.t(f.label_key()),
                     self.t(f.desc_key()),
                     self.root.family == Some(f),
                     Message::Root(RootMsg::RootFamily(f)),
+                    side,
                 )
             }
         };
@@ -421,31 +425,32 @@ impl App {
             Family::APatch,
             Family::Skroot,
         ];
-        let mut cards = column![].spacing(10).width(Length::Fill);
+        let mut cards = column![]
+            .spacing(ROOT_WIZARD_2X2_GRID_GAP)
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
         for chunk in families.chunks(2) {
-            // Fill-width rows so the (Fill) cards split into equal columns.
-            let mut r = row![].spacing(10).width(Length::Fill);
+            let mut r = row![].spacing(ROOT_WIZARD_2X2_GRID_GAP);
             for &f in chunk {
                 r = r.push(mk(f));
-            }
-            if chunk.len() == 1 {
-                r = r.push(Space::new().width(Length::Fill));
             }
             cards = cards.push(r);
         }
 
         let col = column![cards,]
             .spacing(14)
-            .padding(28)
+            .padding(ROOT_WIZARD_2X2_GRID_PADDING)
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
-        centered_step(col, WIZARD_2X2_GRID_MAX_WIDTH)
+        centered_step(col, ROOT_WIZARD_2X2_GRID_MAX_WIDTH)
     }
 
     pub(crate) fn root_provider_step(&self) -> Element<'_, Message> {
         let family = self.root.family.unwrap_or(Family::KernelSU);
         let providers = family.providers();
         let side = self.wizard_square_side();
+        let grid_side = ROOT_WIZARD_2X2_CARD_SIDE;
+        let grid_icon_size = ROOT_WIZARD_2X2_ICON_SIZE;
 
         // KernelSU's four providers form a 2×2 grid (vertical, full-width
         // cards, per the grid rule); Magisk / APatch have two and render as
@@ -454,12 +459,13 @@ impl App {
         let card = |p: Provider, selected: bool| -> Element<'_, Message> {
             let sub = p.desc_key().map(|k| self.t(k)).unwrap_or("");
             if is_grid {
-                icon_option_card_sub(
-                    p.icon(),
+                icon_option_card_sub_square_compact_sized(
+                    p.icon_sized(grid_icon_size),
                     self.t(p.label_key()),
                     sub,
                     selected,
                     Message::Root(RootMsg::RootProvider(p)),
+                    grid_side,
                 )
             } else {
                 // Smaller brand logo (52 vs 72) so the 72px SVG doesn't
@@ -475,24 +481,26 @@ impl App {
             }
         };
 
-        // align_x centred so the shrink-wrapped square rows (2-provider
-        // families) sit centred; full-width grid rows (KernelSU) are
-        // unaffected.
+        // align_x centred so both the compact 2×2 grid and the shrink-wrapped
+        // two-provider square rows stay centred.
         let mut grid = column![]
-            .spacing(10)
+            .spacing(if is_grid {
+                ROOT_WIZARD_2X2_GRID_GAP
+            } else {
+                10.0
+            })
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
         for chunk in providers.chunks(2) {
-            // Grid (Fill cards) → Fill rows for equal columns; square
-            // 2-provider rows stay Shrink so align_x can centre them.
-            let mut r = row![].spacing(10);
-            if is_grid {
-                r = r.width(Length::Fill);
-            }
+            let mut r = row![].spacing(if is_grid {
+                ROOT_WIZARD_2X2_GRID_GAP
+            } else {
+                10.0
+            });
             for &p in chunk {
                 r = r.push(card(p, self.root.provider == Some(p)));
             }
-            if chunk.len() == 1 {
+            if !is_grid && chunk.len() == 1 {
                 r = r.push(Space::new().width(Length::Fill));
             }
             grid = grid.push(r);
@@ -500,11 +508,15 @@ impl App {
 
         let col = column![grid,]
             .spacing(14)
-            .padding(28)
+            .padding(if is_grid {
+                ROOT_WIZARD_2X2_GRID_PADDING
+            } else {
+                28.0
+            })
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
         let max_width = if is_grid {
-            WIZARD_2X2_GRID_MAX_WIDTH
+            ROOT_WIZARD_2X2_GRID_MAX_WIDTH
         } else {
             self.square_step_max_width(providers.len())
         };

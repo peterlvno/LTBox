@@ -457,9 +457,12 @@ pub(crate) const WIZARD_CARD_HEIGHT: f32 = 180.0;
 pub(crate) const WIZARD_CARD_SQUARE: f32 = 200.0;
 /// Larger square-card side used once the window has enough horizontal room.
 pub(crate) const WIZARD_CARD_SQUARE_WIDE: f32 = 236.0;
-/// Width caps for task-focused panels. The app should use extra desktop space
-/// for calm margins, not stretch controls until their relationships break.
-pub(crate) const WIZARD_2X2_GRID_MAX_WIDTH: f32 = 700.0;
+pub(crate) const ROOT_WIZARD_2X2_CARD_SIDE: f32 = 148.0;
+pub(crate) const ROOT_WIZARD_2X2_ICON_SIZE: f32 = 44.0;
+pub(crate) const ROOT_WIZARD_2X2_GRID_GAP: f32 = 8.0;
+pub(crate) const ROOT_WIZARD_2X2_GRID_PADDING: f32 = 20.0;
+pub(crate) const ROOT_WIZARD_2X2_GRID_MAX_WIDTH: f32 =
+    ROOT_WIZARD_2X2_CARD_SIDE * 2.0 + ROOT_WIZARD_2X2_GRID_GAP + ROOT_WIZARD_2X2_GRID_PADDING * 2.0;
 pub(crate) const WIZARD_CONFIRM_MAX_WIDTH: f32 = 660.0;
 pub(crate) const WIZARD_TOP_APP_BAR_HEIGHT: f32 = 132.0;
 pub(crate) const WIZARD_TOP_APP_BAR_MAX_WIDTH: f32 = 1040.0;
@@ -479,6 +482,7 @@ pub(crate) const SUB_ROW_HEIGHT: f32 = 32.0;
 /// longer localized descriptions wrap without clipping. Fits within the
 /// square card's vertical slack below the icon + label.
 pub(crate) const WIZARD_CARD_SQUARE_SUB_HEIGHT: f32 = 60.0;
+pub(crate) const ROOT_WIZARD_2X2_CARD_SUB_HEIGHT: f32 = 42.0;
 
 pub(crate) const FLASH_PARTS_MARKER_CELL_WIDTH: f32 = 32.0;
 pub(crate) const FLASH_PARTS_MARKER_CELL_HEIGHT: f32 = 20.0;
