@@ -769,32 +769,21 @@ impl App {
             .size(11)
             .height(Length::Fill);
 
-        let pill_style = neutral_pill_btn_style;
-        let mut buttons = row![
-            button(
-                text(self.t("btn_save_log").to_string())
-                    .size(11)
-                    .style(muted_style)
-                    .center(),
-            )
-            .on_press(Message::SaveLog)
-            .padding([4, 12])
-            .style(pill_style)
-        ]
-        .spacing(8);
+        let mut actions = row![wizard_surface_fab(
+            icon::fab_save_log(),
+            self.t("btn_save_log").to_string(),
+            Some(Message::SaveLog),
+        )]
+        .spacing(WIZARD_FAB_SPACING)
+        .align_y(iced::Alignment::Center)
+        .height(Length::Fill);
 
         if !self.busy {
-            buttons = buttons.push(
-                button(
-                    text(self.t("btn_start_over").to_string())
-                        .size(11)
-                        .style(muted_style)
-                        .center(),
-                )
-                .on_press(Message::StartOver)
-                .padding([4, 12])
-                .style(pill_style),
-            );
+            actions = actions.push(wizard_error_fab(
+                icon::fab_start_over(),
+                self.t("btn_start_over").to_string(),
+                Some(Message::StartOver),
+            ));
         }
 
         let header = row![
@@ -803,8 +792,6 @@ impl App {
                 text(status).size(12).style(status_color),
             ]
             .spacing(4),
-            Space::new().width(Length::Fill),
-            buttons,
         ]
         .spacing(12)
         .align_y(iced::Alignment::Center);
@@ -828,10 +815,13 @@ impl App {
         .width(Length::Fill)
         .height(Length::Fill);
 
-        container(body)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        column![
+            container(body).width(Length::Fill).height(Length::Fill),
+            wizard_fab_footer(row![].height(Length::Fill), actions),
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 
     /// Simple Firmware Flash wizard: intro (description) → confirm → exec.

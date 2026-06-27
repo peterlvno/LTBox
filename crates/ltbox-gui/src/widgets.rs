@@ -124,6 +124,52 @@ fn wizard_fab<'a>(
     fab_tooltip(btn.into(), tooltip)
 }
 
+pub(crate) fn wizard_surface_fab<'a>(
+    icon: iced::widget::Text<'static, Theme, iced::Renderer>,
+    label: String,
+    msg: Option<Message>,
+) -> Element<'a, Message> {
+    wizard_fab(icon, label, msg, fab_surface_style, None)
+}
+
+pub(crate) fn wizard_error_fab<'a>(
+    icon: iced::widget::Text<'static, Theme, iced::Renderer>,
+    label: String,
+    msg: Option<Message>,
+) -> Element<'a, Message> {
+    wizard_fab(icon, label, msg, fab_error_style, None)
+}
+
+pub(crate) fn wizard_fab_footer<'a>(
+    leading: impl Into<Element<'a, Message>>,
+    trailing: impl Into<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    let leading = leading.into();
+    let trailing = trailing.into();
+
+    container(
+        container(
+            row![leading, Space::new().width(Length::Fill), trailing]
+                .padding(iced::Padding {
+                    top: 8.0,
+                    right: 24.0,
+                    bottom: 24.0,
+                    left: 24.0,
+                })
+                .spacing(WIZARD_FAB_SPACING)
+                .align_y(iced::Alignment::Center)
+                .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
+                .width(Length::Fill),
+        )
+        .width(Length::Fill)
+        .max_width(WIZARD_FAB_NAV_MAX_WIDTH),
+    )
+    .width(Length::Fill)
+    .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
+    .center_x(Length::Fill)
+    .into()
+}
+
 fn wizard_nav_fabs<'a>(
     can_back: bool,
     next_label: &str,
@@ -171,27 +217,7 @@ fn wizard_nav_fabs<'a>(
         disabled_next_hint,
     ));
 
-    container(
-        container(
-            row![leading, Space::new().width(Length::Fill), trailing]
-                .padding(iced::Padding {
-                    top: 8.0,
-                    right: 24.0,
-                    bottom: 24.0,
-                    left: 24.0,
-                })
-                .spacing(WIZARD_FAB_SPACING)
-                .align_y(iced::Alignment::Center)
-                .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
-                .width(Length::Fill),
-        )
-        .width(Length::Fill)
-        .max_width(WIZARD_FAB_NAV_MAX_WIDTH),
-    )
-    .width(Length::Fill)
-    .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
-    .center_x(Length::Fill)
-    .into()
+    wizard_fab_footer(leading, trailing)
 }
 
 pub(crate) fn wizard_nav<'a>(

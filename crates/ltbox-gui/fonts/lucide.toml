@@ -53,6 +53,10 @@ fab_back          = "arrow-left"
 fab_next          = "arrow-right"
 fab_start         = "play"
 fab_cancel        = "x"
+fab_show_log      = "file-text"
+fab_save_log      = "save"
+fab_open_folder   = "folder-open"
+fab_start_over    = "rotate-ccw"
 
 # Region picker
 region_prc        = "star"

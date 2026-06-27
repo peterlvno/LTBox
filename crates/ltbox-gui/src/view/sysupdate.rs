@@ -417,29 +417,23 @@ impl App {
                 }
             });
 
-        let pill_style = neutral_pill_btn_style;
-        let show_btn = button(
-            text(self.t("btn_show_log").to_string())
-                .size(11)
-                .style(muted_style)
-                .center(),
-        )
-        .on_press(Message::ToggleLogPopup(true))
-        .padding([4, 12])
-        .style(pill_style);
-        let save_btn = button(
-            text(self.t("btn_save_log").to_string())
-                .size(11)
-                .style(muted_style)
-                .center(),
-        )
-        .on_press(Message::SaveLog)
-        .padding([4, 12])
-        .style(pill_style);
+        let mut actions = row![
+            wizard_surface_fab(
+                icon::fab_show_log(),
+                self.t("btn_show_log").to_string(),
+                Some(Message::ToggleLogPopup(true)),
+            ),
+            wizard_surface_fab(
+                icon::fab_save_log(),
+                self.t("btn_save_log").to_string(),
+                Some(Message::SaveLog),
+            ),
+        ]
+        .spacing(WIZARD_FAB_SPACING)
+        .align_y(iced::Alignment::Center)
+        .height(Length::Fill);
 
-        let mut button_row = row![show_btn, save_btn].spacing(8);
-
-        // "Open Folder" pill for Advanced ops that produce output —
+        // "Open Folder" FAB for Advanced ops that produce output —
         // guarded on non-busy to avoid racing the file-manager launch.
         if !self.busy
             && self.current_view == View::Advanced
@@ -450,29 +444,19 @@ impl App {
                 .map(|a| a.produces_output())
                 .unwrap_or(false)
         {
-            let open_btn = button(
-                text(self.t("btn_open_folder").to_string())
-                    .size(11)
-                    .style(muted_style)
-                    .center(),
-            )
-            .on_press(Message::Adv(AdvMsg::AdvWizOpenOutputFolder))
-            .padding([4, 12])
-            .style(pill_style);
-            button_row = button_row.push(open_btn);
+            actions = actions.push(wizard_surface_fab(
+                icon::fab_open_folder(),
+                self.t("btn_open_folder").to_string(),
+                Some(Message::Adv(AdvMsg::AdvWizOpenOutputFolder)),
+            ));
         }
 
         if !self.busy {
-            let start_over = button(
-                text(self.t("btn_start_over").to_string())
-                    .size(11)
-                    .style(muted_style)
-                    .center(),
-            )
-            .on_press(Message::StartOver)
-            .padding([4, 12])
-            .style(pill_style);
-            button_row = button_row.push(start_over);
+            actions = actions.push(wizard_error_fab(
+                icon::fab_start_over(),
+                self.t("btn_start_over").to_string(),
+                Some(Message::StartOver),
+            ));
         }
 
         let col = column![
@@ -493,19 +477,24 @@ impl App {
             text(detail).size(13).style(muted_style).center(),
             Space::new().height(8),
             step_card,
-            Space::new().height(6),
-            button_row,
         ]
         .spacing(10)
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
 
-        container(col)
+        let body = container(col)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            .center_y(Length::Fill);
+
+        column![
+            body,
+            wizard_fab_footer(row![].height(Length::Fill), actions),
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 }
