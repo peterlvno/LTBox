@@ -94,7 +94,7 @@ impl App {
             layers.push(self.toast_view());
         }
 
-        // Resize handles last so the 4px/8px hit areas at the window
+        // Resize handles last so the edge/corner hit areas at the window
         // edges and corners sit above every popup/toast — the user can
         // still grab the border while a dialog is open. Events outside
         // each handle's bounding box pass through to the layers below
@@ -212,8 +212,8 @@ impl App {
 
     /// Invisible edge/corner handles for the borderless window.
     pub(crate) fn resize_handles(&self) -> Element<'_, Message> {
-        const EDGE: f32 = 4.0;
-        const CORNER: f32 = 8.0;
+        const EDGE: f32 = 8.0;
+        const CORNER: f32 = 14.0;
 
         // Build one positioned, transparent handle.
         // `dir`: which window edge / corner this handle resizes.
