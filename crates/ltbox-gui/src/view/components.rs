@@ -505,7 +505,7 @@ pub(crate) fn icon_option_card_sub_square_sized(
     msg: Message,
     side: f32,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, selected, Some(msg), Some(side), false)
+    option_card(icon, label, sub, selected, Some(msg), Some(side))
 }
 
 pub(crate) fn icon_option_card_sub_square_disabled_sized(
@@ -514,27 +514,7 @@ pub(crate) fn icon_option_card_sub_square_disabled_sized(
     sub: &str,
     side: f32,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, false, None, Some(side), false)
-}
-
-pub(crate) fn icon_option_card_sub_square_compact_sized(
-    icon: Element<'static, Message>,
-    label: &str,
-    sub: &str,
-    selected: bool,
-    msg: Message,
-    side: f32,
-) -> Element<'static, Message> {
-    option_card(icon, label, sub, selected, Some(msg), Some(side), true)
-}
-
-pub(crate) fn icon_option_card_sub_square_compact_disabled_sized(
-    icon: Element<'static, Message>,
-    label: &str,
-    sub: &str,
-    side: f32,
-) -> Element<'static, Message> {
-    option_card(icon, label, sub, false, None, Some(side), true)
+    option_card(icon, label, sub, false, None, Some(side))
 }
 
 /// Shared body for the vertical icon → title → description option card.
@@ -547,15 +527,10 @@ fn option_card(
     selected: bool,
     msg: Option<Message>,
     square_side: Option<f32>,
-    compact: bool,
 ) -> Element<'static, Message> {
     let enabled = msg.is_some();
     let square = square_side.is_some();
     let side = square_side.unwrap_or(WIZARD_CARD_SQUARE);
-    let label_size = if compact { 12 } else { 13 };
-    let icon_label_gap = if compact { 8 } else { 14 };
-    let label_sub_gap = if compact { 2 } else { 4 };
-    let inner_padding = if compact { [12, 12] } else { [20, 16] };
     let label_style_fn = if enabled {
         on_surface_style
     } else {
@@ -578,11 +553,7 @@ fn option_card(
     // slack below the icon + label, so give it a taller sub-row to absorb
     // ~4 lines instead of clipping; the standard card keeps its 2-line row.
     let sub_h = if square {
-        if compact {
-            ROOT_WIZARD_2X2_CARD_SUB_HEIGHT
-        } else {
-            WIZARD_CARD_SQUARE_SUB_HEIGHT
-        }
+        WIZARD_CARD_SQUARE_SUB_HEIGHT
     } else {
         SUB_ROW_HEIGHT
     };
@@ -594,13 +565,13 @@ fn option_card(
     // unbalanced because the centred sub-row adds ~9 px padding.
     let content = column![
         icon_tile(icon),
-        Space::new().height(icon_label_gap),
+        Space::new().height(14),
         text(label.to_string())
-            .size(label_size)
+            .size(13)
             .style(label_style_fn)
             .width(Length::Fill)
             .center(),
-        Space::new().height(label_sub_gap),
+        Space::new().height(4),
         sub_row,
     ]
     .spacing(0)
@@ -616,7 +587,7 @@ fn option_card(
     let card_h: f32 = if square { side } else { WIZARD_CARD_HEIGHT };
 
     let inner = container(content)
-        .padding(inner_padding)
+        .padding([20, 16])
         .width(card_w)
         .height(card_h)
         .center_x(card_w)

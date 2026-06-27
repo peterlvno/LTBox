@@ -385,6 +385,80 @@ impl App {
         m3_dialog(content.into())
     }
 
+    fn root_list_option_card(
+        icon: Element<'static, Message>,
+        label: &str,
+        sub: &str,
+        selected: bool,
+        msg: Option<Message>,
+    ) -> Element<'static, Message> {
+        let enabled = msg.is_some();
+        let label_style_fn = if enabled {
+            on_surface_style
+        } else {
+            muted_style
+        };
+        let desc: Element<'static, Message> = if sub.is_empty() {
+            text(" ").size(12).width(Length::Fill).into()
+        } else {
+            text(sub.to_string())
+                .size(12)
+                .style(muted_style)
+                .width(Length::Fill)
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph)
+                .into()
+        };
+        let text_block = container(
+            column![
+                text(label.to_string())
+                    .size(16)
+                    .style(label_style_fn)
+                    .width(Length::Fill),
+                desc,
+            ]
+            .spacing(3)
+            .width(Length::Fill),
+        )
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_y(Length::Fill);
+        let body = row![icon_tile(icon), text_block]
+            .spacing(16)
+            .align_y(iced::Alignment::Center);
+
+        let inner = container(body)
+            .padding([10, 16])
+            .width(Length::Fill)
+            .height(Length::Fixed(ROOT_WIZARD_LIST_CARD_HEIGHT))
+            .center_y(Length::Fixed(ROOT_WIZARD_LIST_CARD_HEIGHT))
+            .style(move |t: &Theme| sel_card_style(t, selected && enabled));
+        let btn = button(inner)
+            .padding(0)
+            .width(Length::Fill)
+            .height(Length::Fixed(ROOT_WIZARD_LIST_CARD_HEIGHT));
+        match msg {
+            Some(m) => btn
+                .on_press(m)
+                .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected))
+                .into(),
+            None => btn
+                .style(|t: &Theme, _status| {
+                    let p = pal_of(t);
+                    button::Style {
+                        background: Some(with_alpha(p.surface_container_low, 0.5).into()),
+                        text_color: with_alpha(p.on_surface, 0.38),
+                        border: iced::Border {
+                            color: with_alpha(p.outline_variant, 0.6),
+                            width: 1.0,
+                            radius: theme::shape::MD.into(),
+                        },
+                        ..Default::default()
+                    }
+                })
+                .into(),
+        }
+    }
+
     pub(crate) fn root_family_step(&self) -> Element<'_, Message> {
         // TODO(root): TB320FC has no init_boot for the current Magisk /
         // KernelSU LKM ramdisk-injection path. Replace it with a
@@ -393,134 +467,98 @@ impl App {
         // remains pickable through GKI, and APatch stays available.
         let tb320fc = self.is_tb320fc();
         let unsupported_tb320fc = tr_args!("model_unsupported", model = "TB320FC");
-        let side = ROOT_WIZARD_2X2_CARD_SIDE;
-        let icon_size = ROOT_WIZARD_2X2_ICON_SIZE;
-        // Compact 1:1 cards keep the 2×2 grid fully visible at the minimum
-        // window height without increasing the shell's min-size contract.
-        let mk = |f: Family| -> Element<'_, Message> {
-            let disabled = tb320fc && f == Family::Magisk;
-            if disabled {
-                icon_option_card_sub_square_compact_disabled_sized(
-                    f.icon_disabled_sized(icon_size),
-                    self.t(f.label_key()),
-                    &unsupported_tb320fc,
-                    side,
-                )
-            } else {
-                icon_option_card_sub_square_compact_sized(
-                    f.icon_sized(icon_size),
-                    self.t(f.label_key()),
-                    self.t(f.desc_key()),
-                    self.root.family == Some(f),
-                    Message::Root(RootMsg::RootFamily(f)),
-                    side,
-                )
-            }
-        };
-
-        // 2×2 grid — four families, two-up per row.
         let families = [
             Family::Magisk,
             Family::KernelSU,
             Family::APatch,
             Family::Skroot,
         ];
-        let mut cards = column![]
-            .spacing(ROOT_WIZARD_2X2_GRID_GAP)
-            .width(Length::Fill)
-            .align_x(iced::Alignment::Center);
-        for chunk in families.chunks(2) {
-            let mut r = row![].spacing(ROOT_WIZARD_2X2_GRID_GAP);
-            for &f in chunk {
-                r = r.push(mk(f));
+        let icon_size = 44.0;
+        let mk = |f: Family| -> Element<'_, Message> {
+            let disabled = tb320fc && f == Family::Magisk;
+            if disabled {
+                Self::root_list_option_card(
+                    f.icon_disabled_sized(icon_size),
+                    self.t(f.label_key()),
+                    &unsupported_tb320fc,
+                    false,
+                    None,
+                )
+            } else {
+                Self::root_list_option_card(
+                    f.icon_sized(icon_size),
+                    self.t(f.label_key()),
+                    self.t(f.desc_key()),
+                    self.root.family == Some(f),
+                    Some(Message::Root(RootMsg::RootFamily(f))),
+                )
             }
-            cards = cards.push(r);
+        };
+
+        let mut cards = column![].spacing(8).width(Length::Fill);
+        for f in families {
+            cards = cards.push(mk(f));
         }
 
         let col = column![cards,]
             .spacing(14)
-            .padding(ROOT_WIZARD_2X2_GRID_PADDING)
+            .padding([20, 28])
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
-        centered_step(col, ROOT_WIZARD_2X2_GRID_MAX_WIDTH)
+        centered_step(col, ROOT_WIZARD_LIST_MAX_WIDTH)
     }
 
     pub(crate) fn root_provider_step(&self) -> Element<'_, Message> {
         let family = self.root.family.unwrap_or(Family::KernelSU);
         let providers = family.providers();
-        let side = self.wizard_square_side();
-        let grid_side = ROOT_WIZARD_2X2_CARD_SIDE;
-        let grid_icon_size = ROOT_WIZARD_2X2_ICON_SIZE;
 
-        // KernelSU's four providers form a 2×2 grid (vertical, full-width
-        // cards, per the grid rule); Magisk / APatch have two and render as
-        // a single-row layout, so their options use the 1:1 square cards.
-        let is_grid = providers.len() > 2;
-        let card = |p: Provider, selected: bool| -> Element<'_, Message> {
-            let sub = p.desc_key().map(|k| self.t(k)).unwrap_or("");
-            if is_grid {
-                icon_option_card_sub_square_compact_sized(
-                    p.icon_sized(grid_icon_size),
+        if providers.len() > 2 {
+            let mut cards = column![].spacing(8).width(Length::Fill);
+            for &p in providers {
+                let sub = p.desc_key().map(|k| self.t(k)).unwrap_or("");
+                cards = cards.push(Self::root_list_option_card(
+                    p.icon_sized(44.0),
                     self.t(p.label_key()),
                     sub,
-                    selected,
-                    Message::Root(RootMsg::RootProvider(p)),
-                    grid_side,
-                )
-            } else {
-                // Smaller brand logo (52 vs 72) so the 72px SVG doesn't
-                // overflow the fixed 200px square once the label/desc wraps.
-                icon_option_card_sub_square_sized(
-                    p.icon_sized(52.0),
-                    self.t(p.label_key()),
-                    sub,
-                    selected,
-                    Message::Root(RootMsg::RootProvider(p)),
-                    side,
-                )
+                    self.root.provider == Some(p),
+                    Some(Message::Root(RootMsg::RootProvider(p))),
+                ));
             }
-        };
 
-        // align_x centred so both the compact 2×2 grid and the shrink-wrapped
-        // two-provider square rows stay centred.
-        let mut grid = column![]
-            .spacing(if is_grid {
-                ROOT_WIZARD_2X2_GRID_GAP
-            } else {
-                10.0
-            })
-            .width(Length::Fill)
-            .align_x(iced::Alignment::Center);
-        for chunk in providers.chunks(2) {
-            let mut r = row![].spacing(if is_grid {
-                ROOT_WIZARD_2X2_GRID_GAP
-            } else {
-                10.0
-            });
-            for &p in chunk {
-                r = r.push(card(p, self.root.provider == Some(p)));
-            }
-            if !is_grid && chunk.len() == 1 {
-                r = r.push(Space::new().width(Length::Fill));
-            }
-            grid = grid.push(r);
+            let col = column![cards,]
+                .spacing(14)
+                .padding([20, 28])
+                .width(Length::Fill)
+                .align_x(iced::Alignment::Center);
+            return centered_step(col, ROOT_WIZARD_LIST_MAX_WIDTH);
         }
 
-        let col = column![grid,]
+        let side = self.wizard_square_side();
+        let card = |p: Provider, selected: bool| -> Element<'_, Message> {
+            let sub = p.desc_key().map(|k| self.t(k)).unwrap_or("");
+            // Smaller brand logo (52 vs 72) so the 72px SVG doesn't
+            // overflow the fixed 200px square once the label/desc wraps.
+            icon_option_card_sub_square_sized(
+                p.icon_sized(52.0),
+                self.t(p.label_key()),
+                sub,
+                selected,
+                Message::Root(RootMsg::RootProvider(p)),
+                side,
+            )
+        };
+
+        let mut cards = row![].spacing(12).align_y(iced::Alignment::Center);
+        for &p in providers {
+            cards = cards.push(card(p, self.root.provider == Some(p)));
+        }
+
+        let col = column![cards,]
             .spacing(14)
-            .padding(if is_grid {
-                ROOT_WIZARD_2X2_GRID_PADDING
-            } else {
-                28.0
-            })
+            .padding(28)
             .width(Length::Fill)
             .align_x(iced::Alignment::Center);
-        let max_width = if is_grid {
-            ROOT_WIZARD_2X2_GRID_MAX_WIDTH
-        } else {
-            self.square_step_max_width(providers.len())
-        };
-        centered_step(col, max_width)
+        centered_step(col, self.square_step_max_width(providers.len()))
     }
 
     pub(crate) fn root_file_step(&self, _title: &str, subtitle: &str) -> Element<'_, Message> {
