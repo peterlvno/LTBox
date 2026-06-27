@@ -194,6 +194,64 @@ pub(crate) fn wizard_step_bar<'a>(steps: &[&str], current: usize) -> Element<'a,
     .into()
 }
 
+/// Large flexible top app bar for screen or wizard title/description.
+pub(crate) fn large_top_app_bar<'a>(
+    title: String,
+    subtitle: Option<String>,
+) -> Element<'a, Message> {
+    let mut content = column![
+        text(title)
+            .size(theme::text_size::HEADLINE_MEDIUM)
+            .style(on_surface_style)
+            .width(Length::Fill)
+            .wrapping(iced::widget::text::Wrapping::WordOrGlyph)
+    ]
+    .spacing(6)
+    .width(Length::Fill)
+    .align_x(iced::Alignment::Start);
+
+    if let Some(subtitle) = subtitle.filter(|s| !s.trim().is_empty()) {
+        content = content.push(
+            text(subtitle)
+                .size(theme::text_size::BODY_MEDIUM)
+                .style(muted_style)
+                .width(Length::Fill)
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+        );
+    }
+
+    column![
+        container(
+            container(content)
+                .width(Length::Fill)
+                .max_width(WIZARD_TOP_APP_BAR_MAX_WIDTH)
+        )
+        .width(Length::Fill)
+        .height(Length::Fixed(WIZARD_TOP_APP_BAR_HEIGHT))
+        .padding(iced::Padding {
+            top: 18.0,
+            right: 24.0,
+            bottom: 22.0,
+            left: 24.0,
+        })
+        .align_x(iced::Alignment::Start)
+        .align_y(iced::Alignment::End)
+        .style(|t: &Theme| panel_bg(t)),
+        widget::rule::horizontal(1).style(shell_rule_style),
+    ]
+    .into()
+}
+
+/// Large flexible top app bar for wizard step title/description. The
+/// app-bar surface owns the step context, while the body can focus on
+/// the actual controls.
+pub(crate) fn wizard_action_bar<'a>(
+    title: String,
+    subtitle: Option<String>,
+) -> Element<'a, Message> {
+    large_top_app_bar(title, subtitle)
+}
+
 pub(crate) fn sec_hdr<'a>(label: &str, label_alpha: f32) -> Element<'a, Message> {
     if label_alpha <= 0.0 {
         return container(text(""))
@@ -476,7 +534,7 @@ pub(crate) fn icon_option_card_sub(
     selected: bool,
     msg: Message,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, selected, Some(msg), false)
+    option_card(icon, label, sub, selected, Some(msg), None)
 }
 
 /// Disabled twin of [`icon_option_card_sub`]. Same icon / label / sub
@@ -489,34 +547,31 @@ pub(crate) fn icon_option_card_sub_disabled(
     label: &str,
     sub: &str,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, false, None, false)
+    option_card(icon, label, sub, false, None, None)
 }
 
-/// Square (1:1) variant of [`icon_option_card_sub`] for single-row wizard
-/// steps. The fixed `WIZARD_CARD_SQUARE` side makes each option a square and
-/// lets its row shrink-wrap + centre instead of stretching the cards full
-/// width. The icon → title → description stack is unchanged.
-pub(crate) fn icon_option_card_sub_square(
+pub(crate) fn icon_option_card_sub_square_sized(
     icon: Element<'static, Message>,
     label: &str,
     sub: &str,
     selected: bool,
     msg: Message,
+    side: f32,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, selected, Some(msg), true)
+    option_card(icon, label, sub, selected, Some(msg), Some(side))
 }
 
-/// Disabled twin of [`icon_option_card_sub_square`].
-pub(crate) fn icon_option_card_sub_square_disabled(
+pub(crate) fn icon_option_card_sub_square_disabled_sized(
     icon: Element<'static, Message>,
     label: &str,
     sub: &str,
+    side: f32,
 ) -> Element<'static, Message> {
-    option_card(icon, label, sub, false, None, true)
+    option_card(icon, label, sub, false, None, Some(side))
 }
 
 /// Shared body for the vertical icon → title → description option card.
-/// `msg = None` renders the disabled affordance; `square` swaps the
+/// `msg = None` renders the disabled affordance; `square_side` swaps the
 /// full-width × fixed-height box for a fixed 1:1 square.
 fn option_card(
     icon: Element<'static, Message>,
@@ -524,9 +579,11 @@ fn option_card(
     sub: &str,
     selected: bool,
     msg: Option<Message>,
-    square: bool,
+    square_side: Option<f32>,
 ) -> Element<'static, Message> {
     let enabled = msg.is_some();
+    let square = square_side.is_some();
+    let side = square_side.unwrap_or(WIZARD_CARD_SQUARE);
     let label_style_fn = if enabled {
         on_surface_style
     } else {
@@ -576,15 +633,11 @@ fn option_card(
     // Square → fixed side both ways so the row shrink-wraps and centres;
     // otherwise full width × the standard card height.
     let card_w: Length = if square {
-        Length::Fixed(WIZARD_CARD_SQUARE)
+        Length::Fixed(side)
     } else {
         Length::Fill
     };
-    let card_h: f32 = if square {
-        WIZARD_CARD_SQUARE
-    } else {
-        WIZARD_CARD_HEIGHT
-    };
+    let card_h: f32 = if square { side } else { WIZARD_CARD_HEIGHT };
 
     let inner = container(content)
         .padding([20, 16])
@@ -709,40 +762,33 @@ impl NightlySource {
 }
 
 impl App {
-    /// Shared wizard confirm-screen frame: centered title, muted subtitle,
-    /// a divider, then the caller's summary `rows` — all inside a fill
-    /// scrollable so long summaries (ARB + country + region modify, rescue
-    /// folder/region, the flash warning, …) can grow past the viewport.
-    /// The wizard's sticky nav row is composed separately by the parent
-    /// `view_*_wizard`. Only the title key, subtitle, and rows vary.
-    pub(crate) fn confirm_view<'a>(
+    /// Confirm-screen frame when the step title/description already live in
+    /// the wizard action bar.
+    pub(crate) fn confirm_rows_view<'a>(
         &'a self,
-        title_key: &str,
-        subtitle: String,
         rows: Vec<Element<'a, Message>>,
     ) -> Element<'a, Message> {
-        let mut col = column![
-            text(self.t(title_key).to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(subtitle).size(13).style(muted_style).center(),
-            widget::rule::horizontal(1),
-        ]
-        .spacing(10)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
+        let mut col = column![]
+            .spacing(10)
+            .padding(28)
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
         for r in rows {
             col = col.push(r);
         }
-        container(
+        let summary = container(
             iced::widget::scrollable(col)
                 .style(m3_scrollable_style)
                 .height(Length::Fill)
                 .width(Length::Fill),
         )
         .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+        .height(Length::Fill);
+
+        container(summary.max_width(WIZARD_CONFIRM_MAX_WIDTH))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .into()
     }
 }

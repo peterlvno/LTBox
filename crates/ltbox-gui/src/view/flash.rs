@@ -41,13 +41,36 @@ impl App {
         } else {
             container(text("")).into()
         };
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.flash_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
     }
 
+    fn flash_action_bar(&self) -> Option<Element<'_, Message>> {
+        let (title_key, subtitle_key) = match self.flash.step {
+            0 => ("flash_region_title", Some("flash_region_subtitle")),
+            1 => ("flash_target_title", Some("flash_target_subtitle")),
+            2 => ("flash_data_title", Some("flash_data_subtitle")),
+            3 => ("flash_folder_title", Some("flash_folder_desc")),
+            4 => ("flash_confirm_title", Some("flash_confirm_subtitle")),
+            _ => return None,
+        };
+        Some(wizard_action_bar(
+            self.t(title_key).to_string(),
+            subtitle_key.map(|key| self.t(key).to_string()),
+        ))
+    }
+
     pub(crate) fn flash_region_step(&self) -> Element<'_, Message> {
+        let side = self.wizard_square_side();
         let prc_icon = lucide_primary(icon::region_prc(), 57.6);
         // TB322FC is a PRC-only SKU. Render ROW as a disabled card with
         // a grayed icon so the constraint is visible — silent skip
@@ -55,35 +78,31 @@ impl App {
         let tb322fc = self.is_tb322fc();
         let unsupported_tb322fc = tr_args!("model_unsupported", model = "TB322FC");
         let row_card: Element<'_, Message> = if tb322fc {
-            icon_option_card_sub_square_disabled(
+            icon_option_card_sub_square_disabled_sized(
                 lucide_disabled(icon::region_row(), 57.6),
                 self.t("region_row"),
                 &unsupported_tb322fc,
+                side,
             )
         } else {
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 lucide_primary(icon::region_row(), 57.6),
                 self.t("region_row"),
                 self.t("region_row_name"),
                 self.flash.device_region == Some(DeviceRegion::Row),
                 Message::Flash(FlashMsg::FlashRegion(DeviceRegion::Row)),
+                side,
             )
         };
         let col = column![
-            text(self.t("flash_region_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("flash_region_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             row![
-                icon_option_card_sub_square(
+                icon_option_card_sub_square_sized(
                     prc_icon,
                     self.t("region_prc"),
                     self.t("region_prc_name"),
                     self.flash.device_region == Some(DeviceRegion::Prc),
-                    Message::Flash(FlashMsg::FlashRegion(DeviceRegion::Prc))
+                    Message::Flash(FlashMsg::FlashRegion(DeviceRegion::Prc)),
+                    side,
                 ),
                 row_card,
             ]
@@ -93,15 +112,11 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        centered_step(col, self.square_step_max_width(2))
     }
 
     pub(crate) fn flash_target_step(&self) -> Element<'_, Message> {
+        let side = self.wizard_square_side();
         let device = lucide_primary(icon::tile_device(), 57.6);
         // TB322FC ships only in PRC, so cross-region (OtherRegion) is
         // never a valid target. Disable the card with a grayed icon to
@@ -118,36 +133,32 @@ impl App {
             None => ("flashtarget_same_desc", "flashtarget_other_desc"),
         };
         let other_card: Element<'_, Message> = if tb322fc {
-            icon_option_card_sub_square_disabled(
+            icon_option_card_sub_square_disabled_sized(
                 lucide_disabled(icon::tile_globe(), 57.6),
                 self.t(FlashTarget::OtherRegion.label_key()),
                 &unsupported_tb322fc,
+                side,
             )
         } else {
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 lucide_primary(icon::tile_globe(), 57.6),
                 self.t(FlashTarget::OtherRegion.label_key()),
                 self.t(other_desc),
                 self.flash.target == Some(FlashTarget::OtherRegion),
                 Message::Flash(FlashMsg::FlashTarget(FlashTarget::OtherRegion)),
+                side,
             )
         };
         let col = column![
-            text(self.t("flash_target_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("flash_target_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             row![
                 other_card,
-                icon_option_card_sub_square(
+                icon_option_card_sub_square_sized(
                     device,
                     self.t(FlashTarget::SameRegion.label_key()),
                     self.t(same_desc),
                     self.flash.target == Some(FlashTarget::SameRegion),
-                    Message::Flash(FlashMsg::FlashTarget(FlashTarget::SameRegion))
+                    Message::Flash(FlashMsg::FlashTarget(FlashTarget::SameRegion)),
+                    side,
                 ),
             ]
             .spacing(12),
@@ -156,39 +167,30 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        centered_step(col, self.square_step_max_width(2))
     }
 
     pub(crate) fn flash_data_step(&self) -> Element<'_, Message> {
+        let side = self.wizard_square_side();
         let shield = lucide_primary(icon::tile_shield(), 57.6);
         let wipe = lucide_primary(icon::tile_wipe(), 57.6);
         let col = column![
-            text(self.t("flash_data_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("flash_data_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             row![
-                icon_option_card_sub_square(
+                icon_option_card_sub_square_sized(
                     shield,
                     self.t(DataMode::Keep.label_key()),
                     self.t("datamode_keep_desc"),
                     self.flash.data_mode == Some(DataMode::Keep),
-                    Message::Flash(FlashMsg::FlashDataMode(DataMode::Keep))
+                    Message::Flash(FlashMsg::FlashDataMode(DataMode::Keep)),
+                    side,
                 ),
-                icon_option_card_sub_square(
+                icon_option_card_sub_square_sized(
                     wipe,
                     self.t(DataMode::Wipe.label_key()),
                     self.t("datamode_wipe_desc"),
                     self.flash.data_mode == Some(DataMode::Wipe),
-                    Message::Flash(FlashMsg::FlashDataMode(DataMode::Wipe))
+                    Message::Flash(FlashMsg::FlashDataMode(DataMode::Wipe)),
+                    side,
                 ),
             ]
             .spacing(12),
@@ -197,12 +199,7 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        centered_step(col, self.square_step_max_width(2))
     }
 
     pub(crate) fn flash_folder_step(&self) -> Element<'_, Message> {
@@ -242,9 +239,6 @@ impl App {
             false,
         );
         let mut col = column![
-            text(self.t("flash_folder_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
             btn,
             text(status)
                 .size(12)
@@ -472,11 +466,7 @@ impl App {
             &folder_owned,
         ));
 
-        self.confirm_view(
-            "flash_confirm_title",
-            self.t("flash_confirm_subtitle").to_string(),
-            rows,
-        )
+        self.confirm_rows_view(rows)
     }
 
     pub(crate) fn flash_exec_step(&self) -> Element<'_, Message> {

@@ -53,7 +53,14 @@ impl App {
         } else {
             container(text("")).into()
         };
-        let core: Element<'_, Message> = column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.sysupdate_action_bar() {
+            layout = layout.push(header);
+        }
+        let core: Element<'_, Message> = layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into();
@@ -64,7 +71,32 @@ impl App {
         }
     }
 
+    fn sysupdate_action_bar(&self) -> Option<Element<'_, Message>> {
+        let rescue = self.sysupdate.is_rescue();
+        let (title, subtitle) = match (rescue, self.sysupdate.step) {
+            (_, 0) => (
+                self.t("sysupdate_action_title").to_string(),
+                self.t("sysupdate_action_subtitle").to_string(),
+            ),
+            (true, 1) => (
+                self.t("rescue_folder_title").to_string(),
+                self.loader_picker_desc(),
+            ),
+            (true, 2) | (false, 1) => {
+                let desc = self
+                    .sysupdate
+                    .action
+                    .map(|a| self.t(a.desc_key()).to_string())
+                    .unwrap_or_default();
+                (self.t("sysupdate_confirm_title").to_string(), desc)
+            }
+            _ => return None,
+        };
+        Some(wizard_action_bar(title, Some(subtitle)))
+    }
+
     pub(crate) fn sysupdate_action_step(&self) -> Element<'_, Message> {
+        let side = self.wizard_square_side();
         let off_icon = lucide_primary(icon::tile_update_off(), 57.6);
         let on_icon = lucide_primary(icon::tile_update_on(), 57.6);
         // TB323FU's vendor_boot/vbmeta sit on a different UFS LUN than the
@@ -79,19 +111,21 @@ impl App {
             lucide_primary(icon::tile_rescue(), 57.6)
         };
         let mut cards = row![
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 off_icon,
                 self.t(SysUpdateAction::Disable.label_key()),
                 self.t(SysUpdateAction::Disable.desc_key()),
                 self.sysupdate.action == Some(SysUpdateAction::Disable),
                 Message::Sys(SysMsg::SysAction(SysUpdateAction::Disable)),
+                side,
             ),
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 on_icon,
                 self.t(SysUpdateAction::Enable.label_key()),
                 self.t(SysUpdateAction::Enable.desc_key()),
                 self.sysupdate.action == Some(SysUpdateAction::Enable),
                 Message::Sys(SysMsg::SysAction(SysUpdateAction::Enable)),
+                side,
             ),
         ]
         .spacing(12);
@@ -123,10 +157,10 @@ impl App {
                 button(
                     container(content)
                         .padding([20, 16])
-                        .width(Length::Fixed(WIZARD_CARD_SQUARE))
-                        .height(WIZARD_CARD_SQUARE)
-                        .center_x(WIZARD_CARD_SQUARE)
-                        .center_y(WIZARD_CARD_SQUARE)
+                        .width(Length::Fixed(side))
+                        .height(side)
+                        .center_x(side)
+                        .center_y(side)
                         .style(|t: &Theme| {
                             theme::surface_card_style(
                                 t,
@@ -137,7 +171,7 @@ impl App {
                         }),
                 )
                 .padding(0)
-                .width(Length::Fixed(WIZARD_CARD_SQUARE))
+                .width(Length::Fixed(side))
                 .style(|t: &Theme, _s| button::Style {
                     background: None,
                     text_color: pal_of(t).on_surface,
@@ -145,34 +179,21 @@ impl App {
                 }),
             );
         } else {
-            cards = cards.push(icon_option_card_sub_square(
+            cards = cards.push(icon_option_card_sub_square_sized(
                 rescue_icon,
                 self.t(SysUpdateAction::Rescue.label_key()),
                 self.t(SysUpdateAction::Rescue.desc_key()),
                 self.sysupdate.action == Some(SysUpdateAction::Rescue),
                 Message::Sys(SysMsg::SysAction(SysUpdateAction::Rescue)),
+                side,
             ));
         }
-        let col = column![
-            text(self.t("sysupdate_action_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("sysupdate_action_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            cards,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
+        let col = column![cards,]
+            .spacing(14)
+            .padding(28)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            .align_x(iced::Alignment::Center);
+        centered_step(col, self.square_step_max_width(3))
     }
 
     pub(crate) fn sysupdate_confirm_step(&self) -> Element<'_, Message> {
@@ -182,11 +203,6 @@ impl App {
             .action
             .map(|a| self.t(a.label_key()).to_string())
             .unwrap_or_else(|| dash.clone());
-        let desc = self
-            .sysupdate
-            .action
-            .map(|a| self.t(a.desc_key()).to_string())
-            .unwrap_or_default();
         let mut rows = vec![info_kv_center(self.t("sysupdate_step_action"), &action)];
         // Rescue: echo the chosen firmware folder + region so the user
         // confirms exactly what's about to flash.
@@ -204,7 +220,7 @@ impl App {
             rows.push(info_kv_center(self.t("rescue_folder_label"), &folder));
             rows.push(info_kv_center(self.t("rescue_region_label"), &region));
         }
-        self.confirm_view("sysupdate_confirm_title", desc, rows)
+        self.confirm_rows_view(rows)
     }
 
     pub(crate) fn sysupdate_rescue_folder_step(&self) -> Element<'_, Message> {
@@ -250,9 +266,6 @@ impl App {
             "picker_recents",
         );
         let col = column![
-            text(self.t("rescue_folder_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
             btn,
             text(status)
                 .size(12)

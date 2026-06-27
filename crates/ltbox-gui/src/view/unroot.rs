@@ -39,40 +39,70 @@ impl App {
         } else {
             container(text("")).into()
         };
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.unroot_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
     }
 
+    fn unroot_action_bar(&self) -> Option<Element<'_, Message>> {
+        let (title, subtitle) = match self.unroot.step {
+            0 => (
+                self.t("unroot_method_title").to_string(),
+                self.t("unroot_method_subtitle").to_string(),
+            ),
+            1 => (
+                self.t("unroot_loader_title").to_string(),
+                self.loader_picker_desc(),
+            ),
+            2 => {
+                let desc = self
+                    .unroot
+                    .unroot_type
+                    .map(|t| self.t(t.folder_desc_key()).to_string())
+                    .unwrap_or_else(|| self.t("unroot_folder_placeholder").to_string());
+                (self.t("unroot_folder_title").to_string(), desc)
+            }
+            3 => (
+                self.t("unroot_confirm_title").to_string(),
+                self.t("unroot_confirm_subtitle").to_string(),
+            ),
+            _ => return None,
+        };
+        Some(wizard_action_bar(title, Some(subtitle)))
+    }
+
     pub(crate) fn unroot_type_step(&self) -> Element<'_, Message> {
+        let side = self.wizard_square_side();
         // Unroot reuses the Lucide puzzle/layers glyphs that the root
         // wizard uses for the LKM/GKI pick — context (title + label)
         // disambiguates.
         let lkm_icon = lucide_primary(icon::root_lkm(), 57.6);
         let gki_icon = lucide_primary(icon::root_gki(), 57.6);
         let col = column![
-            text(self.t("unroot_method_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("unroot_method_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             row![
-                icon_option_card_sub_square(
+                icon_option_card_sub_square_sized(
                     lkm_icon,
                     self.t(UnrootType::MagiskLkm.label_key()),
                     self.t(UnrootType::MagiskLkm.desc_key()),
                     self.unroot.unroot_type == Some(UnrootType::MagiskLkm),
-                    Message::Unroot(UnrootMsg::SetUnrootType(UnrootType::MagiskLkm))
+                    Message::Unroot(UnrootMsg::SetUnrootType(UnrootType::MagiskLkm)),
+                    side,
                 ),
-                icon_option_card_sub_square(
+                icon_option_card_sub_square_sized(
                     gki_icon,
                     self.t(UnrootType::APatchGki.label_key()),
                     self.t(UnrootType::APatchGki.desc_key()),
                     self.unroot.unroot_type == Some(UnrootType::APatchGki),
-                    Message::Unroot(UnrootMsg::SetUnrootType(UnrootType::APatchGki))
+                    Message::Unroot(UnrootMsg::SetUnrootType(UnrootType::APatchGki)),
+                    side,
                 ),
             ]
             .spacing(12),
@@ -81,12 +111,7 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        centered_step(col, self.square_step_max_width(2))
     }
 
     pub(crate) fn unroot_loader_step(&self) -> Element<'_, Message> {
@@ -127,9 +152,6 @@ impl App {
             "picker_recents",
         );
         let col = column![
-            text(self.t("unroot_loader_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
             btn,
             text(status)
                 .size(12)
@@ -195,9 +217,6 @@ impl App {
             false,
         );
         let col = column![
-            text(self.t("unroot_folder_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
             btn,
             text(status)
                 .size(12)
@@ -241,15 +260,11 @@ impl App {
             .folder_path
             .clone()
             .unwrap_or_else(|| dash.clone());
-        self.confirm_view(
-            "unroot_confirm_title",
-            self.t("unroot_confirm_subtitle").to_string(),
-            vec![
-                info_kv_center(self.t("unroot_step_method"), &method),
-                info_kv_center(self.t("unroot_loader_title"), &loader),
-                info_kv_center(self.t("unroot_folder_title"), &folder),
-            ],
-        )
+        self.confirm_rows_view(vec![
+            info_kv_center(self.t("unroot_step_method"), &method),
+            info_kv_center(self.t("unroot_loader_title"), &loader),
+            info_kv_center(self.t("unroot_folder_title"), &folder),
+        ])
     }
 
     pub(crate) fn unroot_exec_step(&self) -> Element<'_, Message> {

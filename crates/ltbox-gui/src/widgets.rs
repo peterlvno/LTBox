@@ -309,6 +309,17 @@ pub(crate) const WIZARD_CARD_HEIGHT: f32 = 180.0;
 /// Side length for the square (1:1) option cards used by single-row wizard
 /// steps. Sized so a 3-up row still fits within the minimum window width.
 pub(crate) const WIZARD_CARD_SQUARE: f32 = 200.0;
+/// Larger square-card side used once the window has enough horizontal room.
+pub(crate) const WIZARD_CARD_SQUARE_WIDE: f32 = 236.0;
+/// Width caps for task-focused panels. The app should use extra desktop space
+/// for calm margins, not stretch controls until their relationships break.
+pub(crate) const WIZARD_2X2_GRID_MAX_WIDTH: f32 = 700.0;
+pub(crate) const WIZARD_CONFIRM_MAX_WIDTH: f32 = 660.0;
+pub(crate) const WIZARD_TOP_APP_BAR_HEIGHT: f32 = 132.0;
+pub(crate) const WIZARD_TOP_APP_BAR_MAX_WIDTH: f32 = 1040.0;
+pub(crate) const ADVANCED_GRID_MAX_WIDTH: f32 = 860.0;
+pub(crate) const SETTINGS_PANEL_MAX_WIDTH: f32 = 620.0;
+pub(crate) const REBOOT_PANEL_MAX_WIDTH: f32 = 760.0;
 
 /// Fixed sub-row height (~2 lines at size 11) so cards line up across
 /// translations.
@@ -324,6 +335,54 @@ pub(crate) const FLASH_PARTS_MARKER_CELL_HEIGHT: f32 = 20.0;
 pub(crate) const FLASH_PARTS_MARKER_SIZE: f32 = 16.0;
 pub(crate) const FLASH_PARTS_ERASE_DASH_WIDTH: f32 = 9.0;
 pub(crate) const FLASH_PARTS_ERASE_DASH_HEIGHT: f32 = 2.0;
+
+pub(crate) fn centered_max_width<'a>(
+    content: impl Into<Element<'a, Message>>,
+    max_width: f32,
+) -> Element<'a, Message> {
+    container(
+        container(content.into())
+            .width(Length::Fill)
+            .max_width(max_width),
+    )
+    .width(Length::Fill)
+    .center_x(Length::Fill)
+    .into()
+}
+
+pub(crate) fn centered_step<'a>(
+    content: impl Into<Element<'a, Message>>,
+    max_width: f32,
+) -> Element<'a, Message> {
+    container(
+        container(content.into())
+            .width(Length::Fill)
+            .max_width(max_width),
+    )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .center_x(Length::Fill)
+    .center_y(Length::Fill)
+    .into()
+}
+
+impl App {
+    pub(crate) fn wizard_square_side(&self) -> f32 {
+        let content_width = self.window_size.0 - SIDEBAR_RAIL_WIDTH;
+        if content_width >= 1180.0 {
+            WIZARD_CARD_SQUARE_WIDE
+        } else {
+            WIZARD_CARD_SQUARE
+        }
+    }
+
+    pub(crate) fn square_step_max_width(&self, columns: usize) -> f32 {
+        let columns = columns.max(1) as f32;
+        let gaps = (columns - 1.0) * 12.0;
+        // The column that owns card rows uses 28 px horizontal padding.
+        columns * self.wizard_square_side() + gaps + 56.0
+    }
+}
 
 pub(crate) fn wizard_nav_generic<'a>(
     can_back: bool,

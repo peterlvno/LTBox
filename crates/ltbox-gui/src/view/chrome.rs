@@ -406,27 +406,22 @@ impl App {
         if self.current_view == View::Unroot {
             return self.view_unroot_wizard();
         }
-        // Advanced wizards (generic + FlashPartitions) skip the grid's
-        // scrollable+padding wrapper so the step bar isn't pinched and
-        // the 280 px browse card doesn't stretch.
-        if self.current_view == View::Advanced
-            && (self.advanced_wizard_open.is_open() || self.adv_wizard.action.is_some())
-        {
+        // Advanced owns its scroll/padding so both the landing screen and
+        // wizards can use a full-width top app bar without being pinched by
+        // the generic content wrapper.
+        if self.current_view == View::Advanced {
             return self.view_advanced();
+        }
+
+        // Settings uses the same full-width top app bar pattern as Advanced.
+        if self.current_view == View::Settings {
+            return self.view_settings();
         }
 
         // Reboot cards need Fill height; scrollable would force Shrink
         // and collapse them.
         if self.current_view == View::Reboot {
-            return container(
-                container(self.view_reboot())
-                    .padding(24)
-                    .width(Length::Fill)
-                    .height(Length::Fill),
-            )
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into();
+            return self.view_reboot();
         }
         let inner = match self.current_view {
             View::Dashboard => self.view_dashboard(),

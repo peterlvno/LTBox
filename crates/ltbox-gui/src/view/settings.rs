@@ -352,18 +352,31 @@ impl App {
                 ..Default::default()
             }
         });
+        let prefs_card: Element<'_, Message> =
+            centered_max_width(prefs_card, SETTINGS_PANEL_MAX_WIDTH);
 
-        let mut col = column![
-            text(self.t("settings_title").to_string()).size(theme::text_size::TITLE_LARGE),
-            widget::rule::horizontal(1),
-        ]
-        .spacing(14)
-        .width(Length::Fill);
+        let mut col = column![].spacing(14).width(Length::Fill);
         // Surface the driver install / update banner here too, so switching the
         // driver mode above shows the prompt without a trip to the dashboard.
         if let Some(banner) = self.driver_install_banner() {
-            col = col.push(banner);
+            col = col.push(centered_max_width(banner, SETTINGS_PANEL_MAX_WIDTH));
         }
-        col.push(prefs_card).into()
+        col = col.push(prefs_card);
+
+        let body = iced::widget::scrollable(container(col).padding(24).width(Length::Fill))
+            .style(m3_scrollable_style)
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        column![
+            large_top_app_bar(
+                self.t("settings_title").to_string(),
+                Some(self.t("settings_subtitle").to_string()),
+            ),
+            body,
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 }

@@ -26,12 +26,7 @@ impl App {
             return self.view_adv_wizard();
         }
 
-        let mut content = column![
-            text(self.t("nav_advanced").to_string()).size(theme::text_size::TITLE_LARGE),
-            widget::rule::horizontal(1),
-        ]
-        .spacing(14)
-        .width(Length::Fill);
+        let mut content = column![].spacing(14).width(Length::Fill);
 
         for section in ADV_SECTIONS {
             content = content.push(
@@ -41,7 +36,7 @@ impl App {
             );
             let mut rows = column![].spacing(8);
             for chunk in section.items.chunks(3) {
-                let mut r = row![].spacing(8);
+                let mut r = row![].spacing(8).width(Length::Fill);
                 for &item in chunk {
                     r = r.push(adv_grid_btn(item, self.t(item.label_key())));
                 }
@@ -53,7 +48,25 @@ impl App {
             content = content.push(rows);
         }
 
-        content.into()
+        let body = scrollable(
+            container(centered_max_width(content, ADVANCED_GRID_MAX_WIDTH))
+                .padding(24)
+                .width(Length::Fill),
+        )
+        .style(m3_scrollable_style)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        column![
+            large_top_app_bar(
+                self.t("nav_advanced").to_string(),
+                Some(self.t("adv_overview_subtitle").to_string()),
+            ),
+            body,
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 
     /// Advanced wizard. PatchDevinfo: source/country/confirm/exec.
@@ -152,10 +165,70 @@ impl App {
             )
         };
 
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.adv_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn adv_action_bar(&self) -> Option<Element<'_, Message>> {
+        let action = self.adv_wizard.action?;
+        let is_exec = self.adv_wizard.step == self.adv_wizard.exec_step();
+        if is_exec {
+            return None;
+        }
+
+        let (title, subtitle) =
+            if matches!(action, AdvAction::DetectArb) && self.adv_wizard.step == 0 {
+                let subtitle_key = if self.device_model.eq_ignore_ascii_case("TB320FC") {
+                    "adv_src_detect_arb_loader"
+                } else {
+                    "adv_src_detect_arb_start"
+                };
+                (
+                    self.t("adv_detect_arb").to_string(),
+                    self.t(subtitle_key).to_string(),
+                )
+            } else if self.adv_wizard.is_confirm_step() {
+                (
+                    self.t(action.label_key()).to_string(),
+                    self.t(action.desc_key()).to_string(),
+                )
+            } else if self.adv_wizard.needs_country() && self.adv_wizard.step == 0 {
+                (
+                    self.t("adv_country_title").to_string(),
+                    self.t("adv_country_subtitle").to_string(),
+                )
+            } else if self.adv_wizard.needs_country() && self.adv_wizard.step == 1 {
+                (
+                    self.t("adv_loader_title").to_string(),
+                    self.t("adv_loader_subtitle").to_string(),
+                )
+            } else if self.adv_wizard.needs_region_target() && self.adv_wizard.step == 1 {
+                (
+                    self.t("adv_region_target_title").to_string(),
+                    self.t("adv_region_target_subtitle").to_string(),
+                )
+            } else if matches!(action, AdvAction::PatchArb) && self.adv_wizard.step == 1 {
+                (
+                    self.t("adv_arb_inspect_title").to_string(),
+                    self.t("adv_arb_inspect_subtitle").to_string(),
+                )
+            } else {
+                (
+                    self.t(action.label_key()).to_string(),
+                    self.t(action.source_desc_key()).to_string(),
+                )
+            };
+
+        Some(wizard_action_bar(title, Some(subtitle)))
     }
 
     /// Step 0 — Browse tile. Matches Flash/Root folder steps.
@@ -245,9 +318,6 @@ impl App {
             }
         };
         let col = column![
-            text(self.t(action.label_key()).to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
             btn_row,
             text(status)
                 .size(12)
@@ -316,13 +386,6 @@ impl App {
             }
         };
         let col = column![
-            text(self.t("adv_country_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("adv_country_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             btn_row,
             text(status)
                 .size(12)
@@ -382,13 +445,6 @@ impl App {
             }
         };
         let mut col = column![
-            text(self.t("adv_loader_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("adv_loader_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             row![
                 Space::new().width(Length::Fill),
                 btn,
@@ -474,13 +530,6 @@ impl App {
             }
         };
         let col = column![
-            text(self.t("adv_region_target_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("adv_region_target_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             btn_row,
             text(status)
                 .size(12)
@@ -522,14 +571,6 @@ impl App {
             .into()
         };
         let col = column![
-            text(self.t("adv_arb_inspect_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("adv_arb_inspect_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            Space::new().height(8),
             mk_row("adv_arb_inspect_boot", boot_idx),
             mk_row("adv_arb_inspect_vbmeta", vbmeta_idx),
         ]
@@ -552,19 +593,7 @@ impl App {
     /// detection runs entirely over fastboot vars.
     pub(crate) fn adv_wiz_detect_arb_step(&self) -> Element<'_, Message> {
         let needs_loader = self.device_model.eq_ignore_ascii_case("TB320FC");
-        let title = text(self.t("adv_detect_arb").to_string())
-            .size(theme::text_size::WIZARD_STEP_TITLE)
-            .center();
-        let subtitle_key = if needs_loader {
-            "adv_src_detect_arb_loader"
-        } else {
-            "adv_src_detect_arb_start"
-        };
-        let subtitle = text(self.t(subtitle_key).to_string())
-            .size(13)
-            .style(muted_style)
-            .center();
-        let mut col = column![title, subtitle]
+        let mut col = column![]
             .spacing(14)
             .padding(28)
             .width(Length::Fill)
@@ -645,10 +674,9 @@ impl App {
 
     /// Confirm step — Next becomes Start.
     pub(crate) fn adv_wiz_confirm_step(&self) -> Element<'_, Message> {
-        let action = match self.adv_wizard.action {
-            Some(a) => a,
-            None => return container(text("")).into(),
-        };
+        if self.adv_wizard.action.is_none() {
+            return container(text("")).into();
+        }
         let dash = "—".to_string();
         let path = self
             .adv_wizard
@@ -662,21 +690,11 @@ impl App {
         } else {
             self.t("adv_confirm_source")
         };
-        let mut col = column![
-            text(self.t(action.label_key()).to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t(action.desc_key()).to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            Space::new().height(12),
-            info_kv_center(source_label, &path),
-        ]
-        .spacing(10)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
+        let mut col = column![info_kv_center(source_label, &path),]
+            .spacing(10)
+            .padding(28)
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
         if self.adv_wizard.needs_country() {
             let code = self.adv_wizard.country.clone().unwrap_or(dash.clone());
             col = col.push(info_kv_center(self.t("adv_confirm_country"), &code));
@@ -855,10 +873,29 @@ impl App {
         } else {
             container(text("")).into()
         };
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.simple_flash_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn simple_flash_action_bar(&self) -> Option<Element<'_, Message>> {
+        let (title_key, subtitle_key) = match self.simple_flash.step {
+            0 => ("adv_simple_flash", "adv_simple_flash_desc"),
+            1 => ("flash_confirm_title", "flash_confirm_subtitle"),
+            _ => return None,
+        };
+        Some(wizard_action_bar(
+            self.t(title_key).to_string(),
+            Some(self.t(subtitle_key).to_string()),
+        ))
     }
 
     /// Intro step — shows the action description; Next opens the folder picker.
@@ -876,14 +913,6 @@ impl App {
             }
         };
         let col = column![
-            text(self.t("adv_simple_flash").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("adv_simple_flash_desc").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            Space::new().height(8),
             text(self.t("simple_flash_pick_hint").to_string())
                 .size(12)
                 .style(muted_style)
@@ -934,10 +963,6 @@ impl App {
             info_kv_center(self.t("flash_confirm_rollback"), &off),
             info_kv_center(self.t("flash_confirm_folder"), &folder),
         ];
-        self.confirm_view(
-            "flash_confirm_title",
-            self.t("flash_confirm_subtitle").to_string(),
-            rows,
-        )
+        self.confirm_rows_view(rows)
     }
 }

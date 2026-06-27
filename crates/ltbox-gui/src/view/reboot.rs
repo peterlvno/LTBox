@@ -88,16 +88,21 @@ impl App {
             list = list.push(btn);
         }
 
-        let header = text(self.t("reboot_title").to_string()).size(theme::text_size::TITLE_LARGE);
-        let subtitle = text(tr_args!("reboot_subtitle", conn = conn_label))
-            .size(13)
-            .style(muted_style);
-        column![header, subtitle, widget::rule::horizontal(1), list,]
-            .spacing(14)
-            .padding(0)
+        let body = container(centered_step(list, REBOOT_PANEL_MAX_WIDTH))
+            .padding(24)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+            .height(Length::Fill);
+
+        column![
+            large_top_app_bar(
+                self.t("reboot_title").to_string(),
+                Some(tr_args!("reboot_subtitle", conn = conn_label)),
+            ),
+            body,
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 
     /// M3 confirm dialog for the Reboot panel.

@@ -64,10 +64,81 @@ impl App {
         } else {
             container(text("")).into()
         };
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.root_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn root_action_bar(&self) -> Option<Element<'_, Message>> {
+        let header = match self.root.step {
+            0 => (
+                self.t("root_type_title").to_string(),
+                self.t("root_type_subtitle").to_string(),
+            ),
+            1 if self.root.is_skroot() => (
+                self.t("root_skroot_flavor_title").to_string(),
+                self.t("root_skroot_flavor_subtitle").to_string(),
+            ),
+            1 => {
+                let family = self
+                    .root
+                    .family
+                    .map(|f| self.t(f.label_key()))
+                    .unwrap_or("?");
+                (
+                    tr_args!("root_mode_title_tmpl", family = family),
+                    self.t("root_mode_subtitle").to_string(),
+                )
+            }
+            2 if self.root.is_gki() => (
+                self.t("root_kernel_title").to_string(),
+                self.t("root_kernel_subtitle").to_string(),
+            ),
+            2 => {
+                let family = self.root.family.unwrap_or(Family::KernelSU);
+                (
+                    tr_args!(
+                        "root_provider_title_tmpl",
+                        family = self.t(family.label_key())
+                    ),
+                    self.t("root_provider_subtitle").to_string(),
+                )
+            }
+            3 if self.root.is_forks() => (
+                self.t("root_apk_title").to_string(),
+                self.t("root_apk_subtitle").to_string(),
+            ),
+            3 => (
+                self.t("root_version_title").to_string(),
+                self.t("root_version_subtitle").to_string(),
+            ),
+            4 => (
+                self.t("root_source_title").to_string(),
+                self.t("root_source_subtitle").to_string(),
+            ),
+            5 => (
+                self.t("root_folder_title").to_string(),
+                self.t("root_folder_subtitle").to_string(),
+            ),
+            6 => (
+                self.t("root_confirm_title").to_string(),
+                self.t("root_confirm_subtitle").to_string(),
+            ),
+            8 => (
+                self.t("root_kpm_title").to_string(),
+                self.t("root_kpm_subtitle").to_string(),
+            ),
+            _ => return None,
+        };
+        Some(wizard_action_bar(header.0, Some(header.1)))
     }
 
     pub(crate) fn root_kpm_step(&self) -> Element<'_, Message> {
@@ -123,21 +194,11 @@ impl App {
             );
         }
 
-        let col = column![
-            text(self.t("root_kpm_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_kpm_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            pick_btn,
-            list,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
+        let col = column![pick_btn, list,]
+            .spacing(14)
+            .padding(28)
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
         container(col)
             .width(Length::Fill)
             .height(Length::Fill)
@@ -373,31 +434,18 @@ impl App {
             cards = cards.push(r);
         }
 
-        let col = column![
-            text(self.t("root_type_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_type_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            cards,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
+        let col = column![cards,]
+            .spacing(14)
+            .padding(28)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            .align_x(iced::Alignment::Center);
+        centered_step(col, WIZARD_2X2_GRID_MAX_WIDTH)
     }
 
     pub(crate) fn root_provider_step(&self) -> Element<'_, Message> {
         let family = self.root.family.unwrap_or(Family::KernelSU);
         let providers = family.providers();
+        let side = self.wizard_square_side();
 
         // KernelSU's four providers form a 2×2 grid (vertical, full-width
         // cards, per the grid rule); Magisk / APatch have two and render as
@@ -416,12 +464,13 @@ impl App {
             } else {
                 // Smaller brand logo (52 vs 72) so the 72px SVG doesn't
                 // overflow the fixed 200px square once the label/desc wraps.
-                icon_option_card_sub_square(
+                icon_option_card_sub_square_sized(
                     p.icon_sized(52.0),
                     self.t(p.label_key()),
                     sub,
                     selected,
                     Message::Root(RootMsg::RootProvider(p)),
+                    side,
                 )
             }
         };
@@ -449,33 +498,20 @@ impl App {
             grid = grid.push(r);
         }
 
-        let title = tr_args!(
-            "root_provider_title_tmpl",
-            family = self.t(family.label_key())
-        );
-        let col = column![
-            text(title)
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_provider_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            grid,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
+        let col = column![grid,]
+            .spacing(14)
+            .padding(28)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            .align_x(iced::Alignment::Center);
+        let max_width = if is_grid {
+            WIZARD_2X2_GRID_MAX_WIDTH
+        } else {
+            self.square_step_max_width(providers.len())
+        };
+        centered_step(col, max_width)
     }
 
-    pub(crate) fn root_file_step(&self, title: &str, subtitle: &str) -> Element<'_, Message> {
+    pub(crate) fn root_file_step(&self, _title: &str, subtitle: &str) -> Element<'_, Message> {
         let selected = self.root.file_path.is_some();
         let status_text = if let Some(p) = &self.root.file_path {
             p.clone()
@@ -525,9 +561,6 @@ impl App {
             "picker_recents",
         );
         let col = column![
-            text(title.to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
             btn,
             text(status_text)
                 .size(12)
@@ -593,13 +626,6 @@ impl App {
             "picker_recents",
         );
         let col = column![
-            text(self.t("root_folder_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_folder_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             btn,
             text(status)
                 .size(12)
@@ -627,12 +653,7 @@ impl App {
     }
 
     pub(crate) fn root_mode_step(&self) -> Element<'_, Message> {
-        let fam_label = self
-            .root
-            .family
-            .map(|f| self.t(f.label_key()))
-            .unwrap_or("?");
-        let title = tr_args!("root_mode_title_tmpl", family = fam_label);
+        let side = self.wizard_square_side();
         // TODO(root): TB320FC has no init_boot for the current KernelSU
         // LKM path; replace it with a vendor_boot patch once real-device
         // verification is available. Keep the card disabled for now, but
@@ -642,104 +663,85 @@ impl App {
         let unsupported_tb320fc = tr_args!("model_unsupported", model = "TB320FC");
         let unsupported_tb323fu = tr_args!("model_unsupported", model = "TB323FU");
         let lkm_card: Element<'_, Message> = if tb320fc {
-            icon_option_card_sub_square_disabled(
+            icon_option_card_sub_square_disabled_sized(
                 RootMode::Lkm.icon_disabled(),
                 self.t(RootMode::Lkm.label_key()),
                 &unsupported_tb320fc,
+                side,
             )
         } else {
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 RootMode::Lkm.icon(),
                 self.t(RootMode::Lkm.label_key()),
                 self.t(RootMode::Lkm.desc_key()),
                 self.root.mode == Some(RootMode::Lkm),
                 Message::Root(RootMsg::RootMode(RootMode::Lkm)),
+                side,
             )
         };
         // TODO(root): LTBox currently only swaps the boot.img Image for
         // GKI, which corrupts boot on TB323FU. Keep GKI disabled until
         // vbmeta handling is added.
         let gki_card: Element<'_, Message> = if tb323fu {
-            icon_option_card_sub_square_disabled(
+            icon_option_card_sub_square_disabled_sized(
                 RootMode::Gki.icon_disabled(),
                 self.t(RootMode::Gki.label_key()),
                 &unsupported_tb323fu,
+                side,
             )
         } else {
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 RootMode::Gki.icon(),
                 self.t(RootMode::Gki.label_key()),
                 self.t(RootMode::Gki.desc_key()),
                 self.root.mode == Some(RootMode::Gki),
                 Message::Root(RootMsg::RootMode(RootMode::Gki)),
+                side,
             )
         };
-        let col = column![
-            text(title)
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_mode_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            row![lkm_card, gki_card,].spacing(12),
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
+        let col = column![row![lkm_card, gki_card,].spacing(12),]
+            .spacing(14)
+            .padding(28)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            .align_x(iced::Alignment::Center);
+        centered_step(col, self.square_step_max_width(2))
     }
 
     pub(crate) fn root_skroot_flavor_step(&self) -> Element<'_, Message> {
-        let lite = icon_option_card_sub_square(
+        let side = self.wizard_square_side();
+        let lite = icon_option_card_sub_square_sized(
             SkrootFlavor::Lite.icon(),
             self.t(SkrootFlavor::Lite.label_key()),
             self.t(SkrootFlavor::Lite.desc_key()),
             self.root.skroot_flavor == Some(SkrootFlavor::Lite),
             Message::Root(RootMsg::RootSkrootFlavor(SkrootFlavor::Lite)),
+            side,
         );
-        let pro = icon_option_card_sub_square_disabled(
+        let pro = icon_option_card_sub_square_disabled_sized(
             SkrootFlavor::Pro.icon_disabled(),
             self.t(SkrootFlavor::Pro.label_key()),
             self.t(SkrootFlavor::Pro.desc_key()),
+            side,
         );
 
-        let col = column![
-            text(self.t("root_skroot_flavor_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_skroot_flavor_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            row![lite, pro].spacing(12),
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
+        let col = column![row![lite, pro].spacing(12),]
+            .spacing(14)
+            .padding(28)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            .align_x(iced::Alignment::Center);
+        centered_step(col, self.square_step_max_width(2))
     }
 
     pub(crate) fn root_version_step(&self) -> Element<'_, Message> {
+        let side = self.wizard_square_side();
         let mk = |choice: VerChoice| -> Element<'_, Message> {
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 choice.icon(),
                 self.t(choice.label_key()),
                 self.t(choice.desc_key()),
                 self.root.version == Some(choice),
                 Message::Root(RootMsg::RootVersion(choice)),
+                side,
             )
         };
 
@@ -752,36 +754,29 @@ impl App {
             row![mk(VerChoice::Stable), mk(VerChoice::Nightly)].spacing(12)
         };
 
-        let col = column![
-            text(self.t("root_version_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_version_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            version_row,
-        ]
-        .spacing(14)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
-        container(col)
+        let col = column![version_row,]
+            .spacing(14)
+            .padding(28)
             .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+            .align_x(iced::Alignment::Center);
+        let columns = if self.root.provider == Some(Provider::ReSukiSU) {
+            1
+        } else {
+            2
+        };
+        centered_step(col, self.square_step_max_width(columns))
     }
 
     pub(crate) fn root_nightly_source_step(&self) -> Element<'_, Message> {
+        let side = self.wizard_square_side();
         let mk = |src: NightlySource| -> Element<'_, Message> {
-            icon_option_card_sub_square(
+            icon_option_card_sub_square_sized(
                 src.icon(),
                 self.t(src.label_key()),
                 self.t(src.desc_key()),
                 self.root.nightly_source == Some(src),
                 Message::Root(RootMsg::RootNightlySource(src)),
+                side,
             )
         };
 
@@ -817,13 +812,6 @@ impl App {
             };
 
         let col = column![
-            text(self.t("root_source_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t("root_source_subtitle").to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
             row![
                 mk(NightlySource::AutoDetect),
                 mk(NightlySource::ManualInput)
@@ -835,12 +823,7 @@ impl App {
         .padding(28)
         .width(Length::Fill)
         .align_x(iced::Alignment::Center);
-        container(col)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .into()
+        centered_step(col, self.square_step_max_width(2))
     }
 
     pub(crate) fn root_confirm_step(&self) -> Element<'_, Message> {
@@ -926,11 +909,7 @@ impl App {
             .unwrap_or_else(|| dash.clone());
         rows.push(info_kv_center(self.t("root_step_folder"), &folder));
 
-        self.confirm_view(
-            "root_confirm_title",
-            self.t("root_confirm_subtitle").to_string(),
-            rows,
-        )
+        self.confirm_rows_view(rows)
     }
 
     pub(crate) fn root_flash_step(&self) -> Element<'_, Message> {

@@ -86,10 +86,36 @@ impl App {
             container(text("")).into()
         };
 
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.flash_parts_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn flash_parts_action_bar(&self) -> Option<Element<'_, Message>> {
+        let (title, subtitle) = match self.flash_parts.step {
+            0 => (
+                self.t("dump_parts_loader_title").to_string(),
+                self.loader_picker_desc(),
+            ),
+            1 => (
+                self.t("flash_parts_select_title").to_string(),
+                self.t("flash_parts_select_subtitle").to_string(),
+            ),
+            2 => (
+                self.t("flash_parts_confirm_title").to_string(),
+                self.t("flash_parts_confirm_subtitle").to_string(),
+            ),
+            _ => return None,
+        };
+        Some(wizard_action_bar(title, Some(subtitle)))
     }
 
     /// Shared loader-picker card for the EDL parts / physical-storage
@@ -148,9 +174,6 @@ impl App {
         };
         let chips = self.recent_file_chips(LOADER_PICKER_EXTS, on_chosen, "picker_recents");
         let col = column![
-            text(self.t("dump_parts_loader_title").to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
             btn,
             text(status)
                 .size(12)
@@ -187,29 +210,19 @@ impl App {
     /// data rows, which differ per wizard) vary between callers.
     fn select_step_frame<'a>(
         &'a self,
-        title_key: &str,
-        subtitle_key: &str,
+        _title_key: &str,
+        _subtitle_key: &str,
         list: iced::widget::Column<'a, Message>,
     ) -> Element<'a, Message> {
         let scrolled = scrollable(list)
             .style(m3_scrollable_style)
             .height(Length::Fill)
             .width(Length::Fill);
-        let col = column![
-            text(self.t(title_key).to_string())
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center(),
-            text(self.t(subtitle_key).to_string())
-                .size(13)
-                .style(muted_style)
-                .center(),
-            widget::rule::horizontal(1),
-            scrolled,
-        ]
-        .spacing(10)
-        .padding(20)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
+        let col = column![scrolled,]
+            .spacing(10)
+            .padding(20)
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
         container(col)
             .width(Length::Fill)
             .height(Length::Fill)
@@ -438,11 +451,7 @@ impl App {
             rows.push(container(flash_col).padding(14).width(Length::Fill).into());
         }
 
-        self.confirm_view(
-            "flash_parts_confirm_title",
-            self.t("flash_parts_confirm_subtitle").to_string(),
-            rows,
-        )
+        self.confirm_rows_view(rows)
     }
 
     pub(crate) fn view_dump_parts_wizard(&self) -> Element<'_, Message> {
@@ -486,10 +495,32 @@ impl App {
             container(text("")).into()
         };
 
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.dump_parts_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn dump_parts_action_bar(&self) -> Option<Element<'_, Message>> {
+        let (title, subtitle) = match self.dump_parts.step {
+            0 => (
+                self.t("dump_parts_loader_title").to_string(),
+                self.loader_picker_desc(),
+            ),
+            1 => (
+                self.t("dump_parts_select_title").to_string(),
+                self.t("dump_parts_select_subtitle").to_string(),
+            ),
+            _ => return None,
+        };
+        Some(wizard_action_bar(title, Some(subtitle)))
     }
 
     pub(crate) fn dump_parts_loader_step(&self) -> Element<'_, Message> {
@@ -635,10 +666,32 @@ impl App {
             container(text("")).into()
         };
 
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.dump_phys_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn dump_phys_action_bar(&self) -> Option<Element<'_, Message>> {
+        let (title, subtitle) = match self.dump_phys.step {
+            0 => (
+                self.t("dump_parts_loader_title").to_string(),
+                self.loader_picker_desc(),
+            ),
+            1 => (
+                self.t("phys_select_title").to_string(),
+                self.t("phys_select_subtitle").to_string(),
+            ),
+            _ => return None,
+        };
+        Some(wizard_action_bar(title, Some(subtitle)))
     }
 
     pub(crate) fn dump_phys_loader_step(&self) -> Element<'_, Message> {
@@ -726,10 +779,36 @@ impl App {
             container(text("")).into()
         };
 
-        column![step_bar, body, nav]
+        let mut layout = column![].width(Length::Fill).height(Length::Fill);
+        if let Some(header) = self.flash_phys_action_bar() {
+            layout = layout.push(header);
+        }
+        layout
+            .push(step_bar)
+            .push(body)
+            .push(nav)
             .width(Length::Fill)
             .height(Length::Fill)
             .into()
+    }
+
+    fn flash_phys_action_bar(&self) -> Option<Element<'_, Message>> {
+        let (title, subtitle) = match self.flash_phys.step {
+            0 => (
+                self.t("dump_parts_loader_title").to_string(),
+                self.loader_picker_desc(),
+            ),
+            1 => (
+                self.t("phys_select_title").to_string(),
+                self.t("flash_phys_select_subtitle").to_string(),
+            ),
+            2 => (
+                self.t("flash_parts_confirm_title").to_string(),
+                self.t("flash_phys_confirm_subtitle").to_string(),
+            ),
+            _ => return None,
+        };
+        Some(wizard_action_bar(title, Some(subtitle)))
     }
 
     pub(crate) fn flash_phys_loader_step(&self) -> Element<'_, Message> {
@@ -819,10 +898,6 @@ impl App {
             rows.push(container(list).padding(14).width(Length::Fill).into());
         }
 
-        self.confirm_view(
-            "flash_parts_confirm_title",
-            self.t("flash_phys_confirm_subtitle").to_string(),
-            rows,
-        )
+        self.confirm_rows_view(rows)
     }
 }
