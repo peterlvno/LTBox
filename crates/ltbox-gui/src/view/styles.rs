@@ -365,26 +365,6 @@ pub(crate) fn banner_text_btn_style(t: &Theme, status: button::Status) -> button
     }
 }
 
-/// M3 text button in the error role — red label + error-tinted state layer.
-/// Used for the destructive "Cancel" (start over) action on confirm screens.
-pub(crate) fn md_error_text_btn_style(t: &Theme, status: button::Status) -> button::Style {
-    let p = pal_of(t);
-    let bg_alpha = theme::state_alpha(status);
-    button::Style {
-        background: if bg_alpha > 0.0 {
-            Some(with_alpha(p.error, bg_alpha).into())
-        } else {
-            None
-        },
-        text_color: p.error,
-        border: iced::Border {
-            radius: theme::shape::FULL.into(),
-            ..Default::default()
-        },
-        ..Default::default()
-    }
-}
-
 /// Shared `Rule` styling so every shell-level divider (window
 /// outline, title-bar bottom, sidebar-content split, status-bar
 /// top) reads as the same hairline. Default rule color is

@@ -63,36 +63,6 @@ fn m3_dialog_layers(inner: Element<'_, Message>) -> Element<'_, Message> {
     iced::widget::stack![scrim, centered].into()
 }
 
-/// Wrap `inner` (typically a wizard's nav row) in a hover tooltip that explains
-/// why its Start button is disabled — e.g. the device isn't on ADB, or the
-/// picked EDL loader doesn't fit the connected model. `hint` is the already
-/// localized reason text.
-pub(crate) fn disabled_reason_tooltip<'a>(
-    inner: Element<'a, Message>,
-    hint: String,
-) -> Element<'a, Message> {
-    iced::widget::tooltip(
-        inner,
-        container(text(hint).size(12))
-            .padding([6, 10])
-            .style(|t: &Theme| {
-                let p = pal_of(t);
-                container::Style {
-                    background: Some(p.surface_container_high.into()),
-                    text_color: Some(p.on_surface),
-                    border: iced::Border {
-                        color: p.outline_variant,
-                        width: 1.0,
-                        radius: 8.0.into(),
-                    },
-                    ..Default::default()
-                }
-            }),
-        iced::widget::tooltip::Position::Top,
-    )
-    .into()
-}
-
 pub(crate) fn wizard_step_bar<'a>(steps: &[&str], current: usize) -> Element<'a, Message> {
     let mut r = row![]
         .spacing(6)

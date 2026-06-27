@@ -48,6 +48,12 @@ win_maximize      = "square"
 win_restore       = "copy"
 win_close         = "x"
 
+# Wizard floating actions
+fab_back          = "arrow-left"
+fab_next          = "arrow-right"
+fab_start         = "play"
+fab_cancel        = "x"
+
 # Region picker
 region_prc        = "star"
 region_row        = "globe"

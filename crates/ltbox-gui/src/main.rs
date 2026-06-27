@@ -61,7 +61,7 @@ use std::collections::HashMap;
 
 use ltbox_core::{live, tr_args};
 
-use iced::widget::{self, Space, button, column, container, row, text};
+use iced::widget::{Space, button, column, container, row, text};
 use iced::{Element, Length, Subscription, Task, Theme};
 
 use theme::{Palette, ThemeSeed, palette_for, with_alpha};

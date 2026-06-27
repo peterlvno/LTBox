@@ -2,7 +2,7 @@
 //! color blend/easing, device portrait, layout consts). Extracted from main.rs.
 
 use crate::*;
-use iced::widget::{Space, button, column, container, row, text};
+use iced::widget::{Space, button, container, row, text};
 use iced::{Element, Length, Theme};
 
 /// True for the localized "Start" / "Dump" labels — the primary-action button
@@ -13,56 +13,202 @@ pub(crate) fn is_start_label(label: &str) -> bool {
         || label == ltbox_core::i18n::tr("btn_dump").as_str()
 }
 
+fn fab_icon_content(
+    icon: iced::widget::Text<'static, Theme, iced::Renderer>,
+) -> Element<'static, Message> {
+    container(icon.size(22))
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .center_x(Length::Fill)
+        .center_y(Length::Fill)
+        .into()
+}
+
+fn fab_next_icon(next_label: &str) -> iced::widget::Text<'static, Theme, iced::Renderer> {
+    if is_start_label(next_label) {
+        icon::fab_start()
+    } else {
+        icon::fab_next()
+    }
+}
+
+fn fab_style(t: &Theme, status: button::Status, bg: iced::Color, fg: iced::Color) -> button::Style {
+    let p = pal_of(t);
+    if matches!(status, button::Status::Disabled) {
+        return button::Style {
+            background: Some(with_alpha(p.on_surface, 0.12).into()),
+            text_color: with_alpha(p.on_surface, 0.38),
+            border: iced::Border {
+                radius: theme::shape::FULL.into(),
+                ..Default::default()
+            },
+            shadow: theme::elevation(0, theme::is_dark(t)),
+            ..Default::default()
+        };
+    }
+
+    let elevation = if matches!(status, button::Status::Hovered) {
+        4
+    } else {
+        3
+    };
+
+    button::Style {
+        background: Some(blend(bg, fg, theme::state_alpha(status)).into()),
+        text_color: fg,
+        border: iced::Border {
+            radius: theme::shape::FULL.into(),
+            ..Default::default()
+        },
+        shadow: theme::elevation(elevation, theme::is_dark(t)),
+        ..Default::default()
+    }
+}
+
+fn fab_primary_style(t: &Theme, status: button::Status) -> button::Style {
+    let p = pal_of(t);
+    fab_style(t, status, p.primary_container, p.on_primary_container)
+}
+
+fn fab_surface_style(t: &Theme, status: button::Status) -> button::Style {
+    let p = pal_of(t);
+    fab_style(t, status, p.surface_container_high, p.on_surface_variant)
+}
+
+fn fab_error_style(t: &Theme, status: button::Status) -> button::Style {
+    let p = pal_of(t);
+    fab_style(t, status, p.error_container, p.on_error_container)
+}
+
+fn fab_tooltip<'a>(inner: Element<'a, Message>, label: String) -> Element<'a, Message> {
+    iced::widget::tooltip(
+        inner,
+        container(text(label).size(12))
+            .padding([6, 10])
+            .style(|t: &Theme| {
+                let p = pal_of(t);
+                container::Style {
+                    background: Some(p.surface_container_high.into()),
+                    text_color: Some(p.on_surface),
+                    border: iced::Border {
+                        color: p.outline_variant,
+                        width: 1.0,
+                        radius: 8.0.into(),
+                    },
+                    shadow: theme::elevation(2, theme::is_dark(t)),
+                    ..Default::default()
+                }
+            }),
+        iced::widget::tooltip::Position::Top,
+    )
+    .into()
+}
+
+fn wizard_fab<'a>(
+    icon: iced::widget::Text<'static, Theme, iced::Renderer>,
+    label: String,
+    msg: Option<Message>,
+    style: fn(&Theme, button::Status) -> button::Style,
+    disabled_hint: Option<String>,
+) -> Element<'a, Message> {
+    let mut btn = button(fab_icon_content(icon))
+        .width(Length::Fixed(WIZARD_FAB_SIZE))
+        .height(Length::Fixed(WIZARD_FAB_SIZE))
+        .padding(0)
+        .style(style);
+    if let Some(msg) = msg {
+        btn = btn.on_press(msg);
+    }
+
+    let tooltip = disabled_hint.unwrap_or(label);
+    fab_tooltip(btn.into(), tooltip)
+}
+
+fn wizard_nav_fabs<'a>(
+    can_back: bool,
+    next_label: &str,
+    can_next: bool,
+    disabled_next_hint: Option<String>,
+    back_label: &str,
+    back_msg: Message,
+    next_msg: Message,
+) -> Element<'a, Message> {
+    let mut leading = row![]
+        .spacing(WIZARD_FAB_SPACING)
+        .align_y(iced::Alignment::Center)
+        .height(Length::Fill);
+
+    if can_back {
+        leading = leading.push(wizard_fab(
+            icon::fab_back(),
+            back_label.to_string(),
+            Some(back_msg),
+            fab_surface_style,
+            None,
+        ));
+    }
+
+    let mut trailing = row![]
+        .spacing(WIZARD_FAB_SPACING)
+        .align_y(iced::Alignment::Center)
+        .height(Length::Fill);
+
+    if is_start_label(next_label) {
+        trailing = trailing.push(wizard_fab(
+            icon::fab_cancel(),
+            ltbox_core::i18n::tr("btn_cancel").to_string(),
+            Some(Message::StartOver),
+            fab_error_style,
+            None,
+        ));
+    }
+
+    trailing = trailing.push(wizard_fab(
+        fab_next_icon(next_label),
+        next_label.to_string(),
+        can_next.then_some(next_msg),
+        fab_primary_style,
+        disabled_next_hint,
+    ));
+
+    container(
+        container(
+            row![leading, Space::new().width(Length::Fill), trailing]
+                .padding(iced::Padding {
+                    top: 8.0,
+                    right: 24.0,
+                    bottom: 24.0,
+                    left: 24.0,
+                })
+                .spacing(WIZARD_FAB_SPACING)
+                .align_y(iced::Alignment::Center)
+                .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
+                .width(Length::Fill),
+        )
+        .width(Length::Fill)
+        .max_width(WIZARD_FAB_NAV_MAX_WIDTH),
+    )
+    .width(Length::Fill)
+    .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
+    .center_x(Length::Fill)
+    .into()
+}
+
 pub(crate) fn wizard_nav<'a>(
     can_back: bool,
     next_label: &str,
     can_next: bool,
     back_label: &str,
 ) -> Element<'a, Message> {
-    let mut r = row![].spacing(8).padding([12, 24]);
-
-    if can_back {
-        r = r.push(
-            button(text(back_label.to_string()).size(13))
-                .on_press(Message::Root(RootMsg::RootBack))
-                .padding([10, 20])
-                .style(md_text_btn_style),
-        );
-    }
-
-    r = r.push(Space::new().width(Length::Fill));
-
-    // Red "Cancel" on the confirm/start step → StartOver (see
-    // `wizard_nav_generic` for the M3 placement rationale).
-    if is_start_label(next_label) {
-        r = r.push(
-            button(text(ltbox_core::i18n::tr("btn_cancel")).size(13))
-                .on_press(Message::StartOver)
-                .padding([10, 20])
-                .style(md_error_text_btn_style),
-        );
-    }
-
-    let next_btn = button(text(next_label.to_string()).size(13))
-        .padding([10, 24])
-        .style(md_filled_btn_style);
-
-    r = r.push(if can_next {
-        next_btn.on_press(Message::Root(RootMsg::RootNext))
-    } else {
-        next_btn
-    });
-
-    // Top-edge divider only — bottom + sides come from the window
-    // outline / sidebar rule, so a 4-side border here would render
-    // the top + left as a double line.
-    column![
-        widget::rule::horizontal(1).style(shell_rule_style),
-        container(r)
-            .width(Length::Fill)
-            .style(|t: &Theme| panel_bg(t)),
-    ]
-    .into()
+    wizard_nav_fabs(
+        can_back,
+        next_label,
+        can_next,
+        None,
+        back_label,
+        Message::Root(RootMsg::RootBack),
+        Message::Root(RootMsg::RootNext),
+    )
 }
 
 /// Linear mix of two colors by `t` ∈ [0, 1].
@@ -317,6 +463,10 @@ pub(crate) const WIZARD_2X2_GRID_MAX_WIDTH: f32 = 700.0;
 pub(crate) const WIZARD_CONFIRM_MAX_WIDTH: f32 = 660.0;
 pub(crate) const WIZARD_TOP_APP_BAR_HEIGHT: f32 = 132.0;
 pub(crate) const WIZARD_TOP_APP_BAR_MAX_WIDTH: f32 = 1040.0;
+pub(crate) const WIZARD_FAB_SIZE: f32 = 56.0;
+pub(crate) const WIZARD_FAB_SPACING: f32 = 12.0;
+pub(crate) const WIZARD_FAB_NAV_HEIGHT: f32 = 88.0;
+pub(crate) const WIZARD_FAB_NAV_MAX_WIDTH: f32 = WIZARD_TOP_APP_BAR_MAX_WIDTH;
 pub(crate) const ADVANCED_GRID_MAX_WIDTH: f32 = 860.0;
 pub(crate) const SETTINGS_PANEL_MAX_WIDTH: f32 = 620.0;
 pub(crate) const REBOOT_PANEL_MAX_WIDTH: f32 = 760.0;
@@ -406,46 +556,13 @@ pub(crate) fn wizard_nav_generic_with_disabled_next_tooltip<'a>(
     back_msg: Message,
     next_msg: Message,
 ) -> Element<'a, Message> {
-    let mut r = row![].spacing(8).padding([12, 24]);
-    if can_back {
-        r = r.push(
-            button(text(back_label.to_string()).size(13))
-                .on_press(back_msg)
-                .padding([10, 20])
-                .style(md_text_btn_style),
-        );
-    }
-    r = r.push(Space::new().width(Length::Fill));
-    // Red "Cancel" on the confirm/start step → StartOver, returning the menu
-    // to its beginning. M3: the cancel/start decision pair sits at the
-    // trailing edge, navigation (Back) at the leading edge; one filled button
-    // (Start), destructive action in the error color.
-    if is_start_label(next_label) {
-        r = r.push(
-            button(text(ltbox_core::i18n::tr("btn_cancel")).size(13))
-                .on_press(Message::StartOver)
-                .padding([10, 20])
-                .style(md_error_text_btn_style),
-        );
-    }
-    let next_btn = button(text(next_label.to_string()).size(13))
-        .padding([10, 24])
-        .style(md_filled_btn_style);
-    let next: Element<'_, Message> = if can_next {
-        next_btn.on_press(next_msg).into()
-    } else if let Some(hint) = disabled_next_hint {
-        disabled_reason_tooltip(next_btn.into(), hint)
-    } else {
-        next_btn.into()
-    };
-    r = r.push(next);
-    // Top-edge divider only — bottom + sides come from the window
-    // outline / sidebar rule.
-    column![
-        widget::rule::horizontal(1).style(shell_rule_style),
-        container(r)
-            .width(Length::Fill)
-            .style(|t: &Theme| panel_bg(t)),
-    ]
-    .into()
+    wizard_nav_fabs(
+        can_back,
+        next_label,
+        can_next,
+        disabled_next_hint,
+        back_label,
+        back_msg,
+        next_msg,
+    )
 }
