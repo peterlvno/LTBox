@@ -2059,6 +2059,10 @@ fn effective_qcom_driver_mode(
 
 struct App {
     window_id: Option<iced::window::Id>,
+    /// Host maximized state for the custom titlebar restore/maximize glyph.
+    /// Iced exposes this as a query, not a window event, so update/window.rs
+    /// refreshes it when the id arrives and after resize/toggle traffic.
+    window_maximized: bool,
     current_view: View,
     /// Effective dark-mode flag — cached to keep repaint off the OS
     /// registry. Recomputed on theme-choice change.
@@ -2299,6 +2303,7 @@ impl Default for App {
         let ready_log = translations.t("log_ready").to_string();
         Self {
             window_id: None,
+            window_maximized: false,
             current_view: View::default(),
             dark_mode,
             theme_choice,

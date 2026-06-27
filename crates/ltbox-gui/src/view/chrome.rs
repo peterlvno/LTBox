@@ -100,7 +100,7 @@ impl App {
         // each handle's bounding box pass through to the layers below
         // so normal UI clicks aren't intercepted. macOS uses native resize
         // edges, so the overlay handles are omitted there.
-        if !crate::SYSTEM_WINDOW_CHROME {
+        if !crate::SYSTEM_WINDOW_CHROME && !self.window_maximized {
             layers.push(self.resize_handles());
         }
 
@@ -151,8 +151,13 @@ impl App {
             }
         });
 
+        let maximize_icon = if self.window_maximized {
+            icon::win_restore()
+        } else {
+            icon::win_maximize()
+        };
         let maximize_btn = button(
-            container(lucide_icon(icon::win_maximize(), 12.0, |t: &Theme| {
+            container(lucide_icon(maximize_icon, 12.0, |t: &Theme| {
                 pal_of(t).on_surface
             }))
             .width(btn_w)

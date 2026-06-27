@@ -132,6 +132,9 @@ pub(crate) enum Message {
     /// `iced::Event::Window(Resized)`. Persisted with throttling so the
     /// user's preferred geometry survives a restart.
     WindowResized(f32, f32),
+    /// Current host maximized state. Queried from iced because window
+    /// events expose resize/move but not a dedicated maximize notification.
+    WindowMaximized(bool),
     /// Tick from a periodic subscription; flushes the latest window
     /// size to disk if `window_size_dirty` is set and the debounce
     /// interval has elapsed since the last save.

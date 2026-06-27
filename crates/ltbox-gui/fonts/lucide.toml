@@ -45,6 +45,7 @@ op_failed         = "circle-x"
 # Window chrome (10 px)
 win_minimize      = "minus"
 win_maximize      = "square"
+win_restore       = "copy"
 win_close         = "x"
 
 # Region picker

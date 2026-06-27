@@ -25,6 +25,9 @@ impl App {
             // variant out inline.
             Message::Window(m) => return self.update_window(m),
             Message::WindowResized(w, h) => return self.update_window_resized(w, h),
+            Message::WindowMaximized(maximized) => {
+                self.window_maximized = maximized;
+            }
             Message::PersistWindowSize => return self.update_persist_window_size(),
             // Navigation
             Message::Noop => {}

@@ -13,7 +13,9 @@ impl App {
         match msg {
             WindowMsg::WindowIdReceived(id) => {
                 self.window_id = id;
-                Task::none()
+                self.window_id
+                    .map(|id| iced::window::is_maximized(id).map(Message::WindowMaximized))
+                    .unwrap_or_else(Task::none)
             }
             WindowMsg::WindowDrag => self
                 .window_id
@@ -25,7 +27,11 @@ impl App {
                 .unwrap_or_else(Task::none),
             WindowMsg::WindowToggleMaximize => self
                 .window_id
-                .map(iced::window::toggle_maximize)
+                .map(|id| {
+                    let maximized = !self.window_maximized;
+                    self.window_maximized = maximized;
+                    iced::window::maximize(id, maximized)
+                })
                 .unwrap_or_else(Task::none),
             WindowMsg::WindowClose => self
                 .window_id
@@ -49,7 +55,9 @@ impl App {
             self.window_size = (w, h);
             self.window_size_dirty = true;
         }
-        Task::none()
+        self.window_id
+            .map(|id| iced::window::is_maximized(id).map(Message::WindowMaximized))
+            .unwrap_or_else(Task::none)
     }
 
     /// Debounced persistence tick — only flushes when the resize
