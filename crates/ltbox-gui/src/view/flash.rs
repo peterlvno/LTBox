@@ -61,7 +61,7 @@ impl App {
             2 => ("flash_data_title", Some("flash_data_subtitle")),
             3 => ("flash_folder_title", Some("flash_folder_desc")),
             4 => ("flash_confirm_title", Some("flash_confirm_subtitle")),
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(
             self.t(title_key).to_string(),

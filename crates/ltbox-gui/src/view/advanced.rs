@@ -182,7 +182,7 @@ impl App {
         let action = self.adv_wizard.action?;
         let is_exec = self.adv_wizard.step == self.adv_wizard.exec_step();
         if is_exec {
-            return None;
+            return Some(self.exec_action_bar());
         }
 
         let (title, subtitle) =
@@ -738,32 +738,6 @@ impl App {
     }
 
     pub(crate) fn adv_image_info_exec_step(&self) -> Element<'_, Message> {
-        let action_label = self
-            .adv_wizard
-            .action
-            .map(|a| self.t(a.label_key()).to_string())
-            .unwrap_or_else(|| self.t("adv_image_info").to_string());
-        let status = if self.busy {
-            self.t("exec_executing_title").to_string()
-        } else if self.error_msg.is_some() {
-            self.t("exec_failed_title").to_string()
-        } else {
-            self.t("exec_done_title").to_string()
-        };
-        let is_error = self.error_msg.is_some();
-        let is_busy = self.busy;
-        let status_color = move |t: &Theme| {
-            let p = pal_of(t);
-            let color = if is_error {
-                p.error
-            } else if is_busy {
-                p.primary
-            } else {
-                p.success
-            };
-            iced::widget::text::Style { color: Some(color) }
-        };
-
         let editor = iced::widget::text_editor(&self.image_info_log_editor)
             .on_action(Message::ImageInfoLogEditorAction)
             .size(11)
@@ -786,19 +760,7 @@ impl App {
             ));
         }
 
-        let header = row![
-            column![
-                text(action_label).size(theme::text_size::TITLE_LARGE),
-                text(status).size(12).style(status_color),
-            ]
-            .spacing(4),
-        ]
-        .spacing(12)
-        .align_y(iced::Alignment::Center);
-
         let body = column![
-            header,
-            widget::rule::horizontal(1),
             container(editor)
                 .width(Length::Fill)
                 .height(Length::Fill)
@@ -880,7 +842,7 @@ impl App {
         let (title_key, subtitle_key) = match self.simple_flash.step {
             0 => ("adv_simple_flash", "adv_simple_flash_desc"),
             1 => ("flash_confirm_title", "flash_confirm_subtitle"),
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(
             self.t(title_key).to_string(),

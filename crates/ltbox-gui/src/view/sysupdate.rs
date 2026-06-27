@@ -90,7 +90,7 @@ impl App {
                     .unwrap_or_default();
                 (self.t("sysupdate_confirm_title").to_string(), desc)
             }
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(title, Some(subtitle)))
     }
@@ -296,9 +296,8 @@ impl App {
         self.exec_step_view()
     }
 
-    /// Reusable exec-step view with collapsible log panel.
-    pub(crate) fn exec_step_view(&self) -> Element<'_, Message> {
-        let (title, detail) = if self.busy {
+    pub(crate) fn exec_status_copy(&self) -> (String, String) {
+        if self.busy {
             (
                 self.t("exec_executing_title").to_string(),
                 self.t("exec_executing_subtitle").to_string(),
@@ -313,7 +312,17 @@ impl App {
                 self.t("exec_done_title").to_string(),
                 self.t("exec_done_subtitle").to_string(),
             )
-        };
+        }
+    }
+
+    pub(crate) fn exec_action_bar(&self) -> Element<'_, Message> {
+        let (title, subtitle) = self.exec_status_copy();
+        wizard_action_bar(title, Some(subtitle))
+    }
+
+    /// Reusable exec-step view with collapsible log panel.
+    pub(crate) fn exec_step_view(&self) -> Element<'_, Message> {
+        let (_, detail) = self.exec_status_copy();
         let is_error = self.error_msg.is_some();
         let is_busy = self.busy;
 
@@ -459,29 +468,11 @@ impl App {
             ));
         }
 
-        let col = column![
-            text(title)
-                .size(theme::text_size::WIZARD_STEP_TITLE)
-                .center()
-                .style(move |t: &Theme| {
-                    let p = pal_of(t);
-                    let color = if is_error {
-                        p.error
-                    } else if is_busy {
-                        p.primary
-                    } else {
-                        p.success
-                    };
-                    iced::widget::text::Style { color: Some(color) }
-                }),
-            text(detail).size(13).style(muted_style).center(),
-            Space::new().height(8),
-            step_card,
-        ]
-        .spacing(10)
-        .padding(28)
-        .width(Length::Fill)
-        .align_x(iced::Alignment::Center);
+        let col = column![step_card]
+            .spacing(10)
+            .padding(28)
+            .width(Length::Fill)
+            .align_x(iced::Alignment::Center);
 
         let body = container(col)
             .width(Length::Fill)

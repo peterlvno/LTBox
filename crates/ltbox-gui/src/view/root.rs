@@ -132,6 +132,7 @@ impl App {
                 self.t("root_confirm_title").to_string(),
                 self.t("root_confirm_subtitle").to_string(),
             ),
+            7 => return Some(self.exec_action_bar()),
             8 => (
                 self.t("root_kpm_title").to_string(),
                 self.t("root_kpm_subtitle").to_string(),

@@ -74,7 +74,7 @@ impl App {
                 self.t("unroot_confirm_title").to_string(),
                 self.t("unroot_confirm_subtitle").to_string(),
             ),
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(title, Some(subtitle)))
     }

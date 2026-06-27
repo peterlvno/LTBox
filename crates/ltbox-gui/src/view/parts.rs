@@ -113,7 +113,7 @@ impl App {
                 self.t("flash_parts_confirm_title").to_string(),
                 self.t("flash_parts_confirm_subtitle").to_string(),
             ),
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(title, Some(subtitle)))
     }
@@ -518,7 +518,7 @@ impl App {
                 self.t("dump_parts_select_title").to_string(),
                 self.t("dump_parts_select_subtitle").to_string(),
             ),
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(title, Some(subtitle)))
     }
@@ -689,7 +689,7 @@ impl App {
                 self.t("phys_select_title").to_string(),
                 self.t("phys_select_subtitle").to_string(),
             ),
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(title, Some(subtitle)))
     }
@@ -806,7 +806,7 @@ impl App {
                 self.t("flash_parts_confirm_title").to_string(),
                 self.t("flash_phys_confirm_subtitle").to_string(),
             ),
-            _ => return None,
+            _ => return Some(self.exec_action_bar()),
         };
         Some(wizard_action_bar(title, Some(subtitle)))
     }
