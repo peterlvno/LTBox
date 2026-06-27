@@ -406,11 +406,14 @@ impl CountryPatchProgress {
             parts.push(self.failures.join("; "));
         }
         if !missing.is_empty() {
-            parts.push(format!("missing {}", missing.join(", ")));
+            parts.push(tr_args!(
+                "country_reason_missing",
+                items = missing.join(", ")
+            ));
         }
-        Err(format!(
-            "country-code patch incomplete ({})",
-            parts.join("; ")
+        Err(tr_args!(
+            "err_country_patch_incomplete",
+            details = parts.join("; ")
         ))
     }
 }

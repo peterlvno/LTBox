@@ -997,7 +997,7 @@ impl App {
                                 .and_then(|r| r)
                             })
                             .await
-                            .unwrap_or(Err("Task failed".to_string()))
+                            .unwrap_or_else(|_| Err(ltbox_core::i18n::tr("err_task_failed")))
                         },
                         |result| match result {
                             Ok(lines) => Message::Adv(AdvMsg::AdvExecDone(lines)),
@@ -1035,7 +1035,7 @@ impl App {
                             .and_then(|r| r)
                         })
                         .await
-                        .unwrap_or_else(|e| Err(format!("Task failed: {e}")))
+                        .unwrap_or_else(|e| Err(tr_args!("err_task_failed_with_error", error = e)))
                     },
                     |__v| Message::Adv(AdvMsg::AdvImageInfoExecDone(__v)),
                 );

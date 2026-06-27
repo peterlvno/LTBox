@@ -100,7 +100,8 @@ fn read_edl_start_device(
 ) -> std::result::Result<EdlStartProbe, String> {
     let work_dir = ltbox_core::app_paths::work_dir_for("flash_edl_probe");
     let _ = std::fs::remove_dir_all(&work_dir);
-    std::fs::create_dir_all(&work_dir).map_err(|e| format!("edl probe work dir: {e}"))?;
+    std::fs::create_dir_all(&work_dir)
+        .map_err(|e| tr_args!("err_edl_probe_work_dir_failed", error = e))?;
 
     // 1. Model + vbmeta_system rollback index — dump vbmeta_system from BOTH
     //    slots. It carries the device build fingerprint (system.fingerprint) AND
@@ -622,7 +623,7 @@ fn run_country_change(
     let mut country_progress = CountryPatchProgress::new(country_partitions);
     for label in country_partitions.iter().copied() {
         let Some(lun) = ltbox_core::partition_lun::lun_for_partition(label) else {
-            let reason = "no hardcoded LUN for label";
+            let reason = ltbox_core::i18n::tr("country_reason_no_lun");
             ltbox_core::live!(
                 log,
                 "[Country] {}",
@@ -648,7 +649,7 @@ fn run_country_change(
             )
         );
         if let Err(e) = session.dump_partition(label, &dump_path, 0, lun, log) {
-            let reason = format!("dump failed: {e}");
+            let reason = tr_args!("country_reason_dump_failed", error = e);
             ltbox_core::live!(
                 log,
                 "[Country] {}",
@@ -663,7 +664,7 @@ fn run_country_change(
         }
         // Backup before any patch touches it.
         if let Err(e) = std::fs::copy(&dump_path, critical_backup.join(format!("{label}.img"))) {
-            let reason = format!("backup failed: {e}");
+            let reason = tr_args!("country_reason_backup_failed", error = e);
             ltbox_core::live!(
                 log,
                 "[Country] {}",
@@ -683,7 +684,7 @@ fn run_country_change(
         ) {
             Ok(c) => c,
             Err(e) => {
-                let reason = format!("detect failed: {e}");
+                let reason = tr_args!("country_reason_detect_failed", error = e);
                 ltbox_core::live!(
                     log,
                     "[Country] {}",
@@ -725,7 +726,7 @@ fn run_country_change(
                 ) {
                     Ok(c) => changed |= c,
                     Err(e) => {
-                        let reason = format!("patch failed: {e}");
+                        let reason = tr_args!("country_reason_patch_failed", error = e);
                         ltbox_core::live!(
                             log,
                             "[Country] {}",
@@ -742,7 +743,7 @@ fn run_country_change(
             }
             None => {
                 if label != "persist" {
-                    let reason = "no known code detected";
+                    let reason = ltbox_core::i18n::tr("country_reason_no_known_code");
                     ltbox_core::live!(
                         log,
                         "[Country] {}",
@@ -773,7 +774,8 @@ fn run_country_change(
                         error = e.to_string()
                     )
                 );
-                country_progress.mark_failed(label, format!("flash failed: {e}"));
+                country_progress
+                    .mark_failed(label, tr_args!("country_reason_flash_failed", error = e));
             } else {
                 live!(
                     log,

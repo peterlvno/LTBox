@@ -3147,11 +3147,9 @@ impl App {
                 if let Some(manifest) = resolve_sahara_manifest(parent) {
                     return Ok(manifest.to_string_lossy().to_string());
                 }
-                return Err(format!(
-                    "TB323FU requires a multi-image loader manifest. Pick \
-                     `qsahara_device_programmer.xml` (or its encrypted `.x`) \
-                     directly, or place it next to the chosen .melf file ({}).",
-                    path.display()
+                return Err(tr_args!(
+                    "err_tb323fu_loader_manifest_required",
+                    path = path.display()
                 ));
             }
             // Encrypted multi-image manifest picked directly
@@ -3163,8 +3161,9 @@ impl App {
             if is_loader_file(path) {
                 return Ok(selected_path.to_string());
             }
-            return Err(format!(
-                "Unsupported loader file: {selected_path} (expected .melf, .mbn, .elf, .xml, or .x manifest)"
+            return Err(tr_args!(
+                "err_unsupported_loader_file",
+                path = selected_path
             ));
         }
 
@@ -3172,10 +3171,10 @@ impl App {
             self.remember_recent(pickers::PickerKind::LoaderFolder, selected_path);
             return find_edl_loader(path)
                 .map(|p| p.to_string_lossy().to_string())
-                .ok_or_else(|| format!("xbl_s_devprg_ns.melf not found in {selected_path}"));
+                .ok_or_else(|| tr_args!("err_loader_not_found_in_path", path = selected_path));
         }
 
-        Err(format!("Path does not exist: {selected_path}"))
+        Err(tr_args!("err_path_missing", path = selected_path))
     }
 
     fn subscription(&self) -> Subscription<Message> {
@@ -4185,6 +4184,7 @@ mod tests {
 
     #[test]
     fn country_patch_progress_requires_all_expected() {
+        install_core_translator(Language::En);
         let mut progress = CountryPatchProgress::new(&["devinfo", "persist"]);
         progress.mark_flashed("devinfo");
 
@@ -4203,6 +4203,7 @@ mod tests {
 
     #[test]
     fn country_patch_progress_surfaces_partition_failures() {
+        install_core_translator(Language::En);
         let mut progress = CountryPatchProgress::new(&["devinfo", "persist"]);
         progress.mark_flashed("devinfo");
         progress.mark_failed("persist", "no known country code");

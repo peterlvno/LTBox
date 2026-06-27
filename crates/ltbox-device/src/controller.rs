@@ -3,6 +3,7 @@
 use crate::adb::AdbManager;
 use crate::edl;
 use crate::fastboot::FastbootDevice;
+use ltbox_core::{i18n::tr, tr_args};
 use thiserror::Error;
 use tracing::info;
 
@@ -211,26 +212,24 @@ pub fn poll_active_slot(
                         return Ok(s);
                     }
                     Ok(Some(other)) => {
-                        last_adb_err = format!("ADB returned unexpected slot value `{other}`");
+                        last_adb_err = tr_args!("slot_err_adb_unexpected", slot = other);
                     }
                     Ok(None) => {
-                        last_adb_err =
-                            "ADB returned empty `ro.boot.slot_suffix` (device may not be A/B)"
-                                .to_string();
+                        last_adb_err = tr("slot_err_adb_empty");
                     }
                     Err(e) => {
-                        last_adb_err = format!("ADB shell failed: {e}");
+                        last_adb_err = tr_args!("slot_err_adb_shell_failed", error = e);
                     }
                 }
             }
             Ok(Some(state)) => {
-                last_adb_err = format!("ADB state `{state}` does not accept shell");
+                last_adb_err = tr_args!("slot_err_adb_state_no_shell", state = state);
             }
             Ok(None) => {
-                last_adb_err = "no ADB device visible".to_string();
+                last_adb_err = tr("slot_err_adb_no_device");
             }
             Err(e) => {
-                last_adb_err = format!("ADB probe failed: {e}");
+                last_adb_err = tr_args!("slot_err_adb_probe_failed", error = e);
             }
         }
 
@@ -249,21 +248,18 @@ pub fn poll_active_slot(
                         return Ok(s);
                     }
                     Ok(Some(other)) => {
-                        last_fastboot_err =
-                            format!("Fastboot returned unexpected `current-slot` value `{other}`");
+                        last_fastboot_err = tr_args!("slot_err_fastboot_unexpected", slot = other);
                     }
                     Ok(None) => {
-                        last_fastboot_err =
-                            "Fastboot `current-slot` getvar returned empty (device may not be A/B)"
-                                .to_string();
+                        last_fastboot_err = tr("slot_err_fastboot_empty");
                     }
                     Err(e) => {
-                        last_fastboot_err = format!("Fastboot getvar failed: {e}");
+                        last_fastboot_err = tr_args!("slot_err_fastboot_getvar_failed", error = e);
                     }
                 }
             }
             Err(e) => {
-                last_fastboot_err = format!("Fastboot open failed: {e}");
+                last_fastboot_err = tr_args!("slot_err_fastboot_open_failed", error = e);
             }
         }
 
@@ -275,19 +271,23 @@ pub fn poll_active_slot(
     // ADB cable, reboot to bootloader, or fix permissions.
     let mut detail = String::new();
     if adb_attempted {
-        detail.push_str(&format!("ADB: {last_adb_err}. "));
+        detail.push_str(&tr_args!("slot_err_adb_detail", error = last_adb_err));
     } else {
-        detail.push_str("ADB: never reached a shell-capable state. ");
+        detail.push_str(&tr("slot_err_adb_never_shell"));
     }
+    detail.push(' ');
     if fastboot_attempted {
-        detail.push_str(&format!("Fastboot: {last_fastboot_err}."));
+        detail.push_str(&tr_args!(
+            "slot_err_fastboot_detail",
+            error = last_fastboot_err
+        ));
     } else {
-        detail.push_str("Fastboot: device never enumerated as a Fastboot endpoint.");
+        detail.push_str(&tr("slot_err_fastboot_never"));
     }
-    Err(ControllerError::SlotResolve(format!(
-        "Could not detect active slot via ADB or Fastboot within {timeout:?}. {detail} \
-         Connect the device in normal / recovery mode (ADB) or bootloader mode (Fastboot) and retry. \
-         Defaulting to slot `_a` was previously silent and led to flashes landing on the wrong slot."
+    Err(ControllerError::SlotResolve(tr_args!(
+        "err_active_slot_detect_failed",
+        timeout = format!("{timeout:?}"),
+        detail = detail
     )))
 }
 

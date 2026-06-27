@@ -714,7 +714,8 @@ pub(crate) fn flash_worker(
     if fw_key_class == ltbox_patch::key_map::KeyClass::Fixed && !target_is_tb323fu {
         let kc_dir = ltbox_core::app_paths::work_dir_for("flash_keyclass");
         let _ = std::fs::remove_dir_all(&kc_dir);
-        std::fs::create_dir_all(&kc_dir).map_err(|e| format!("keyclass work dir: {e}"))?;
+        std::fs::create_dir_all(&kc_dir)
+            .map_err(|e| tr_args!("err_keyclass_work_dir_failed", error = e))?;
         let dev = match read_device_vbmeta(&mut session, active_slot.as_deref(), &kc_dir, &mut log)
         {
             Ok(d) => d,
@@ -777,7 +778,8 @@ pub(crate) fn flash_worker(
                 );
                 let arb_work_dir = ltbox_core::app_paths::work_dir_for("flash_arb");
                 let _ = std::fs::remove_dir_all(&arb_work_dir);
-                std::fs::create_dir_all(&arb_work_dir).map_err(|e| format!("arb work dir: {e}"))?;
+                std::fs::create_dir_all(&arb_work_dir)
+                    .map_err(|e| tr_args!("err_arb_work_dir_failed", error = e))?;
 
                 // Cross-region: convert vendor_boot + rebuild a testkey vbmeta
                 // first (region converter passes the testkey override), then
@@ -878,7 +880,8 @@ pub(crate) fn flash_worker(
         // (or flash stock when not a downgrade).
         let arb_work_dir = ltbox_core::app_paths::work_dir_for("flash_arb");
         let _ = std::fs::remove_dir_all(&arb_work_dir);
-        std::fs::create_dir_all(&arb_work_dir).map_err(|e| format!("arb work dir: {e}"))?;
+        std::fs::create_dir_all(&arb_work_dir)
+            .map_err(|e| tr_args!("err_arb_work_dir_failed", error = e))?;
         let (overlays, need) = build_tb323fu_arb_overlays(
             &mut session,
             fw_dir,
@@ -894,7 +897,8 @@ pub(crate) fn flash_worker(
     } else if rb_mode != ltbox_patch::rollback::RollbackMode::Off {
         let arb_work_dir = ltbox_core::app_paths::work_dir_for("flash_arb");
         let _ = std::fs::remove_dir_all(&arb_work_dir);
-        std::fs::create_dir_all(&arb_work_dir).map_err(|e| format!("arb work dir: {e}"))?;
+        std::fs::create_dir_all(&arb_work_dir)
+            .map_err(|e| tr_args!("err_arb_work_dir_failed", error = e))?;
 
         // Per-location device rollback floors. On EDL-start we already read
         // component-wise maxima from BOTH slots; apply each location's own floor
@@ -1113,18 +1117,22 @@ pub(crate) fn flash_worker(
             tr_args!("live_flash_efisp_fetch", variant = suffix)
         );
         let gh = ltbox_core::github::GitHubClient::from_url("github.com/miner7222/gbl_root_baldur")
-            .map_err(|e| format!("efisp EFI: GitHub client: {e}"))?;
+            .map_err(|e| tr_args!("err_flash_efisp_github_failed", error = e))?;
         let (asset_name, asset_url) = gh
             .latest_release_asset_where(|n| n.to_ascii_lowercase().ends_with(suffix))
-            .map_err(|e| {
-                format!("efisp EFI: no '{suffix}' asset on latest gbl_root_baldur release: {e}")
-            })?;
+            .map_err(|e| tr_args!("err_flash_efisp_asset_missing", suffix = suffix, error = e))?;
         let efi_dir = ltbox_core::app_paths::work_dir_for("flash_efisp");
         let _ = std::fs::remove_dir_all(&efi_dir);
-        std::fs::create_dir_all(&efi_dir).map_err(|e| format!("efisp EFI work dir: {e}"))?;
+        std::fs::create_dir_all(&efi_dir)
+            .map_err(|e| tr_args!("err_flash_efisp_work_dir_failed", error = e))?;
         let efi_path = efi_dir.join(&asset_name);
-        ltbox_core::downloader::download_to_file(&asset_url, &efi_path, &mut log)
-            .map_err(|e| format!("efisp EFI: download '{asset_name}' failed: {e}"))?;
+        ltbox_core::downloader::download_to_file(&asset_url, &efi_path, &mut log).map_err(|e| {
+            tr_args!(
+                "err_flash_efisp_download_failed",
+                asset = asset_name,
+                error = e
+            )
+        })?;
         ltbox_core::live!(
             log,
             "[Flash] {}",

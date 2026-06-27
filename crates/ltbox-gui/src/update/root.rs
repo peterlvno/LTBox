@@ -470,7 +470,7 @@ impl App {
                             .and_then(|r| r)
                         })
                         .await
-                        .unwrap_or(Err("Task failed".to_string()))
+                        .unwrap_or_else(|_| Err(ltbox_core::i18n::tr("err_task_failed")))
                     },
                     |result| match result {
                         Ok(lines) => Message::Root(RootMsg::RootExecDone(lines)),

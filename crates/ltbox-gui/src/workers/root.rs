@@ -8,7 +8,7 @@ use crate::{
     phase_marker, stage_manager_apk_for_manual_install, transition_to_edl,
     wait_and_install_root_manager_apk,
 };
-use ltbox_core::{live, tr_args};
+use ltbox_core::{i18n::tr, live, tr_args};
 
 // The 13 params are the closure's captured locals, threaded through verbatim
 // from the update_root handler; bundling them into a struct would only move the
@@ -35,7 +35,7 @@ pub(crate) fn root_worker(
     // GKI route: AnyKernel3 zip is the full input —
     // no provider / version / GitHub fetch.
     let is_gki_route = mode == Some(RootMode::Gki);
-    let family = family.ok_or_else(|| "No root family selected".to_string())?;
+    let family = family.ok_or_else(|| tr("err_root_family_missing"))?;
     let is_skroot_route = family == Family::Skroot;
     let (provider, version) = if is_gki_route {
         // `Magisk` stand-in — picks magiskboot as
@@ -46,8 +46,8 @@ pub(crate) fn root_worker(
         // the latest Lite release manager APK and direct boot.img patching.
         (Provider::Magisk, VerChoice::Stable)
     } else {
-        let prov = provider.ok_or_else(|| "No provider selected".to_string())?;
-        let ver = version.ok_or_else(|| "No version selected".to_string())?;
+        let prov = provider.ok_or_else(|| tr("err_root_provider_missing"))?;
+        let ver = version.ok_or_else(|| tr("err_root_version_missing"))?;
         (prov, ver)
     };
 
@@ -83,17 +83,10 @@ pub(crate) fn root_worker(
     let file_path_buf: Option<std::path::PathBuf> =
         file_path.as_ref().map(std::path::PathBuf::from);
 
-    let loader_path = fw_folder.ok_or_else(|| {
-        "No EDL loader selected. Pick an xbl_s_devprg_ns.melf \
-                (or equivalent `.melf`) file on the Loader step and retry."
-            .to_string()
-    })?;
+    let loader_path = fw_folder.ok_or_else(|| tr("err_root_loader_not_selected"))?;
     let loader = std::path::PathBuf::from(&loader_path);
     if !loader.is_file() {
-        return Err(format!(
-            "Selected loader does not exist: {}",
-            loader.display()
-        ));
+        return Err(tr_args!("err_root_loader_missing", path = loader.display()));
     }
     // Accept single-blob loaders (`.melf` / `.mbn` /
     // `.elf`), the `.xml` multi-image manifest, or its
@@ -108,9 +101,9 @@ pub(crate) fn root_worker(
         })
         || ltbox_core::sahara_xml::is_encrypted_manifest_filename(&loader);
     if !loader_ok {
-        return Err(format!(
-            "Selected loader must be .melf / .mbn / .elf / .xml / .x, got: {}",
-            loader.display()
+        return Err(tr_args!(
+            "err_root_loader_invalid_ext",
+            path = loader.display()
         ));
     }
     // Signing key: pipeline resolves via KEY_MAP
@@ -126,8 +119,10 @@ pub(crate) fn root_worker(
     let work_dir = base.join("work");
     let output_dir = base.join("out");
     let _ = std::fs::remove_dir_all(&work_dir);
-    std::fs::create_dir_all(&work_dir).map_err(|e| format!("work dir: {e}"))?;
-    std::fs::create_dir_all(&output_dir).map_err(|e| format!("out dir: {e}"))?;
+    std::fs::create_dir_all(&work_dir)
+        .map_err(|e| tr_args!("err_root_work_dir_failed", error = e))?;
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|e| tr_args!("err_root_output_dir_failed", error = e))?;
 
     // Phase 1/7 — ADB connect + slot/kver detect.
     // Front-loaded so the user sees something happen
@@ -175,10 +170,7 @@ pub(crate) fn root_worker(
         }
     }
     if mode == Some(RootMode::Lkm) && kernel_version.is_none() {
-        return Err(
-            "KernelSU LKM requires kernel version before EDL; enter it manually and retry."
-                .to_string(),
-        );
+        return Err(tr("err_ksu_lkm_kernel_version_required"));
     }
 
     let mut manager_cfg = RootPipelineConfig {
@@ -217,10 +209,11 @@ pub(crate) fn root_worker(
     // installed manager APK across two
     // different builds.
     ensure_nightly_run_id(&mut manager_cfg, &mut log)
-        .map_err(|e| format!("Nightly run resolve: {e}"))?;
-    let mut manager_apk =
-        stage_root_manager_apk(&manager_cfg, &mut log).map_err(|e| format!("Manager APK: {e}"))?;
-    stage_root_payload(&manager_cfg, &mut log).map_err(|e| format!("Root payload: {e}"))?;
+        .map_err(|e| tr_args!("err_root_nightly_run_failed", error = e))?;
+    let mut manager_apk = stage_root_manager_apk(&manager_cfg, &mut log)
+        .map_err(|e| tr_args!("err_root_manager_apk_failed", error = e))?;
+    stage_root_payload(&manager_cfg, &mut log)
+        .map_err(|e| tr_args!("err_root_payload_failed", error = e))?;
     // Manager install is non-fatal; keep the path to surface in the
     // post-run manual-install reminder (the on-device /sdcard copy when
     // the push fallback worked, otherwise the local staged file).
@@ -317,7 +310,13 @@ pub(crate) fn root_worker(
                         ROOT_PARTITIONS_LUN,
                         &mut log,
                     )
-                    .map_err(|e| format!("Dump {boot_primary}: {e}"))?;
+                    .map_err(|e| {
+                        tr_args!(
+                            "err_root_dump_partition_failed",
+                            partition = boot_primary,
+                            error = e
+                        )
+                    })?;
 
                 // TB323FU root needs provisioned efisp; once present,
                 // skip AVB footer and vbmeta work. Keep the fingerprint
@@ -338,7 +337,13 @@ pub(crate) fn root_worker(
                     let dumped_efisp = work_dir.join("efisp.img");
                     session
                         .dump_partition("efisp", &dumped_efisp, 0, ROOT_PARTITIONS_LUN, &mut log)
-                        .map_err(|e| format!("Dump efisp: {e}"))?;
+                        .map_err(|e| {
+                            tr_args!(
+                                "err_root_dump_partition_failed",
+                                partition = "efisp",
+                                error = e
+                            )
+                        })?;
                     let efisp_empty = std::fs::read(&dumped_efisp)
                         .map(|d| efisp_is_empty(&d))
                         .unwrap_or(true);
@@ -373,21 +378,28 @@ pub(crate) fn root_worker(
                         let gh = ltbox_core::github::GitHubClient::from_url(
                             "github.com/miner7222/gbl_root_baldur",
                         )
-                        .map_err(|e| format!("efisp EFI: GitHub client: {e}"))?;
+                        .map_err(|e| tr_args!("err_root_efisp_github_failed", error = e))?;
                         let (asset_name, asset_url) = gh
-                            .latest_release_asset_where(|n| n.to_ascii_lowercase().ends_with(suffix))
+                            .latest_release_asset_where(|n| {
+                                n.to_ascii_lowercase().ends_with(suffix)
+                            })
                             .map_err(|e| {
-                                format!(
-                                    "efisp EFI: no '{suffix}' asset on latest gbl_root_baldur release: {e}"
-                                )
+                                tr_args!("err_root_efisp_asset_missing", suffix = suffix, error = e)
                             })?;
                         let efi_dir = ltbox_core::app_paths::work_dir_for("root_efisp");
                         let _ = std::fs::remove_dir_all(&efi_dir);
                         std::fs::create_dir_all(&efi_dir)
-                            .map_err(|e| format!("efisp EFI work dir: {e}"))?;
+                            .map_err(|e| tr_args!("err_root_efisp_work_dir_failed", error = e))?;
                         let efi_path = efi_dir.join(&asset_name);
-                        ltbox_core::downloader::download_to_file(&asset_url, &efi_path, &mut log)
-                            .map_err(|e| format!("efisp EFI: download '{asset_name}' failed: {e}"))?;
+                        if let Err(e) = ltbox_core::downloader::download_to_file(
+                            &asset_url, &efi_path, &mut log,
+                        ) {
+                            return Err(tr_args!(
+                                "err_root_efisp_download_failed",
+                                asset = asset_name,
+                                error = e
+                            ));
+                        }
                         live!(
                             log,
                             "[Root] {}",
@@ -410,18 +422,35 @@ pub(crate) fn root_worker(
                             ROOT_PARTITIONS_LUN,
                             &mut log,
                         )
-                        .map_err(|e| format!("Dump {vbmeta_primary}: {e}"))?;
+                        .map_err(|e| {
+                            tr_args!(
+                                "err_root_dump_partition_failed",
+                                partition = vbmeta_primary,
+                                error = e
+                            )
+                        })?;
                 }
                 // Stock-image safety net for Unroot, captured
                 // before the irreversible patch + flash. A copy
                 // failure must abort the run.
-                std::fs::create_dir_all(&backup_dir)
-                    .map_err(|e| format!("Create backup dir {}: {e}", backup_dir.display()))?;
-                std::fs::copy(&dumped_boot, backup_dir.join(boot_out))
-                    .map_err(|e| format!("Back up {boot_out}: {e}"))?;
+                std::fs::create_dir_all(&backup_dir).map_err(|e| {
+                    tr_args!(
+                        "err_root_backup_dir_failed",
+                        path = backup_dir.display(),
+                        error = e
+                    )
+                })?;
+                std::fs::copy(&dumped_boot, backup_dir.join(boot_out)).map_err(|e| {
+                    tr_args!("err_root_backup_copy_failed", image = boot_out, error = e)
+                })?;
                 if !is_tb323fu {
-                    std::fs::copy(&dumped_vbmeta, backup_dir.join("vbmeta.img"))
-                        .map_err(|e| format!("Back up vbmeta.img: {e}"))?;
+                    std::fs::copy(&dumped_vbmeta, backup_dir.join("vbmeta.img")).map_err(|e| {
+                        tr_args!(
+                            "err_root_backup_copy_failed",
+                            image = "vbmeta.img",
+                            error = e
+                        )
+                    })?;
                 }
                 if is_tb323fu {
                     live!(
@@ -445,7 +474,7 @@ pub(crate) fn root_worker(
                 // the device is still in Firehose.
                 session
                     .reset_to_edl(&mut log)
-                    .map_err(|e| format!("reset_to_edl: {e}"))?;
+                    .map_err(|e| tr_args!("err_root_reset_to_edl_failed", error = e))?;
                 // Terminate any dangling pbr `\r`-only
                 // line so the next message gets a fresh row.
                 println!();
@@ -471,7 +500,7 @@ pub(crate) fn root_worker(
             // if a future field gets added to the struct.
             let cfg = manager_cfg.clone();
             let artifacts = build_patched_artifacts(&cfg, is_tb323fu, &mut log)
-                .map_err(|e| format!("Root patch: {e}"))?;
+                .map_err(|e| tr_args!("err_root_patch_failed", error = e))?;
             if manager_apk.is_none() {
                 manager_apk = artifacts.manager_apk.clone();
             }
@@ -500,7 +529,7 @@ pub(crate) fn root_worker(
                 );
                 session
                     .flash_partition("efisp", efi, 0, efisp_lun, &mut log)
-                    .map_err(|e| format!("efisp GBL provisioning failed (boot left stock): {e}"))?;
+                    .map_err(|e| tr_args!("err_root_efisp_provision_failed", error = e))?;
                 live!(
                     log,
                     "[Root] {}",
@@ -515,11 +544,23 @@ pub(crate) fn root_worker(
                     ROOT_PARTITIONS_LUN,
                     &mut log,
                 )
-                .map_err(|e| format!("Flash {boot_primary}: {e}"))?;
+                .map_err(|e| {
+                    tr_args!(
+                        "err_root_flash_partition_failed",
+                        partition = boot_primary,
+                        error = e
+                    )
+                })?;
             if let Some(vbpath) = &artifacts.patched_vbmeta {
                 session
                     .flash_partition(&vbmeta_primary, vbpath, 0, ROOT_PARTITIONS_LUN, &mut log)
-                    .map_err(|e| format!("Flash {vbmeta_primary}: {e}"))?;
+                    .map_err(|e| {
+                        tr_args!(
+                            "err_root_flash_partition_failed",
+                            partition = vbmeta_primary,
+                            error = e
+                        )
+                    })?;
             }
             println!();
             // Phase 7/7 — Reboot to system (was Phase 6/6).

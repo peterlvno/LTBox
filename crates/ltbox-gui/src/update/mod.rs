@@ -356,11 +356,16 @@ impl App {
                     match std::fs::write(&path, joined) {
                         Ok(()) => self.note_log_save_result(
                             source,
-                            format!("[Log] Saved to {}", path.display()),
+                            tr_args!("log_save_succeeded", path = path.display()),
                         ),
                         Err(e) => {
-                            self.error_msg = Some(format!("Log save failed: {e}"));
-                            self.note_log_save_result(source, format!("[Log] Save failed: {e}"));
+                            let error = e.to_string();
+                            self.error_msg =
+                                Some(tr_args!("err_log_save_failed", error = error.clone()));
+                            self.note_log_save_result(
+                                source,
+                                tr_args!("log_save_failed", error = error),
+                            );
                         }
                     }
                 }
@@ -847,7 +852,7 @@ impl App {
                             }
                         })
                         .await
-                        .unwrap_or_else(|_| Err("Task panicked".to_string()))
+                        .unwrap_or_else(|_| Err(ltbox_core::i18n::tr("err_task_panicked")))
                     },
                     Message::InstallDriversDone,
                 );

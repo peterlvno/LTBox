@@ -63,7 +63,7 @@ impl App {
                             reboot_worker(conn, target, reboot_cmd_sent)
                         })
                         .await
-                        .unwrap_or_else(|_| Err("Task failed".to_string()))
+                        .unwrap_or_else(|_| Err(ltbox_core::i18n::tr("err_task_failed")))
                     },
                     |r| match r {
                         Ok(lines) => Message::Reboot(RebootMsg::RebootDone(lines)),
@@ -90,7 +90,7 @@ impl App {
                     }
                 };
                 if !loader.exists() {
-                    self.error_msg = Some(format!("Loader not found: {}", loader.display()));
+                    self.error_msg = Some(tr_args!("err_loader_missing", path = loader.display()));
                     return Task::none();
                 }
                 self.begin_op(View::Reboot);
@@ -110,7 +110,7 @@ impl App {
                             reboot_edl_with_loader_worker(loader, target, reboot_cmd_sent)
                         })
                         .await
-                        .unwrap_or_else(|_| Err("Task failed".to_string()))
+                        .unwrap_or_else(|_| Err(ltbox_core::i18n::tr("err_task_failed")))
                     },
                     |r| match r {
                         Ok(lines) => Message::Reboot(RebootMsg::RebootDone(lines)),

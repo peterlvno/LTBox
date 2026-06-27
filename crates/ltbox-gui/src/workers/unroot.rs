@@ -5,7 +5,7 @@ use crate::{
     ConnectionStatus, LiveLabels, UnrootType, find_edl_loader, open_edl_session, phase_marker,
     transition_to_edl,
 };
-use ltbox_core::{live, tr_args};
+use ltbox_core::{i18n::tr, live, tr_args};
 
 pub(crate) fn unroot_worker(
     folder: String,
@@ -24,10 +24,10 @@ pub(crate) fn unroot_worker(
     let boot_path = dir.join(boot_name);
     let vbmeta_path = dir.join("vbmeta.img");
     if !boot_path.exists() {
-        return Err(format!("{boot_name} not found in selected folder"));
+        return Err(tr_args!("err_unroot_image_missing", image = boot_name));
     }
     if !vbmeta_path.exists() {
-        return Err("vbmeta.img not found in selected folder".to_string());
+        return Err(tr("err_unroot_vbmeta_missing"));
     }
     live!(
         log,
@@ -46,7 +46,7 @@ pub(crate) fn unroot_worker(
     // signal to the user.
     let slot =
         ltbox_device::controller::poll_active_slot(std::time::Duration::from_secs(30), &mut log)
-            .map_err(|e| format!("Unroot slot resolve: {e}"))?;
+            .map_err(|e| tr_args!("err_unroot_slot_resolve_failed", error = e))?;
 
     // Decoupled loader — explicit picker /
     // Settings default takes priority. Fall back
@@ -58,7 +58,7 @@ pub(crate) fn unroot_worker(
         Some(p) => std::path::PathBuf::from(p),
         None => find_edl_loader(dir)
             .or_else(|| dir.parent().and_then(find_edl_loader))
-            .ok_or_else(|| format!("xbl_s_devprg_ns.melf not found under {}", dir.display()))?,
+            .ok_or_else(|| tr_args!("err_unroot_loader_missing_under", path = dir.display()))?,
     };
     live!(
         log,
@@ -78,9 +78,9 @@ pub(crate) fn unroot_worker(
     let boot_label = format!("{base_part}{slot}");
     let vbm_label = format!("vbmeta{slot}");
     let boot_lun = ltbox_core::partition_lun::lun_for_partition(base_part)
-        .ok_or_else(|| format!("No hardcoded LUN for {base_part}"))?;
+        .ok_or_else(|| tr_args!("err_no_hardcoded_lun", partition = base_part))?;
     let vbm_lun = ltbox_core::partition_lun::lun_for_partition("vbmeta")
-        .ok_or_else(|| "No hardcoded LUN for vbmeta".to_string())?;
+        .ok_or_else(|| tr_args!("err_no_hardcoded_lun", partition = "vbmeta"))?;
     live!(
         log,
         "[Unroot] {}",
@@ -109,10 +109,10 @@ pub(crate) fn unroot_worker(
     let mut session = open_edl_session(&loader, true, &mut log)?;
     session
         .flash_partition(&boot_label, &boot_path, 0, boot_lun, &mut log)
-        .map_err(|e| format!("Flash {boot_label} failed: {e}"))?;
+        .map_err(|e| tr_args!("err_unroot_flash_failed", label = boot_label, error = e))?;
     session
         .flash_partition(&vbm_label, &vbmeta_path, 0, vbm_lun, &mut log)
-        .map_err(|e| format!("Flash {vbm_label} failed: {e}"))?;
+        .map_err(|e| tr_args!("err_unroot_flash_failed", label = vbm_label, error = e))?;
 
     println!();
     live!(
@@ -122,7 +122,7 @@ pub(crate) fn unroot_worker(
     );
     session
         .reset(&mut log)
-        .map_err(|e| format!("Reset failed: {e}"))?;
+        .map_err(|e| tr_args!("err_reset_failed", error = e))?;
     live!(log, "[Unroot] {}", ll.unroot_completed);
     Ok(log)
 }

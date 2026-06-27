@@ -2,6 +2,7 @@
 //! Each runs on a blocking thread; extracted from the update_reboot handler.
 
 use crate::{ConnectionStatus, RebootTarget, ensure_edl, open_edl_session};
+use ltbox_core::{i18n::tr, tr_args};
 use std::path::PathBuf;
 
 pub(crate) fn reboot_worker(
@@ -16,7 +17,7 @@ pub(crate) fn reboot_worker(
             // `AdbManager::reboot` needs the serial
             // from a prior `check_device` call.
             if !adb.check_device().unwrap_or(false) {
-                return Err("No ADB device detected — try replugging the cable".into());
+                return Err(tr("err_no_adb_device_replug"));
             }
             let arg = match t {
                 RebootTarget::System => "",
@@ -25,19 +26,26 @@ pub(crate) fn reboot_worker(
                 RebootTarget::Edl => "edl",
             };
             if let Err(e) = adb.reboot(arg) {
-                return Err(format!("ADB reboot failed: {e}"));
+                return Err(tr_args!("err_reboot_adb_failed", error = e));
             }
         }
         (ConnectionStatus::Fastboot, t) => {
             let mut dev = ltbox_device::fastboot::FastbootDevice::open()
-                .map_err(|e| format!("Fastboot open: {e}"))?;
+                .map_err(|e| tr_args!("err_fastboot_open_failed", error = e))?;
             match t {
                 RebootTarget::System => {
-                    dev.reboot().map_err(|e| format!("reboot: {e}"))?;
+                    dev.reboot().map_err(|e| {
+                        tr_args!("err_fastboot_command_failed", command = "reboot", error = e)
+                    })?;
                 }
                 RebootTarget::Bootloader => {
-                    dev.reboot_bootloader()
-                        .map_err(|e| format!("reboot-bootloader: {e}"))?;
+                    dev.reboot_bootloader().map_err(|e| {
+                        tr_args!(
+                            "err_fastboot_command_failed",
+                            command = "reboot-bootloader",
+                            error = e
+                        )
+                    })?;
                 }
                 RebootTarget::Edl => {
                     drop(dev);
@@ -45,9 +53,7 @@ pub(crate) fn reboot_worker(
                         .map_err(|()| ltbox_core::i18n::tr("err_edl_transition_failed"))?;
                 }
                 RebootTarget::Recovery => {
-                    return Err(
-                        "Fastboot cannot reboot to recovery directly — switch to ADB first".into(),
-                    );
+                    return Err(tr("err_fastboot_recovery_unsupported"));
                 }
             }
         }
@@ -57,15 +63,13 @@ pub(crate) fn reboot_worker(
             unreachable!("EDL reboot goes through RebootEdlWithLoader");
         }
         (ConnectionStatus::None, _) => {
-            return Err("No device connected".into());
+            return Err(tr("err_no_device_connected"));
         }
         (ConnectionStatus::AdbUnauthorized, _) => {
-            return Err("USB debugging is not authorized on the device".into());
+            return Err(tr("err_usb_debugging_unauthorized"));
         }
         (ConnectionStatus::AdbServerBlocking, _) => {
-            return Err(
-                                                        "An external adb server is holding the USB interface. Kill it from the dashboard and retry.".into(),
-                                                    );
+            return Err(tr("err_adb_server_blocking_retry"));
         }
     }
     ltbox_core::live!(log, "[Reboot] {}", reboot_cmd_sent);
@@ -91,10 +95,13 @@ pub(crate) fn reboot_edl_with_loader_worker(
         RebootTarget::Edl => {
             session
                 .reset_to_edl(&mut log)
-                .map_err(|e| format!("reset_to_edl: {e}"))?;
+                .map_err(|e| tr_args!("err_reboot_edl_reset_failed", error = e))?;
         }
         other => {
-            return Err(format!("Reboot to {other:?} is not supported from EDL"));
+            return Err(tr_args!(
+                "err_reboot_edl_target_unsupported",
+                target = format!("{other:?}")
+            ));
         }
     }
     ltbox_core::live!(log, "[Reboot] {}", reboot_cmd_sent);
