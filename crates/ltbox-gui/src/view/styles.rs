@@ -183,15 +183,17 @@ pub(crate) fn m3_pick_list_style(t: &Theme, status: pick_list::Status) -> pick_l
 pub(crate) fn m3_pick_list_menu_style(t: &Theme) -> iced::widget::overlay::menu::Style {
     let p = pal_of(t);
     iced::widget::overlay::menu::Style {
-        background: p.surface_container_high.into(),
+        // M3 exposed dropdown menus use the menu surface for the popup and a
+        // higher surface tone for the selected / hovered simple item.
+        background: p.surface_container.into(),
         border: iced::Border {
-            color: p.outline_variant,
-            width: 1.0,
+            color: iced::Color::TRANSPARENT,
+            width: 0.0,
             radius: theme::shape::SM.into(),
         },
         text_color: p.on_surface,
-        selected_text_color: p.on_secondary_container,
-        selected_background: p.secondary_container.into(),
+        selected_text_color: p.on_surface,
+        selected_background: p.surface_container_highest.into(),
         shadow: theme::elevation(2, is_dark(t)),
     }
 }
