@@ -353,6 +353,7 @@
   "flash_data_title": "データモードを選択",
   "flash_folder_desc": "ファームウェアイメージと rawprogram XML を含むフォルダ",
   "flash_folder_placeholder": "フォルダが選択されていません",
+  "flash_folder_subtitle": "展開済みの QFIL ファームウェアフォルダを選択してください。",
   "flash_folder_title": "ファームウェアフォルダを選択",
   "flash_loader_browse": "ローダーファイルを選択",
   "flash_loader_change": "ローダーを変更",

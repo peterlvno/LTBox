@@ -353,6 +353,7 @@
   "flash_data_title": "데이터 모드 선택",
   "flash_folder_desc": "펌웨어 이미지와 rawprogram XML이 들어있는 폴더",
   "flash_folder_placeholder": "선택된 폴더 없음",
+  "flash_folder_subtitle": "압축 해제된 QFIL 펌웨어 폴더를 선택하세요.",
   "flash_folder_title": "펌웨어 폴더 선택",
   "flash_loader_browse": "로더 파일 선택",
   "flash_loader_change": "로더 변경",

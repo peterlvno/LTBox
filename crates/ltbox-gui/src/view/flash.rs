@@ -59,7 +59,7 @@ impl App {
             0 => ("flash_region_title", Some("flash_region_subtitle")),
             1 => ("flash_target_title", Some("flash_target_subtitle")),
             2 => ("flash_data_title", Some("flash_data_subtitle")),
-            3 => ("flash_folder_title", Some("flash_folder_desc")),
+            3 => ("flash_folder_title", Some("flash_folder_subtitle")),
             4 => ("flash_confirm_title", Some("flash_confirm_subtitle")),
             _ => return Some(self.exec_action_bar()),
         };

@@ -353,6 +353,7 @@
   "flash_data_title": "Режим данных",
   "flash_folder_desc": "Папка с образами прошивки и rawprogram XML",
   "flash_folder_placeholder": "Папка не выбрана",
+  "flash_folder_subtitle": "Выберите распакованную папку прошивки QFIL.",
   "flash_folder_title": "Выбор папки прошивки",
   "flash_loader_browse": "Выбрать файл загрузчика",
   "flash_loader_change": "Сменить загрузчик",

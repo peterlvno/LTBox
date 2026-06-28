@@ -353,6 +353,7 @@
   "flash_data_title": "Select Data Mode",
   "flash_folder_desc": "Folder containing firmware images and rawprogram XML",
   "flash_folder_placeholder": "No folder selected",
+  "flash_folder_subtitle": "Select the extracted QFIL firmware folder.",
   "flash_folder_title": "Select Firmware Folder",
   "flash_loader_browse": "Select loader file",
   "flash_loader_change": "Change loader",

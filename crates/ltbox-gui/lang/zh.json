@@ -353,6 +353,7 @@
   "flash_data_title": "选择数据模式",
   "flash_folder_desc": "包含固件镜像和 rawprogram XML 的文件夹",
   "flash_folder_placeholder": "未选择文件夹",
+  "flash_folder_subtitle": "选择已解压的 QFIL 固件文件夹。",
   "flash_folder_title": "选择固件文件夹",
   "flash_loader_browse": "选择加载器文件",
   "flash_loader_change": "更换加载器",
