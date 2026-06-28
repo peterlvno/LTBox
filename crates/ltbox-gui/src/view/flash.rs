@@ -389,83 +389,114 @@ impl App {
         } else {
             "flash_confirm_warning"
         };
-        let mut rows = vec![
+        let warning = container(
             text(self.t(warning_key).to_string())
-                .size(13)
+                .size(12)
                 .style(warning_style)
                 .center()
-                .into(),
-            widget::rule::horizontal(1).into(),
-            info_kv_center_editable(
-                self.t("flash_confirm_region"),
-                &region,
-                region_changed,
-                &caution,
-                open(ConfirmField::Region),
-            ),
-            info_kv_center_editable(
-                self.t("flash_confirm_target"),
-                &target,
-                modify_changed,
-                &caution,
-                open(ConfirmField::Target),
-            ),
-            info_kv_center_editable(
-                self.t("flash_confirm_data"),
-                &data,
-                data_changed,
-                &caution,
-                open(ConfirmField::Data),
-            ),
-            info_kv_center_editable(
-                self.t("flash_confirm_region_edit"),
-                &modify_region,
-                modify_changed,
-                &caution,
-                open(ConfirmField::RegionEdit),
-            ),
-            info_kv_center_editable(
-                self.t("flash_confirm_rollback"),
-                &rollback,
-                rollback_changed,
-                &caution,
-                open(ConfirmField::Rollback),
-            ),
-        ];
+                .width(Length::Fill)
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+        )
+        .padding([4, 8])
+        .width(Length::Fill);
+
+        let region_row = info_kv_center_editable(
+            self.t("flash_confirm_region"),
+            &region,
+            region_changed,
+            &caution,
+            open(ConfirmField::Region),
+        );
+        let target_row = info_kv_center_editable(
+            self.t("flash_confirm_target"),
+            &target,
+            modify_changed,
+            &caution,
+            open(ConfirmField::Target),
+        );
+        let data_row = info_kv_center_editable(
+            self.t("flash_confirm_data"),
+            &data,
+            data_changed,
+            &caution,
+            open(ConfirmField::Data),
+        );
+        let region_edit_row = info_kv_center_editable(
+            self.t("flash_confirm_region_edit"),
+            &modify_region,
+            modify_changed,
+            &caution,
+            open(ConfirmField::RegionEdit),
+        );
+        let rollback_row = info_kv_center_editable(
+            self.t("flash_confirm_rollback"),
+            &rollback,
+            rollback_changed,
+            &caution,
+            open(ConfirmField::Rollback),
+        );
+
         let country_changed = base.is_some_and(|b| b.country_action != cfg.country_action);
-        if let Some(cc) = cfg.country_action.target() {
-            let entry = COUNTRY_CODES.iter().find(|e| e.code == cc);
-            let label = entry
+        let country_label = if let Some(cc) = cfg.country_action.target() {
+            COUNTRY_CODES
+                .iter()
+                .find(|e| e.code == cc)
                 .map(|e| format!("{} — {}", e.code, e.name))
-                .unwrap_or_else(|| cc.to_string());
-            rows.push(info_kv_center_editable(
-                self.t("flash_confirm_country"),
-                &label,
-                country_changed,
-                &caution,
-                open(ConfirmField::Country),
-            ));
-        } else if cfg.wipe && cfg.country_action.is_skipped() {
-            rows.push(info_kv_center_editable(
-                self.t("flash_confirm_country"),
-                self.t("flash_confirm_country_skip"),
-                country_changed,
-                &caution,
-                open(ConfirmField::Country),
-            ));
-        }
+                .unwrap_or_else(|| cc.to_string())
+        } else {
+            self.t("flash_confirm_country_skip").to_string()
+        };
+        let country_row = info_kv_center_editable(
+            self.t("flash_confirm_country"),
+            &country_label,
+            country_changed,
+            &caution,
+            open(ConfirmField::Country),
+        );
         let folder_owned = self
             .flash
             .firmware_folder
             .clone()
             .unwrap_or_else(|| dash.clone());
-        rows.push(info_kv_center_action(
+        let folder_row = info_kv_center_action(
             self.t("flash_confirm_folder"),
             &folder_owned,
             Message::Flash(FlashMsg::FlashSelectFolder),
-        ));
+        );
 
-        self.confirm_rows_view(rows)
+        let mut details = column![
+            row![region_row, target_row].spacing(12).width(Length::Fill),
+            row![data_row, region_edit_row]
+                .spacing(12)
+                .width(Length::Fill),
+        ]
+        .spacing(8)
+        .width(Length::Fill);
+
+        details = details.push(
+            row![rollback_row, country_row]
+                .spacing(12)
+                .width(Length::Fill),
+        );
+
+        let content = column![
+            warning,
+            widget::rule::horizontal(1),
+            details,
+            widget::rule::horizontal(1),
+            folder_row,
+        ]
+        .spacing(8)
+        .padding([18, 28])
+        .width(Length::Fill)
+        .align_x(iced::Alignment::Center);
+
+        container(content.max_width(WIZARD_CONFIRM_MAX_WIDTH))
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .into()
     }
 
     pub(crate) fn flash_exec_step(&self) -> Element<'_, Message> {

@@ -598,19 +598,19 @@ pub(crate) fn flash_worker(
             "[Flash] {}",
             ltbox_core::i18n::tr("live_flash_data_mode_wipe")
         );
-        if let Some(cc) = cfg.country_action.target() {
-            ltbox_core::live!(
-                log,
-                "[Flash] {}",
-                tr_args!("live_flash_country_devinfo", code = cc)
-            );
-        } else if cfg.country_action.is_skipped() {
-            ltbox_core::live!(
-                log,
-                "[Flash] {}",
-                ltbox_core::i18n::tr("live_flash_country_skip")
-            );
-        }
+    }
+    if let Some(cc) = cfg.country_action.target() {
+        ltbox_core::live!(
+            log,
+            "[Flash] {}",
+            tr_args!("live_flash_country_devinfo", code = cc)
+        );
+    } else if cfg.wipe && cfg.country_action.is_skipped() {
+        ltbox_core::live!(
+            log,
+            "[Flash] {}",
+            ltbox_core::i18n::tr("live_flash_country_skip")
+        );
     }
 
     // 8. EDL flash. A user-picked loader (the firmware folder shipped none) wins
@@ -1311,9 +1311,7 @@ pub(crate) fn flash_worker(
 
     // Country-code patch is best-effort after firmware flash.
     // TB320FC/TB323FU use oemowninfo; others use devinfo.
-    if cfg.wipe
-        && let Some(target_code) = cfg.country_action.target()
-    {
+    if let Some(target_code) = cfg.country_action.target() {
         live!(
             log,
             "[Flash] {}",

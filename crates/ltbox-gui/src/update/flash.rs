@@ -234,17 +234,15 @@ impl App {
                 let wipe = m == DataMode::Wipe;
                 self.wf_config.wipe = wipe;
                 self.confirm_edit_field = None;
-                // Keep the country choice consistent with the wipe flag, which
-                // the normal wizard couples: a wipe run demands an explicit
-                // country/skip decision, a keep run ignores it entirely. Flip
-                // to wipe → default to "do not change" (still editable via the
-                // country row) so the worker never runs on an `Unset`; flip to
-                // keep → clear it so no stale country row lingers.
+                // Wipe still demands an explicit country/skip decision before
+                // leaving the data step. Keep-data normally means "do not
+                // change", but a confirm-step country override is valid and
+                // must survive toggling back to Keep.
                 if wipe {
                     if matches!(self.wf_config.country_action, CountryAction::Unset) {
                         self.wf_config.country_action = CountryAction::Skip;
                     }
-                } else {
+                } else if self.wf_config.country_action.is_skipped() {
                     self.wf_config.country_action = CountryAction::Unset;
                 }
                 Task::none()

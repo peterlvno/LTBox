@@ -1304,11 +1304,10 @@ impl Default for SettingsState {
     }
 }
 
-/// Country-code state for the Flash wizard's wipe path. Sum type so
-/// the three valid states (popup not yet reached / explicitly
-/// skipped / target picked) stay un-collapsible — the previous
-/// `Option<String>` + `bool` pair encoded the same with two fields
-/// and a doc-comment.
+/// Country-code state for the Flash wizard. Sum type so the three valid
+/// states (not yet chosen / explicitly skipped / target picked) stay
+/// un-collapsible — the previous `Option<String>` + `bool` pair encoded the
+/// same with two fields and a doc-comment.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) enum CountryAction {
     /// Popup hasn't been answered yet.
@@ -4061,6 +4060,44 @@ mod tests {
             ..App::default()
         };
         assert_eq!(app.country_popup_selected_code(), Some("CN"));
+    }
+
+    #[test]
+    fn flash_keep_data_preserves_confirm_country_override() {
+        let mut app = App {
+            wf_config: WorkflowConfig {
+                wipe: true,
+                country_action: CountryAction::Set("KR".to_string()),
+                ..WorkflowConfig::default()
+            },
+            ..App::default()
+        };
+
+        let _ = app.update_flash(FlashMsg::FlashConfirmSetData(DataMode::Keep));
+
+        assert!(!app.wf_config.wipe);
+        assert_eq!(app.wf_config.country_action.target(), Some("KR"));
+    }
+
+    #[test]
+    fn flash_confirm_country_popup_dismiss_stays_on_confirm() {
+        let mut app = App {
+            flash: FlashWizard {
+                step: 4,
+                ..FlashWizard::default()
+            },
+            country_popup_open: true,
+            wf_config: WorkflowConfig {
+                country_action: CountryAction::Unset,
+                ..WorkflowConfig::default()
+            },
+            ..App::default()
+        };
+
+        let _ = app.update(Message::DismissCountryPopup);
+
+        assert!(!app.country_popup_open);
+        assert_eq!(app.flash.step, 4);
     }
 
     #[test]

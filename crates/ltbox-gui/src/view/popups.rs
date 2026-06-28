@@ -344,7 +344,8 @@ impl App {
         // PatchDevinfo flow because that action requires a concrete target
         // code to write into devinfo/persist.
         if !self.adv_needs_country {
-            let skipped = self.wf_config.country_action.is_skipped();
+            let no_change_selected = self.wf_config.country_action.target().is_none()
+                && (!self.wf_config.wipe || self.wf_config.country_action.is_skipped());
             list = list.push(
                 button(text(self.t("popup_country_do_not_change").to_string()).size(13))
                     .on_press(Message::SkipCountryPatch)
@@ -353,7 +354,7 @@ impl App {
                     .style(move |t: &Theme, status| {
                         let p = pal_of(t);
                         button::Style {
-                            background: Some(if skipped {
+                            background: Some(if no_change_selected {
                                 p.primary.into()
                             } else {
                                 // M3 list-item state layer on hover / press.
@@ -364,7 +365,11 @@ impl App {
                                     iced::Color::TRANSPARENT.into()
                                 }
                             }),
-                            text_color: if skipped { p.on_primary } else { p.on_surface },
+                            text_color: if no_change_selected {
+                                p.on_primary
+                            } else {
+                                p.on_surface
+                            },
                             ..Default::default()
                         }
                     }),

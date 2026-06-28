@@ -150,18 +150,25 @@ impl App {
             Message::SkipCountryPatch => {
                 // Flash wizard only — Advanced PatchDevinfo always needs a
                 // target code, so the popup hides this option there.
-                // `Skip` makes the exec gate skip the patch and the confirm
-                // screen render the choice honestly.
+                // Wipe mode records an explicit skip; keep-data mode leaves
+                // the neutral default as Unset so the confirm row is not
+                // highlighted for a no-op choice.
                 self.country_popup_open = false;
                 if !self.adv_needs_country {
-                    self.wf_config.country_action = CountryAction::Skip;
+                    self.wf_config.country_action = if self.wf_config.wipe {
+                        CountryAction::Skip
+                    } else {
+                        CountryAction::Unset
+                    };
                 }
             }
             Message::DismissCountryPopup => {
                 self.country_popup_open = false;
                 if self.adv_needs_country {
                     self.adv_needs_country = false;
-                } else if matches!(self.wf_config.country_action, CountryAction::Unset) {
+                } else if self.flash.step == 3
+                    && matches!(self.wf_config.country_action, CountryAction::Unset)
+                {
                     // Flash wizard — back to Data so user can switch wipe off.
                     self.flash.back();
                 }
