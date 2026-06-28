@@ -356,6 +356,50 @@ pub(crate) fn info_kv_center<'a>(label: &str, value: &str) -> Element<'a, Messag
     .into()
 }
 
+/// Centered summary row that opens an immediate picker/action. Unlike
+/// `info_kv_center_editable`, this is not an override row, so it only uses the
+/// standard state layer on hover/press and never shows the warning accent.
+pub(crate) fn info_kv_center_action<'a>(
+    label: &str,
+    value: &str,
+    on_press: Message,
+) -> Element<'a, Message> {
+    let inner = column![
+        text(label.to_string())
+            .size(11)
+            .style(label_style)
+            .width(Length::Fill)
+            .center(),
+        text(value.to_string())
+            .size(14)
+            .width(Length::Fill)
+            .center()
+            .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+    ]
+    .spacing(3)
+    .width(Length::Fill)
+    .align_x(iced::Alignment::Center);
+
+    button(inner)
+        .on_press(on_press)
+        .padding([6, 10])
+        .width(Length::Fill)
+        .style(|t: &Theme, status| {
+            let p = pal_of(t);
+            let alpha = theme::state_alpha(status);
+            button::Style {
+                background: (alpha > 0.0).then(|| with_alpha(p.on_surface, alpha).into()),
+                text_color: p.on_surface,
+                border: iced::Border {
+                    radius: theme::shape::SM.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        })
+        .into()
+}
+
 /// Like [`info_kv_center`] but the value is a click-to-edit "hidden
 /// dropdown": pixel-identical to the static row until pressed, so casual
 /// users never notice it. When `changed` (the picked option diverges from

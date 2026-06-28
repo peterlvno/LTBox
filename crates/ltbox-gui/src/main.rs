@@ -2976,6 +2976,12 @@ impl App {
         };
         self.flash.loader_error = None;
         self.flash.firmware_folder = Some(path);
+        if self.flash.step == 4
+            && self.flash.loader_required
+            && self.flash.loader_override.is_none()
+        {
+            self.flash.step = 3;
+        }
     }
 
     /// Map cached PTSTPD `SaleArea` for the connected device → `DeviceRegion`.
@@ -3790,6 +3796,20 @@ mod tests {
         w.reset();
         assert_eq!(w.step, 0);
         assert!(w.device_region.is_none());
+    }
+
+    #[test]
+    fn flash_confirm_requires_loader_when_folder_has_none() {
+        let mut w = FlashWizard {
+            step: 4,
+            firmware_folder: Some("firmware".to_string()),
+            loader_required: true,
+            ..Default::default()
+        };
+        assert!(!w.can_next());
+
+        w.loader_override = Some("prog_firehose.elf".to_string());
+        assert!(w.can_next());
     }
 
     #[test]

@@ -664,7 +664,10 @@ impl Wizard for FlashWizard {
                 self.firmware_folder.is_some()
                     && (!self.loader_required || self.loader_override.is_some())
             }
-            4 => true,
+            4 => {
+                self.firmware_folder.is_some()
+                    && (!self.loader_required || self.loader_override.is_some())
+            }
             _ => false,
         }
     }

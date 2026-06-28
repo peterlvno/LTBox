@@ -454,16 +454,15 @@ impl App {
                 open(ConfirmField::Country),
             ));
         }
-        // Folder is picked via the file dialog, not a dropdown — keep it a
-        // plain static row.
         let folder_owned = self
             .flash
             .firmware_folder
             .clone()
             .unwrap_or_else(|| dash.clone());
-        rows.push(info_kv_center(
+        rows.push(info_kv_center_action(
             self.t("flash_confirm_folder"),
             &folder_owned,
+            Message::Flash(FlashMsg::FlashSelectFolder),
         ));
 
         self.confirm_rows_view(rows)
