@@ -185,48 +185,37 @@ impl App {
             return Some(self.exec_action_bar());
         }
 
-        let (title, subtitle) =
-            if matches!(action, AdvAction::DetectArb) && self.adv_wizard.step == 0 {
-                let subtitle_key = if self.device_model.eq_ignore_ascii_case("TB320FC") {
-                    "adv_src_detect_arb_loader"
-                } else {
-                    "adv_src_detect_arb_start"
-                };
-                (
-                    self.t("adv_detect_arb").to_string(),
-                    self.t(subtitle_key).to_string(),
-                )
-            } else if self.adv_wizard.is_confirm_step() {
-                (
-                    self.t(action.label_key()).to_string(),
-                    self.t(action.desc_key()).to_string(),
-                )
-            } else if self.adv_wizard.needs_country() && self.adv_wizard.step == 0 {
-                (
-                    self.t("adv_country_title").to_string(),
-                    self.t("adv_country_subtitle").to_string(),
-                )
-            } else if self.adv_wizard.needs_country() && self.adv_wizard.step == 1 {
-                (
-                    self.t("adv_loader_title").to_string(),
-                    self.t("adv_loader_subtitle").to_string(),
-                )
-            } else if self.adv_wizard.needs_region_target() && self.adv_wizard.step == 1 {
-                (
-                    self.t("adv_region_target_title").to_string(),
-                    self.t("adv_region_target_subtitle").to_string(),
-                )
-            } else if matches!(action, AdvAction::PatchArb) && self.adv_wizard.step == 1 {
-                (
-                    self.t("adv_arb_inspect_title").to_string(),
-                    self.t("adv_arb_inspect_subtitle").to_string(),
-                )
-            } else {
-                (
-                    self.t(action.label_key()).to_string(),
-                    self.t(action.source_desc_key()).to_string(),
-                )
-            };
+        let (title, subtitle) = if self.adv_wizard.is_confirm_step() {
+            (
+                self.t(action.label_key()).to_string(),
+                self.t(action.desc_key()).to_string(),
+            )
+        } else if self.adv_wizard.needs_country() && self.adv_wizard.step == 0 {
+            (
+                self.t("adv_country_title").to_string(),
+                self.t("adv_country_subtitle").to_string(),
+            )
+        } else if self.adv_wizard.needs_country() && self.adv_wizard.step == 1 {
+            (
+                self.t("adv_loader_title").to_string(),
+                self.t("adv_loader_subtitle").to_string(),
+            )
+        } else if self.adv_wizard.needs_region_target() && self.adv_wizard.step == 1 {
+            (
+                self.t("adv_region_target_title").to_string(),
+                self.t("adv_region_target_subtitle").to_string(),
+            )
+        } else if matches!(action, AdvAction::PatchArb) && self.adv_wizard.step == 1 {
+            (
+                self.t("adv_arb_inspect_title").to_string(),
+                self.t("adv_arb_inspect_subtitle").to_string(),
+            )
+        } else {
+            (
+                self.t(action.label_key()).to_string(),
+                self.t(action.desc_key()).to_string(),
+            )
+        };
 
         Some(wizard_action_bar(title, Some(subtitle)))
     }
