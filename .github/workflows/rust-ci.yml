@@ -294,14 +294,10 @@ jobs:
 
   build-linux:
     name: Build linux_${{ matrix.arch }}
-    # Each matrix entry pins its runner so the artifact inherits the
-    # older glibc 2.35 floor (ubuntu-22.04 / -arm). AppImage built
-    # against an older glibc is forward-compatible with newer
-    # distros; the reverse is not. Future packaging jobs share the
-    # same base. arm64 leg uses GitHub's native arm64 runner
-    # (ubuntu-22.04-arm) so the build is host-native rather than a
-    # cross-toolchain shim — proves the same code path real arm64
-    # users will exercise without an extra sysroot/cc-rs setup.
+    # Each matrix entry declares its runner explicitly. x86_64 tracks
+    # ubuntu-latest so CI follows GitHub's current Linux image. arm64 uses
+    # GitHub's native arm64 runner (ubuntu-24.04-arm) so the build is
+    # host-native rather than a cross-toolchain shim.
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -310,10 +306,10 @@ jobs:
         include:
           - arch: x86_64
             target: x86_64-unknown-linux-gnu
-            runner: ubuntu-22.04
+            runner: ubuntu-latest
           - arch: arm64
             target: aarch64-unknown-linux-gnu
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
 
     steps:
       - uses: actions/checkout@v6
@@ -565,7 +561,7 @@ jobs:
     # Same package list as `build-linux` so what CI proves green
     # locally maps 1:1 to what packagers will need to install.
     name: Test linux_x86_64
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
