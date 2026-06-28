@@ -311,43 +311,29 @@ impl App {
         );
         content = content.push(card(self.t("dash_current_operation"), op_text));
         // Read-only text_editor so drag-select + Ctrl+C work. `Length::Fill`
-        // height so the editor expands to fill whatever space the parent log
-        // card claims — combined with the log card's own `height(Fill)` and
-        // the dashboard column's `height(Fill)`, this is what makes the log
-        // grow to balance the dashboard's top and bottom padding.
+        // height lets the M3 text field claim the remaining dashboard space
+        // directly, without wrapping the log in a second card.
         let dash_log_editor: Element<'_, Message> = iced::widget::text_editor(&self.log_editor)
             .on_action(Message::LogEditorAction)
             .size(11)
             .height(Length::Fill)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: 16.0,
+                bottom: 10.0,
+                left: 16.0,
+            })
+            .style(m3_log_text_editor_style)
             .into();
         let dash_save_fab = wizard_surface_fab(
             icon::fab_save_log(),
             self.t("btn_save_log").to_string(),
             Some(Message::SaveLog),
         );
-        let dash_log_body = column![
-            text(self.t("dash_log").to_string())
-                .size(13)
-                .style(label_style)
-                .line_height(1.0),
+        content = content.push(m3_log_text_field(
+            self.t("dash_log").to_string(),
             dash_log_editor,
-        ]
-        .spacing(8)
-        .padding(iced::Padding {
-            top: 10.0,
-            right: 18.0,
-            bottom: 14.0,
-            left: 18.0,
-        })
-        .width(Length::Fill)
-        .height(Length::Fill);
-        let dash_log_card = container(dash_log_body)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .style(|t: &Theme| {
-                theme::surface_card_style(t, theme::SurfaceLevel::Default, theme::shape::MD, 1)
-            });
-        content = content.push(dash_log_card);
+        ));
         let dash_log_actions = container(dash_save_fab)
             .width(Length::Fill)
             .height(Length::Fill)

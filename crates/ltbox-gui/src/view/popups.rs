@@ -725,7 +725,14 @@ impl App {
         let editor = iced::widget::text_editor(&self.log_editor)
             .on_action(Message::LogEditorAction)
             .size(11)
-            .height(Length::Fill);
+            .height(Length::Fill)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: 16.0,
+                bottom: 10.0,
+                left: 16.0,
+            })
+            .style(m3_log_text_editor_style);
         let body = column![
             row![
                 text(self.t("log_popup_title").to_string()).size(theme::text_size::TITLE_LARGE),
@@ -734,16 +741,7 @@ impl App {
             .spacing(8)
             .align_y(iced::Alignment::Center),
             widget::rule::horizontal(1),
-            container(editor)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .padding(10)
-                .style(|t: &Theme| theme::surface_card_style(
-                    t,
-                    theme::SurfaceLevel::Low,
-                    theme::shape::SM,
-                    0,
-                )),
+            m3_log_text_field(self.t("dash_log").to_string(), editor.into()),
         ]
         .spacing(12)
         .padding(20)

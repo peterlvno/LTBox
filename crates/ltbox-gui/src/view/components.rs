@@ -25,6 +25,59 @@ pub(crate) fn m3_dialog_modeless(inner: Element<'_, Message>) -> Element<'_, Mes
     m3_dialog_layers(inner)
 }
 
+pub(crate) fn m3_log_text_field<'a>(
+    label: impl Into<String>,
+    editor: Element<'a, Message>,
+) -> Element<'a, Message> {
+    let label = label.into();
+    let label_row = container(text(label).size(12).line_height(1.0).style(|t: &Theme| {
+        iced::widget::text::Style {
+            color: Some(pal_of(t).primary),
+        }
+    }))
+    .padding(iced::Padding {
+        top: 12.0,
+        right: 16.0,
+        bottom: 6.0,
+        left: 16.0,
+    })
+    .width(Length::Fill);
+
+    let active_indicator = container(Space::new().height(2).width(Length::Fill))
+        .height(2)
+        .width(Length::Fill)
+        .style(|t: &Theme| container::Style {
+            background: Some(pal_of(t).primary.into()),
+            ..Default::default()
+        });
+
+    let field = column![
+        label_row,
+        container(editor).width(Length::Fill).height(Length::Fill),
+        active_indicator
+    ]
+    .spacing(0)
+    .height(Length::Fill)
+    .width(Length::Fill);
+
+    container(field)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .style(|t: &Theme| {
+            let p = pal_of(t);
+            container::Style {
+                background: Some(p.surface_container_highest.into()),
+                border: iced::Border {
+                    color: with_alpha(p.on_surface, 0.0),
+                    width: 0.0,
+                    radius: theme::shape::SM.into(),
+                },
+                ..Default::default()
+            }
+        })
+        .into()
+}
+
 /// Shared scrim + centered card layers behind [`m3_dialog`] /
 /// [`m3_dialog_modeless`]. The scrim only paints its dim background (in iced a
 /// plain `container` does not capture pointer events); modality is decided by

@@ -730,7 +730,14 @@ impl App {
         let editor = iced::widget::text_editor(&self.image_info_log_editor)
             .on_action(Message::ImageInfoLogEditorAction)
             .size(11)
-            .height(Length::Fill);
+            .height(Length::Fill)
+            .padding(iced::Padding {
+                top: 0.0,
+                right: 16.0,
+                bottom: 10.0,
+                left: 16.0,
+            })
+            .style(m3_log_text_editor_style);
 
         let mut actions = row![wizard_surface_fab(
             icon::fab_save_log(),
@@ -749,18 +756,10 @@ impl App {
             ));
         }
 
-        let body = column![
-            container(editor)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .padding(10)
-                .style(|t: &Theme| theme::surface_card_style(
-                    t,
-                    theme::SurfaceLevel::Low,
-                    theme::shape::SM,
-                    0,
-                )),
-        ]
+        let body = column![m3_log_text_field(
+            self.t("adv_image_info").to_string(),
+            editor.into()
+        )]
         .spacing(12)
         .padding(20)
         .width(Length::Fill)

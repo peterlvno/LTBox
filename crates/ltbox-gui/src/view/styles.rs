@@ -2,7 +2,7 @@
 
 use crate::*;
 use iced::Theme;
-use iced::widget::{button, checkbox, container, pick_list, scrollable, text_input};
+use iced::widget::{button, checkbox, container, pick_list, scrollable, text_editor, text_input};
 use theme::{is_dark, mix_color, with_alpha};
 
 /// `on_surface_variant` — secondary labels / descriptions.
@@ -118,6 +118,29 @@ pub(crate) fn m3_text_input_style(t: &Theme, status: text_input::Status) -> text
             with_alpha(p.on_surface, 0.38)
         } else {
             p.on_surface_variant
+        },
+        placeholder: with_alpha(p.on_surface, if disabled { 0.38 } else { 0.62 }),
+        value: if disabled {
+            with_alpha(p.on_surface, 0.38)
+        } else {
+            p.on_surface
+        },
+        selection: with_alpha(p.primary, 0.30),
+    }
+}
+
+pub(crate) fn m3_log_text_editor_style(
+    t: &Theme,
+    status: text_editor::Status,
+) -> text_editor::Style {
+    let p = pal_of(t);
+    let disabled = matches!(status, text_editor::Status::Disabled);
+    text_editor::Style {
+        background: p.surface_container_highest.into(),
+        border: iced::Border {
+            color: iced::Color::TRANSPARENT,
+            width: 0.0,
+            radius: 0.0.into(),
         },
         placeholder: with_alpha(p.on_surface, if disabled { 0.38 } else { 0.62 }),
         value: if disabled {
