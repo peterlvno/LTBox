@@ -518,10 +518,8 @@ impl App {
             SimpleFlashMsg::SimpleFlashNext => {
                 match self.simple_flash.step {
                     // Source → Confirm once a firmware folder is selected.
-                    0 => {
-                        if self.simple_flash.firmware_folder.is_some() {
-                            self.simple_flash.next();
-                        }
+                    0 if self.simple_flash.firmware_folder.is_some() => {
+                        self.simple_flash.next();
                     }
                     // Confirm → start the flash.
                     1 => {
