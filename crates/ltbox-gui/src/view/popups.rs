@@ -3,7 +3,7 @@
 use crate::*;
 use iced::widget::{self, Space, button, column, container, row, scrollable, text};
 use iced::{Element, Length, Theme};
-use theme::{mix_color, with_alpha};
+use theme::with_alpha;
 
 impl App {
     /// Device-info popup: render the Lenovo PTSTPD `data` block as a
@@ -730,37 +730,6 @@ impl App {
             row![
                 text(self.t("log_popup_title").to_string()).size(theme::text_size::TITLE_LARGE),
                 Space::new().width(Length::Fill),
-                button(text(self.t("btn_save_log").to_string()).size(12))
-                    .on_press(Message::SaveLog)
-                    .padding([6, 14])
-                    .style(|t: &Theme, _s| {
-                        let p = pal_of(t);
-                        button::Style {
-                            background: Some(with_alpha(p.on_surface, 0.1).into()),
-                            text_color: p.on_surface,
-                            border: iced::Border {
-                                radius: 6.0.into(),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        }
-                    }),
-                button(text(self.t("btn_close").to_string()).size(12))
-                    .on_press(Message::ToggleLogPopup(false))
-                    .padding([6, 16])
-                    .style(|t: &Theme, status| {
-                        let p = pal_of(t);
-                        let bg = mix_color(p.primary, p.on_primary, theme::state_alpha(status));
-                        button::Style {
-                            background: Some(bg.into()),
-                            text_color: p.on_primary,
-                            border: iced::Border {
-                                radius: theme::shape::FULL.into(),
-                                ..Default::default()
-                            },
-                            ..Default::default()
-                        }
-                    }),
             ]
             .spacing(8)
             .align_y(iced::Alignment::Center),
@@ -780,9 +749,28 @@ impl App {
         .padding(20)
         .width(Length::Fill)
         .height(Length::Fill);
-        container(body)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        let actions = row![
+            wizard_surface_fab(
+                icon::fab_save_log(),
+                self.t("btn_save_log").to_string(),
+                Some(Message::SaveLog),
+            ),
+            wizard_surface_fab(
+                icon::fab_cancel(),
+                self.t("btn_close").to_string(),
+                Some(Message::ToggleLogPopup(false)),
+            ),
+        ]
+        .spacing(WIZARD_FAB_SPACING)
+        .align_y(iced::Alignment::Center)
+        .height(Length::Fill);
+
+        column![
+            container(body).width(Length::Fill).height(Length::Fill),
+            wizard_fab_footer(row![].height(Length::Fill), actions),
+        ]
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     }
 }
