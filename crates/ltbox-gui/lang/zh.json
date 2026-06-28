@@ -190,6 +190,7 @@
   "dump_parts_step_dump": "导出",
   "dump_parts_step_loader": "加载器",
   "dump_parts_step_select": "选择",
+  "edl_loader_subtitle": "在 EDL 模式下执行读取或写入操作前，需要上传正确的加载器。",
   "err_active_slot_detect_failed": "无法在 {timeout} 内通过 ADB 或 Fastboot 检测活动槽位。{detail} 请以正常/恢复模式（ADB）或引导加载程序模式（Fastboot）连接设备后重试。过去会静默默认到槽位 `_a`，这可能导致刷写落到错误槽位，因此已中止。",
   "err_adb_server_blocking_retry": "外部 adb 服务器正在占用 USB 接口。请从仪表盘结束它后重试。",
   "err_advanced_detect_arb_dedicated": "检测回滚保护使用专用工作器；文件管线不应运行此操作。",

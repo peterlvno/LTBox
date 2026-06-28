@@ -80,7 +80,7 @@ impl App {
             ),
             (true, 1) => (
                 self.t("rescue_folder_title").to_string(),
-                self.loader_picker_desc(),
+                self.t("edl_loader_subtitle").to_string(),
             ),
             (true, 2) | (false, 1) => {
                 let desc = self

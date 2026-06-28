@@ -190,6 +190,7 @@
   "dump_parts_step_dump": "Dump",
   "dump_parts_step_loader": "Loader",
   "dump_parts_step_select": "Select",
+  "edl_loader_subtitle": "Upload the correct loader before LTBox reads or writes in EDL mode.",
   "err_active_slot_detect_failed": "Could not detect active slot via ADB or Fastboot within {timeout}. {detail} Connect the device in normal / recovery mode (ADB) or bootloader mode (Fastboot) and retry. Defaulting to slot `_a` was previously silent and led to flashes landing on the wrong slot.",
   "err_adb_server_blocking_retry": "An external adb server is holding the USB interface. Kill it from the dashboard and retry.",
   "err_advanced_detect_arb_dedicated": "Detect Rollback Protection uses a dedicated worker; the file pipeline should not run.",

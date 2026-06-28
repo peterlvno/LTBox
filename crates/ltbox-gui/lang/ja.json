@@ -190,6 +190,7 @@
   "dump_parts_step_dump": "ダンプ",
   "dump_parts_step_loader": "ローダー",
   "dump_parts_step_select": "選択",
+  "edl_loader_subtitle": "EDL モードで読み書きするには、正しいローダーをアップロードする必要があります。",
   "err_active_slot_detect_failed": "{timeout} 以内に ADB または Fastboot でアクティブスロットを検出できませんでした。{detail} デバイスを通常/リカバリモード (ADB) またはブートローダーモード (Fastboot) で接続して再試行してください。以前はスロット `_a` に黙って既定化していましたが、誤ったスロットにフラッシュされる原因になっていたため中止します。",
   "err_adb_server_blocking_retry": "外部 adb サーバーが USB インターフェースを保持しています。ダッシュボードから終了して再試行してください。",
   "err_advanced_detect_arb_dedicated": "ロールバック保護の検出は専用ワーカーを使用します。ファイルパイプラインでは実行できません。",

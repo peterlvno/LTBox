@@ -60,7 +60,7 @@ impl App {
             ),
             1 => (
                 self.t("unroot_loader_title").to_string(),
-                self.loader_picker_desc(),
+                self.t("edl_loader_subtitle").to_string(),
             ),
             2 => {
                 let desc = self

@@ -190,6 +190,7 @@
   "dump_parts_step_dump": "덤프",
   "dump_parts_step_loader": "로더",
   "dump_parts_step_select": "선택",
+  "edl_loader_subtitle": "EDL 모드에서 읽기·쓰기 작업을 수행하려면 올바른 로더를 업로드해야 합니다.",
   "err_active_slot_detect_failed": "{timeout} 안에 ADB 또는 Fastboot로 활성 슬롯을 감지하지 못했습니다. {detail} 기기를 일반/복구 모드(ADB) 또는 부트로더 모드(Fastboot)로 연결한 뒤 다시 시도하세요. 이전에는 슬롯 `_a`를 조용히 기본값으로 사용했지만, 잘못된 슬롯에 플래시될 수 있어 중단합니다.",
   "err_adb_server_blocking_retry": "외부 adb 서버가 USB 인터페이스를 점유하고 있습니다. 대시보드에서 종료한 뒤 다시 시도하세요.",
   "err_advanced_detect_arb_dedicated": "롤백 보호 감지는 전용 워커를 사용합니다. 파일 파이프라인에서는 실행할 수 없습니다.",

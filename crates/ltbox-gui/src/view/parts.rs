@@ -103,7 +103,7 @@ impl App {
         let (title, subtitle) = match self.flash_parts.step {
             0 => (
                 self.t("dump_parts_loader_title").to_string(),
-                self.loader_picker_desc(),
+                self.t("edl_loader_subtitle").to_string(),
             ),
             1 => (
                 self.t("flash_parts_select_title").to_string(),
@@ -512,7 +512,7 @@ impl App {
         let (title, subtitle) = match self.dump_parts.step {
             0 => (
                 self.t("dump_parts_loader_title").to_string(),
-                self.loader_picker_desc(),
+                self.t("edl_loader_subtitle").to_string(),
             ),
             1 => (
                 self.t("dump_parts_select_title").to_string(),
@@ -683,7 +683,7 @@ impl App {
         let (title, subtitle) = match self.dump_phys.step {
             0 => (
                 self.t("dump_parts_loader_title").to_string(),
-                self.loader_picker_desc(),
+                self.t("edl_loader_subtitle").to_string(),
             ),
             1 => (
                 self.t("phys_select_title").to_string(),
@@ -796,7 +796,7 @@ impl App {
         let (title, subtitle) = match self.flash_phys.step {
             0 => (
                 self.t("dump_parts_loader_title").to_string(),
-                self.loader_picker_desc(),
+                self.t("edl_loader_subtitle").to_string(),
             ),
             1 => (
                 self.t("phys_select_title").to_string(),
