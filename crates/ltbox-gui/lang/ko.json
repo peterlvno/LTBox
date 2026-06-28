@@ -923,8 +923,6 @@
   "settings_title": "설정",
   "sidebar_update_available": "업데이트",
   "simple_flash_confirm_warning": "⚠ 모든 안전 검사를 건너뜁니다. 데이터 초기화 여부는 펌웨어 패키지에 따라 다릅니다.",
-  "simple_flash_pick_hint": "다음을 누르면 펌웨어 폴더를 선택합니다.",
-  "simple_flash_step_intro": "안내",
   "skroot_flavor_lite": "Lite",
   "skroot_flavor_lite_desc": "안정성과 호환성 중심",
   "skroot_flavor_pro": "Pro",

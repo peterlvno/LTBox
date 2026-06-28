@@ -923,8 +923,6 @@
   "settings_title": "設定",
   "sidebar_update_available": "更新",
   "simple_flash_confirm_warning": "⚠ すべての安全チェックをスキップします。データが初期化されるかはファームウェアパッケージによります。",
-  "simple_flash_pick_hint": "「次へ」を押すとファームウェアフォルダを選択します。",
-  "simple_flash_step_intro": "概要",
   "skroot_flavor_lite": "Lite",
   "skroot_flavor_lite_desc": "安定性と互換性重視",
   "skroot_flavor_pro": "Pro",

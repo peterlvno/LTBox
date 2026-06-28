@@ -923,8 +923,6 @@
   "settings_title": "Настройки",
   "sidebar_update_available": "Обновить",
   "simple_flash_confirm_warning": "⚠ Пропускает все проверки безопасности. Будут ли стёрты данные, зависит от пакета прошивки.",
-  "simple_flash_pick_hint": "Нажмите «Далее», чтобы выбрать папку с прошивкой.",
-  "simple_flash_step_intro": "Обзор",
   "skroot_flavor_lite": "Lite",
   "skroot_flavor_lite_desc": "Упор на стабильность и совместимость",
   "skroot_flavor_pro": "Pro",

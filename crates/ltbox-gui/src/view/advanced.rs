@@ -774,8 +774,7 @@ impl App {
         .into()
     }
 
-    /// Simple Firmware Flash wizard: intro (description) → confirm → exec.
-    /// The firmware-folder picker opens on Next from the intro step.
+    /// Simple Firmware Flash wizard: source folder → confirm → exec.
     pub(crate) fn view_simple_flash_wizard(&self) -> Element<'_, Message> {
         if self.log_popup_open && self.simple_flash.step >= 2 {
             return self.log_popup_view();
@@ -838,7 +837,8 @@ impl App {
         ))
     }
 
-    /// Intro step — shows the action description; Next opens the folder picker.
+    /// Source step — centered firmware-folder picker, matching the other
+    /// Advanced source pickers.
     fn simple_flash_intro_step(&self) -> Element<'_, Message> {
         let selected = self.simple_flash.firmware_folder.is_some();
         let status = self
@@ -846,23 +846,52 @@ impl App {
             .firmware_folder
             .clone()
             .unwrap_or_else(|| self.t("flash_folder_placeholder").to_string());
+        let btn = button(
+            container(
+                column![
+                    text(self.t("btn_browse_folder").to_string())
+                        .size(14)
+                        .center(),
+                    text(self.t("flash_folder_desc").to_string())
+                        .size(11)
+                        .style(muted_style)
+                        .center(),
+                ]
+                .spacing(6)
+                .width(Length::Fill)
+                .align_x(iced::Alignment::Center),
+            )
+            .padding([20, 24])
+            .width(280)
+            .style(move |t: &Theme| sel_card_style(t, selected)),
+        )
+        .on_press(Message::SimpleFlash(
+            SimpleFlashMsg::SimpleFlashSelectFolder,
+        ))
+        .padding(0)
+        .style(move |t: &Theme, status| sel_card_btn_style(t, status, selected));
         let status_style = move |t: &Theme| {
             let p = pal_of(t);
             iced::widget::text::Style {
                 color: Some(if selected { p.success } else { p.outline }),
             }
         };
+        let chips = self.recent_chips(
+            self.recent_paths
+                .recent(pickers::PickerKind::QfilFirmwareFolder.storage_key()),
+            |p| Message::SimpleFlash(SimpleFlashMsg::SimpleFlashFolderChosen(Some(p))),
+            "picker_recents",
+            false,
+        );
         let col = column![
-            text(self.t("simple_flash_pick_hint").to_string())
-                .size(12)
-                .style(muted_style)
-                .center(),
+            btn,
             text(status)
                 .size(12)
                 .width(Length::Fill)
                 .style(status_style)
                 .center()
                 .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+            chips,
         ]
         .spacing(14)
         .padding(28)

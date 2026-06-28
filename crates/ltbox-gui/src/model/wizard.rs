@@ -1167,9 +1167,8 @@ impl Wizard for FlashPhysWizard {
 // =========================================================================
 
 /// Minimal flash wizard for the "Firmware Simple Flasher" advanced op: pick a
-/// firmware folder, review a read-only confirm screen, flash. Step 0 (intro)
-/// opens the folder picker on Next; the picker callback advances to the
-/// confirm step. No region / rollback / data choices — the flash runs the
+/// firmware folder, review a read-only confirm screen, flash. No region /
+/// rollback / data choices — the flash runs the
 /// firmware's own rawprogram verbatim.
 #[derive(Default)]
 pub(crate) struct SimpleFlashWizard {
@@ -1177,11 +1176,8 @@ pub(crate) struct SimpleFlashWizard {
     pub(crate) firmware_folder: Option<String>,
 }
 
-pub(crate) const SIMPLE_FLASH_STEPS: &[&str] = &[
-    "simple_flash_step_intro",
-    "flash_step_confirm",
-    "flash_step_flash",
-];
+pub(crate) const SIMPLE_FLASH_STEPS: &[&str] =
+    &["adv_step_source", "flash_step_confirm", "flash_step_flash"];
 
 impl Wizard for SimpleFlashWizard {
     fn step(&self) -> usize {
@@ -1194,9 +1190,13 @@ impl Wizard for SimpleFlashWizard {
         SIMPLE_FLASH_STEPS.len()
     }
     fn can_next(&self) -> bool {
-        // Intro (0): Next opens the firmware-folder picker. Confirm (1):
-        // Start. Exec (2) has no Next.
-        matches!(self.step, 0 | 1)
+        // Source (0): require a firmware folder. Confirm (1): Start.
+        // Exec (2) has no Next.
+        match self.step {
+            0 => self.firmware_folder.is_some(),
+            1 => true,
+            _ => false,
+        }
     }
 }
 

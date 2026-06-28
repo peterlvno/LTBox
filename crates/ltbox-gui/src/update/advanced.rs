@@ -517,11 +517,11 @@ impl App {
         match msg {
             SimpleFlashMsg::SimpleFlashNext => {
                 match self.simple_flash.step {
-                    // Intro → open the firmware-folder picker.
+                    // Source → Confirm once a firmware folder is selected.
                     0 => {
-                        return self.update(Message::SimpleFlash(
-                            SimpleFlashMsg::SimpleFlashSelectFolder,
-                        ));
+                        if self.simple_flash.firmware_folder.is_some() {
+                            self.simple_flash.next();
+                        }
                     }
                     // Confirm → start the flash.
                     1 => {
@@ -553,7 +553,6 @@ impl App {
                 if let Some(folder) = path {
                     self.remember_recent(pickers::PickerKind::QfilFirmwareFolder, &folder);
                     self.simple_flash.firmware_folder = Some(folder);
-                    self.simple_flash.step = 1; // → Confirm
                 }
                 Task::none()
             }

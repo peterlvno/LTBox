@@ -923,8 +923,6 @@
   "settings_title": "Settings",
   "sidebar_update_available": "Update",
   "simple_flash_confirm_warning": "⚠ Skips all safety checks. Whether user data is wiped depends on the firmware package.",
-  "simple_flash_pick_hint": "Press Next to choose the firmware folder.",
-  "simple_flash_step_intro": "Overview",
   "skroot_flavor_lite": "Lite",
   "skroot_flavor_lite_desc": "Focused on stability and compatibility",
   "skroot_flavor_pro": "Pro",
