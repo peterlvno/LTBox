@@ -355,6 +355,141 @@ impl App {
         let prefs_card: Element<'_, Message> =
             centered_max_width(prefs_card, SETTINGS_PANEL_MAX_WIDTH);
 
+        // --- Maintenance card: clean leftover temp/scratch files ----------
+        // Enabled only once a scan has found something to remove and no
+        // device op is live (a live op owns the very dirs we'd delete).
+        let cleanup_enabled =
+            !self.busy && !self.cleaning_temp && matches!(self.temp_files_bytes, Some(b) if b > 0);
+        let cleanup_help_icon = widget::tooltip(
+            container(text("?").size(11).style(label_style))
+                .padding([2, 6])
+                .style(|t: &Theme| {
+                    let p = pal_of(t);
+                    container::Style {
+                        background: Some(with_alpha(p.on_surface_variant, 0.10).into()),
+                        border: iced::Border {
+                            radius: theme::shape::FULL.into(),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }
+                }),
+            container(text(self.t("settings_cleanup_help").to_string()).size(11))
+                .padding([6, 10])
+                .max_width(280)
+                .style(|t: &Theme| theme::tooltip_style(t, theme::shape::SM)),
+            widget::tooltip::Position::Right,
+        );
+
+        let cleanup_label = if self.cleaning_temp {
+            self.t("settings_cleanup_busy").to_string()
+        } else {
+            self.t("settings_cleanup_button").to_string()
+        };
+        // M3 filled-tonal button: trash icon + label on a secondary-container
+        // pill, state layer pre-composited via `mix_color`. Greyed to the M3
+        // disabled tokens whenever there's nothing to clean or an op is live.
+        let cleanup_btn_inner = row![
+            lucide_icon(icon::settings_cleanup(), 18.0, move |t: &Theme| {
+                let p = pal_of(t);
+                if cleanup_enabled {
+                    p.on_secondary_container
+                } else {
+                    with_alpha(p.on_surface, 0.38)
+                }
+            }),
+            text(cleanup_label).size(13),
+        ]
+        .spacing(8)
+        .align_y(iced::Alignment::Center);
+        let mut cleanup_btn = button(
+            container(cleanup_btn_inner)
+                .padding([8, 16])
+                .center_y(Length::Shrink),
+        )
+        .padding(0)
+        .style(move |t: &Theme, status| {
+            let p = pal_of(t);
+            if !cleanup_enabled || matches!(status, button::Status::Disabled) {
+                return button::Style {
+                    background: Some(with_alpha(p.on_surface, 0.12).into()),
+                    text_color: with_alpha(p.on_surface, 0.38),
+                    border: iced::Border {
+                        radius: theme::shape::FULL.into(),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+            }
+            let base = p.secondary_container;
+            let bg = match status {
+                button::Status::Hovered => {
+                    mix_color(base, p.on_secondary_container, theme::state::HOVER)
+                }
+                button::Status::Pressed => {
+                    mix_color(base, p.on_secondary_container, theme::state::PRESSED)
+                }
+                _ => base,
+            };
+            button::Style {
+                background: Some(bg.into()),
+                text_color: p.on_secondary_container,
+                border: iced::Border {
+                    radius: theme::shape::FULL.into(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }
+        });
+        if cleanup_enabled {
+            cleanup_btn = cleanup_btn.on_press(Message::Settings(SettingsMsg::CleanupTempFiles));
+        }
+
+        // Size readout sits in parens between the label and the help icon;
+        // shown once a scan has landed. Explanation lives only in the tooltip.
+        let cleanup_size: Element<'_, Message> = match self.temp_files_bytes {
+            Some(bytes) => text(format!("({})", format_bytes_auto(bytes)))
+                .size(13)
+                .style(muted_style)
+                .into(),
+            None => Space::new().width(0).height(0).into(),
+        };
+        let cleanup_top = row![
+            text(self.t("settings_cleanup").to_string())
+                .size(13)
+                .line_height(1.0),
+            cleanup_size,
+            cleanup_help_icon,
+            Space::new().width(Length::Fill),
+            cleanup_btn,
+        ]
+        .spacing(8)
+        .width(Length::Fill)
+        .align_y(iced::Alignment::Center);
+
+        let cleanup_card = container(cleanup_top.padding(iced::Padding {
+            top: 14.0,
+            right: 18.0,
+            bottom: 14.0,
+            left: 18.0,
+        }))
+        .width(Length::Fill)
+        .style(|t: &Theme| {
+            let p = pal_of(t);
+            container::Style {
+                background: Some(p.surface_container.into()),
+                border: iced::Border {
+                    color: p.outline_variant,
+                    width: 1.0,
+                    radius: theme::shape::MD.into(),
+                },
+                shadow: theme::elevation(1, theme::is_dark(t)),
+                ..Default::default()
+            }
+        });
+        let cleanup_card: Element<'_, Message> =
+            centered_max_width(cleanup_card, SETTINGS_PANEL_MAX_WIDTH);
+
         let mut col = column![].spacing(14).width(Length::Fill);
         // Surface the driver install / update banner here too, so switching the
         // driver mode above shows the prompt without a trip to the dashboard.
@@ -362,6 +497,7 @@ impl App {
             col = col.push(centered_max_width(banner, SETTINGS_PANEL_MAX_WIDTH));
         }
         col = col.push(prefs_card);
+        col = col.push(cleanup_card);
 
         let body = iced::widget::scrollable(container(col).padding(24).width(Length::Fill))
             .style(m3_scrollable_style)

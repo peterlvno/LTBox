@@ -375,4 +375,11 @@ pub(crate) enum SettingsMsg {
     SettingsPickDefaultLoader,
     SettingsDefaultLoaderChosen(Option<String>),
     SettingsClearDefaultLoader,
+    /// Remove leftover temp files (`work_*` scratch + `output_*` auto-output).
+    CleanupTempFiles,
+    /// Cleanup sweep finished; triggers a rescan.
+    CleanupDone,
+    /// Result of a temp-file size scan, in bytes. Drives the button's
+    /// enabled state + the size readout next to the label.
+    TempScanDone(u64),
 }

@@ -78,6 +78,9 @@ history           = "history"
 settings_browse   = "square-pen"
 settings_clear    = "eraser"
 
+# Settings maintenance — clean leftover temp/scratch files (18 px)
+settings_cleanup  = "trash-2"
+
 # About panel
 nav_about         = "info"
 about_github      = "github"

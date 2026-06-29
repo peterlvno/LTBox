@@ -2172,6 +2172,12 @@ struct App {
     /// When set, every loader picker bypasses to this path. Re-validated at exec.
     default_loader_path: Option<String>,
     qcom_driver_mode: ltbox_device::driver::QcomDriverMode,
+    /// `true` while a Settings "Clean temporary files" sweep is running.
+    cleaning_temp: bool,
+    /// Cached on-disk size of removable temp files (`work_*` + `output_*`),
+    /// rescanned on Settings entry and after a sweep. `None` until first
+    /// scanned; drives the cleanup button's enabled state + size readout.
+    temp_files_bytes: Option<u64>,
     log_lines: Vec<String>,
     /// Selectable mirror of `log_lines`. Rebuilt on drain tick when `log_dirty`
     /// — batched to keep a long pbr flash from crashing wgpu.
@@ -2357,6 +2363,8 @@ impl Default for App {
             recent_paths: persisted.recent_paths.clone(),
             default_loader_path: persisted.default_loader_path.clone(),
             qcom_driver_mode,
+            cleaning_temp: false,
+            temp_files_bytes: None,
             log_lines: vec![ready_log.clone()],
             log_editor: iced::widget::text_editor::Content::with_text(&ready_log),
             log_dirty: false,
@@ -2858,6 +2866,10 @@ impl App {
 
     fn should_show_busy_progress_dialog(&self) -> bool {
         self.busy
+            // The temp-file cleanup borrows `busy` only to lock out racing
+            // device ops; it's a sub-second maintenance action with its own
+            // in-button "Cleaning…" state, so it gets no full-screen dialog.
+            && !self.cleaning_temp
             && self.current_view != View::Dashboard
             && !self.blocking_popup_open()
             && !self.current_view_has_inline_exec_surface()

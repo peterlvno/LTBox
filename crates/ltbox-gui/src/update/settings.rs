@@ -85,6 +85,57 @@ impl App {
                 self.persist_settings();
                 Task::none()
             }
+            SettingsMsg::CleanupTempFiles => {
+                // Skip while a flash/root op is live — it owns the very
+                // `work_*` dirs we'd be deleting. Also ignore a double-press.
+                if self.busy || self.cleaning_temp {
+                    return Task::none();
+                }
+                self.cleaning_temp = true;
+                // Hold the global `busy` lock for the (brief) sweep so every
+                // existing op-start guard blocks a flash/root from racing the
+                // cleaner — which enumerates `work_*`/`output_*` up front and
+                // could otherwise delete a dir a freshly-started op just
+                // recreated. The progress dialog is suppressed for this
+                // lightweight op (see `should_show_busy_progress_dialog`); the
+                // button's own "Cleaning…" state is the only feedback.
+                self.busy = true;
+                Task::perform(
+                    async {
+                        tokio::task::spawn_blocking(
+                            ltbox_core::app_paths::clean_temp_files_reporting,
+                        )
+                        .await
+                        .ok();
+                    },
+                    |()| Message::Settings(SettingsMsg::CleanupDone),
+                )
+            }
+            SettingsMsg::CleanupDone => {
+                self.cleaning_temp = false;
+                self.busy = false;
+                // Rescan so the size readout + enabled state reflect what
+                // actually remains (a locked dir could survive the sweep).
+                self.scan_temp_files_task()
+            }
+            SettingsMsg::TempScanDone(bytes) => {
+                self.temp_files_bytes = Some(bytes);
+                Task::none()
+            }
         }
+    }
+
+    /// Off-thread scan of removable temp files; result lands as
+    /// [`SettingsMsg::TempScanDone`]. Dispatched on Settings entry and after
+    /// every sweep.
+    pub(crate) fn scan_temp_files_task(&self) -> Task<Message> {
+        Task::perform(
+            async {
+                tokio::task::spawn_blocking(ltbox_core::app_paths::temp_files_size)
+                    .await
+                    .unwrap_or(0)
+            },
+            |bytes| Message::Settings(SettingsMsg::TempScanDone(bytes)),
+        )
     }
 }

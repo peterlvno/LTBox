@@ -99,6 +99,12 @@ impl App {
                     self.dump_phys = DumpPhysWizard::default();
                     self.simple_flash = SimpleFlashWizard::default();
                 }
+                // Settings entry: rescan removable temp files so the cleanup
+                // button reflects current on-disk state (enabled only when
+                // there's something to clean).
+                if v == View::Settings && !self.cleaning_temp {
+                    return self.scan_temp_files_task();
+                }
             }
             Message::SetTheme(choice) => {
                 self.theme_choice = choice;
