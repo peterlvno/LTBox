@@ -322,21 +322,15 @@ impl App {
         .spacing(6);
 
         let prefs_card = container(
-            column![
-                lang_row,
-                theme_row,
-                seed_row,
-                driver_row,
-                default_loader_row,
-            ]
-            .spacing(14)
-            .padding(iced::Padding {
-                top: 14.0,
-                right: 18.0,
-                bottom: 14.0,
-                left: 18.0,
-            })
-            .width(Length::Fill),
+            column![lang_row, theme_row, seed_row,]
+                .spacing(14)
+                .padding(iced::Padding {
+                    top: 14.0,
+                    right: 18.0,
+                    bottom: 14.0,
+                    left: 18.0,
+                })
+                .width(Length::Fill),
         )
         .width(Length::Fill)
         .style(|t: &Theme| {
@@ -467,12 +461,19 @@ impl App {
         .width(Length::Fill)
         .align_y(iced::Alignment::Center);
 
-        let cleanup_card = container(cleanup_top.padding(iced::Padding {
-            top: 14.0,
-            right: 18.0,
-            bottom: 14.0,
-            left: 18.0,
-        }))
+        // Device / maintenance card: Qualcomm driver + default loader sit
+        // above, with the temp-file cleanup row kept at the very bottom.
+        let cleanup_card = container(
+            column![driver_row, default_loader_row, cleanup_top]
+                .spacing(14)
+                .padding(iced::Padding {
+                    top: 14.0,
+                    right: 18.0,
+                    bottom: 14.0,
+                    left: 18.0,
+                })
+                .width(Length::Fill),
+        )
         .width(Length::Fill)
         .style(|t: &Theme| {
             let p = pal_of(t);
