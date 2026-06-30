@@ -881,6 +881,7 @@
   "root_mode_title_tmpl": "选择模式 — {family}",
   "root_provider_subtitle": "选择具体的 root 提供者。",
   "root_provider_title_tmpl": "选择提供者 — {family}",
+  "root_recommended_tip": "大多数情况下推荐的选项",
   "root_skroot_flavor_subtitle": "选择要使用的 SKRoot 版本。",
   "root_skroot_flavor_title": "选择 SKRoot 版本",
   "root_source_subtitle": "如何获取 Nightly 构建？",

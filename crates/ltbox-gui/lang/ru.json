@@ -881,6 +881,7 @@
   "root_mode_title_tmpl": "Выбор режима — {family}",
   "root_provider_subtitle": "Выберите конкретного провайдера root.",
   "root_provider_title_tmpl": "Выбор провайдера — {family}",
+  "root_recommended_tip": "Рекомендуется в большинстве случаев",
   "root_skroot_flavor_subtitle": "Выберите редакцию SKRoot.",
   "root_skroot_flavor_title": "Выбор редакции SKRoot",
   "root_source_subtitle": "Как получить nightly-сборку?",

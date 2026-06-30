@@ -489,6 +489,67 @@ pub(crate) fn info_kv_center_editable<'a>(
     .into()
 }
 
+/// Overlay a small "recommended" star badge on the top-right corner of an
+/// option card. Hovering the badge surfaces `tip`. The badge lives in a
+/// non-interactive overlay layer, so the card underneath stays fully
+/// clickable (same `stack` pattern as the dashboard save-FAB).
+pub(crate) fn recommended_overlay(
+    card: Element<'static, Message>,
+    tip: String,
+) -> Element<'static, Message> {
+    let badge = container(lucide_icon(icon::rec_badge(), 13.0, |t: &Theme| {
+        pal_of(t).on_primary
+    }))
+    .width(22)
+    .height(22)
+    .center_x(22)
+    .center_y(22)
+    .style(|t: &Theme| {
+        let p = pal_of(t);
+        container::Style {
+            background: Some(p.primary.into()),
+            border: iced::Border {
+                radius: theme::shape::FULL.into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    });
+    let badge_tip = iced::widget::tooltip(
+        badge,
+        container(
+            text(tip)
+                .size(12)
+                .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+        )
+        .padding([8, 12])
+        .max_width(240)
+        .style(|t: &Theme| {
+            let p = pal_of(t);
+            container::Style {
+                background: Some(p.surface_container_high.into()),
+                border: iced::Border {
+                    color: p.outline_variant,
+                    width: 1.0,
+                    radius: theme::shape::SM.into(),
+                },
+                ..Default::default()
+            }
+        }),
+        iced::widget::tooltip::Position::Top,
+    )
+    .gap(6);
+    // Full-size overlay pins the badge to the top-right; padding insets it
+    // from the card edge.
+    let overlay = container(badge_tip)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .padding(8)
+        .align_x(iced::Alignment::End)
+        .align_y(iced::Alignment::Start);
+    iced::widget::stack![card, overlay].into()
+}
+
 pub(crate) fn adv_grid_btn<'a>(item: AdvAction, label: &str) -> Element<'a, Message> {
     // Inner container: border-only via `sel_card_style`. Earlier
     // version used `theme::surface_card_style` which paints an opaque

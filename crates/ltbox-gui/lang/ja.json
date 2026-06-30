@@ -881,6 +881,7 @@
   "root_mode_title_tmpl": "モードを選択 — {family}",
   "root_provider_subtitle": "特定のルートプロバイダーを選択します。",
   "root_provider_title_tmpl": "プロバイダーを選択 — {family}",
+  "root_recommended_tip": "ほとんどの状況で推奨される選択肢",
   "root_skroot_flavor_subtitle": "使用する SKRoot エディションを選択してください。",
   "root_skroot_flavor_title": "SKRoot エディションを選択",
   "root_source_subtitle": "nightly ビルドをどのように取得しますか？",

@@ -881,6 +881,7 @@
   "root_mode_title_tmpl": "Select Mode — {family}",
   "root_provider_subtitle": "Choose specific root provider.",
   "root_provider_title_tmpl": "Select Provider — {family}",
+  "root_recommended_tip": "Recommended in most situations",
   "root_skroot_flavor_subtitle": "Choose the SKRoot edition to use.",
   "root_skroot_flavor_title": "Select SKRoot Edition",
   "root_source_subtitle": "How to obtain the nightly build?",

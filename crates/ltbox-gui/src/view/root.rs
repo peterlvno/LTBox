@@ -478,21 +478,27 @@ impl App {
         let mk = |f: Family| -> Element<'_, Message> {
             let disabled = tb320fc && f == Family::Magisk;
             if disabled {
-                Self::root_list_option_card(
+                return Self::root_list_option_card(
                     f.icon_disabled_sized(icon_size),
                     self.t(f.label_key()),
                     &unsupported_tb320fc,
                     false,
                     None,
-                )
+                );
+            }
+            let card = Self::root_list_option_card(
+                f.icon_sized(icon_size),
+                self.t(f.label_key()),
+                self.t(f.desc_key()),
+                self.root.family == Some(f),
+                Some(Message::Root(RootMsg::RootFamily(f))),
+            );
+            // KernelSU (LKM) is the recommended path on every supported
+            // device; TB320FC can't run it, so the badge is withheld there.
+            if !tb320fc && f == Family::KernelSU {
+                recommended_overlay(card, self.t("root_recommended_tip").to_string())
             } else {
-                Self::root_list_option_card(
-                    f.icon_sized(icon_size),
-                    self.t(f.label_key()),
-                    self.t(f.desc_key()),
-                    self.root.family == Some(f),
-                    Some(Message::Root(RootMsg::RootFamily(f))),
-                )
+                card
             }
         };
 
@@ -517,13 +523,21 @@ impl App {
             let mut cards = column![].spacing(8).width(Length::Fill);
             for &p in providers {
                 let sub = p.desc_key().map(|k| self.t(k)).unwrap_or("");
-                cards = cards.push(Self::root_list_option_card(
+                let card = Self::root_list_option_card(
                     p.icon_sized(44.0),
                     self.t(p.label_key()),
                     sub,
                     self.root.provider == Some(p),
                     Some(Message::Root(RootMsg::RootProvider(p))),
-                ));
+                );
+                // Official KernelSU is the recommended provider; withheld on
+                // TB320FC, where the recommended LKM path is unavailable.
+                let card = if !self.is_tb320fc() && p == Provider::KernelSU {
+                    recommended_overlay(card, self.t("root_recommended_tip").to_string())
+                } else {
+                    card
+                };
+                cards = cards.push(card);
             }
 
             let col = column![cards,]
@@ -721,14 +735,17 @@ impl App {
                 side,
             )
         } else {
-            icon_option_card_sub_square_sized(
+            // Reached only on supported devices (TB320FC takes the disabled
+            // branch above), so LKM always carries the recommended badge here.
+            let card = icon_option_card_sub_square_sized(
                 RootMode::Lkm.icon(),
                 self.t(RootMode::Lkm.label_key()),
                 self.t(RootMode::Lkm.desc_key()),
                 self.root.mode == Some(RootMode::Lkm),
                 Message::Root(RootMsg::RootMode(RootMode::Lkm)),
                 side,
-            )
+            );
+            recommended_overlay(card, self.t("root_recommended_tip").to_string())
         };
         // TODO(root): LTBox currently only swaps the boot.img Image for
         // GKI, which corrupts boot on TB323FU. Keep GKI disabled until
@@ -786,14 +803,21 @@ impl App {
     pub(crate) fn root_version_step(&self) -> Element<'_, Message> {
         let side = self.wizard_square_side();
         let mk = |choice: VerChoice| -> Element<'_, Message> {
-            icon_option_card_sub_square_sized(
+            let card = icon_option_card_sub_square_sized(
                 choice.icon(),
                 self.t(choice.label_key()),
                 self.t(choice.desc_key()),
                 self.root.version == Some(choice),
                 Message::Root(RootMsg::RootVersion(choice)),
                 side,
-            )
+            );
+            // Stable is the recommended channel; withheld on TB320FC, where
+            // the recommended LKM path is unavailable.
+            if !self.is_tb320fc() && choice == VerChoice::Stable {
+                recommended_overlay(card, self.t("root_recommended_tip").to_string())
+            } else {
+                card
+            }
         };
 
         // ReSukiSU ships nightlies only — hide the Stable card so users

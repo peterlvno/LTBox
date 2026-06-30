@@ -81,6 +81,9 @@ settings_clear    = "eraser"
 # Settings maintenance — clean leftover temp/scratch files (18 px)
 settings_cleanup  = "trash-2"
 
+# Root wizard "recommended option" corner badge (13 px)
+rec_badge         = "star"
+
 # About panel
 nav_about         = "info"
 about_github      = "github"
