@@ -68,7 +68,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install LLVM toolchain
         # cargo-xwin needs clang-cl + lld-link to drive the cross
@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@v2
@@ -173,7 +173,7 @@ jobs:
             target: aarch64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install LLVM toolchain
         # cargo-xwin uses clang-cl + lld-link as the cross MSVC
@@ -312,7 +312,7 @@ jobs:
             runner: ubuntu-24.04-arm
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install native deps
         # `serialport` pulls libudev-sys; `qdl-rs` + transitive
@@ -414,7 +414,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust (toolchain pinned by rust-toolchain.toml)
         # rustup is preinstalled on the macOS runner; `rustup show` triggers the
@@ -491,7 +491,7 @@ jobs:
           - { arch: arm64,  runner: macos-26,       target: aarch64-apple-darwin }
           - { arch: x86_64, runner: macos-26-intel, target: x86_64-apple-darwin }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust (toolchain pinned by rust-toolchain.toml)
         # rustup is preinstalled on the macOS runner; `rustup show` triggers the
@@ -535,7 +535,7 @@ jobs:
       run:
         shell: pwsh
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install Rust (toolchain pinned by rust-toolchain.toml)
         # rustup is preinstalled on the Windows 2025 + VS 2026 image;
@@ -564,7 +564,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install native deps
         run: |
