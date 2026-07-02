@@ -375,39 +375,39 @@ impl App {
             widget::tooltip::Position::Right,
         );
 
-        let cleanup_label = if self.cleaning_temp {
+        // Icon-only tonal action, mirroring the default-loader browse/clear
+        // buttons: no label, the description surfaces on hover. Enabled only
+        // when a scan found something removable and no op is live.
+        let cleanup_tip_label = if self.cleaning_temp {
             self.t("settings_cleanup_busy").to_string()
         } else {
             self.t("settings_cleanup_button").to_string()
         };
-        // M3 filled-tonal button: trash icon + label on a secondary-container
-        // pill, state layer pre-composited via `mix_color`. Greyed to the M3
-        // disabled tokens whenever there's nothing to clean or an op is live.
-        let cleanup_btn_inner = row![
-            lucide_icon(icon::settings_cleanup(), 18.0, move |t: &Theme| {
-                let p = pal_of(t);
-                if cleanup_enabled {
-                    p.on_secondary_container
-                } else {
-                    with_alpha(p.on_surface, 0.38)
-                }
-            }),
-            text(cleanup_label).size(13),
-        ]
-        .spacing(8)
-        .align_y(iced::Alignment::Center);
         let mut cleanup_btn = button(
-            container(cleanup_btn_inner)
-                .padding([8, 16])
-                .center_y(Length::Shrink),
+            container(lucide_icon(
+                icon::settings_cleanup(),
+                18.0,
+                move |t: &Theme| {
+                    let p = pal_of(t);
+                    if cleanup_enabled {
+                        p.on_secondary_container
+                    } else {
+                        with_alpha(p.on_surface, 0.38)
+                    }
+                },
+            ))
+            .width(36)
+            .height(36)
+            .center_x(36)
+            .center_y(36),
         )
         .padding(0)
         .style(move |t: &Theme, status| {
             let p = pal_of(t);
+            // Greyed M3 disabled affordance when there's nothing to clean.
             if !cleanup_enabled || matches!(status, button::Status::Disabled) {
                 return button::Style {
                     background: Some(with_alpha(p.on_surface, 0.12).into()),
-                    text_color: with_alpha(p.on_surface, 0.38),
                     border: iced::Border {
                         radius: theme::shape::FULL.into(),
                         ..Default::default()
@@ -427,7 +427,6 @@ impl App {
             };
             button::Style {
                 background: Some(bg.into()),
-                text_color: p.on_secondary_container,
                 border: iced::Border {
                     radius: theme::shape::FULL.into(),
                     ..Default::default()
@@ -438,6 +437,13 @@ impl App {
         if cleanup_enabled {
             cleanup_btn = cleanup_btn.on_press(Message::Settings(SettingsMsg::CleanupTempFiles));
         }
+        let cleanup_action = widget::tooltip(
+            cleanup_btn,
+            container(text(cleanup_tip_label).size(11))
+                .padding([6, 10])
+                .style(|t: &Theme| theme::tooltip_style(t, theme::shape::XS)),
+            widget::tooltip::Position::Top,
+        );
 
         // Size readout sits in parens between the label and the help icon;
         // shown once a scan has landed. Explanation lives only in the tooltip.
@@ -455,7 +461,7 @@ impl App {
             cleanup_size,
             cleanup_help_icon,
             Space::new().width(Length::Fill),
-            cleanup_btn,
+            cleanup_action,
         ]
         .spacing(8)
         .width(Length::Fill)
