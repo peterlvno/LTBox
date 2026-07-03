@@ -148,25 +148,20 @@ pub(crate) fn wizard_fab_footer<'a>(
     let trailing = trailing.into();
 
     container(
-        container(
-            row![leading, Space::new().width(Length::Fill), trailing]
-                .padding(iced::Padding {
-                    top: 8.0,
-                    right: 24.0,
-                    bottom: 24.0,
-                    left: 24.0,
-                })
-                .spacing(WIZARD_FAB_SPACING)
-                .align_y(iced::Alignment::Center)
-                .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
-                .width(Length::Fill),
-        )
-        .width(Length::Fill)
-        .max_width(WIZARD_FAB_NAV_MAX_WIDTH),
+        row![leading, Space::new().width(Length::Fill), trailing]
+            .spacing(WIZARD_FAB_SPACING)
+            .align_y(iced::Alignment::Center)
+            .height(Length::Fixed(WIZARD_FAB_SIZE))
+            .width(Length::Fill),
     )
+    .padding(iced::Padding {
+        top: 8.0,
+        right: 24.0,
+        bottom: 24.0,
+        left: 24.0,
+    })
     .width(Length::Fill)
     .height(Length::Fixed(WIZARD_FAB_NAV_HEIGHT))
-    .center_x(Length::Fill)
     .into()
 }
 
@@ -491,7 +486,6 @@ pub(crate) const WIZARD_TOP_APP_BAR_MAX_WIDTH: f32 = 1040.0;
 pub(crate) const WIZARD_FAB_SIZE: f32 = 56.0;
 pub(crate) const WIZARD_FAB_SPACING: f32 = 12.0;
 pub(crate) const WIZARD_FAB_NAV_HEIGHT: f32 = 88.0;
-pub(crate) const WIZARD_FAB_NAV_MAX_WIDTH: f32 = WIZARD_TOP_APP_BAR_MAX_WIDTH;
 pub(crate) const ADVANCED_GRID_MAX_WIDTH: f32 = 860.0;
 pub(crate) const SETTINGS_PANEL_MAX_WIDTH: f32 = 620.0;
 pub(crate) const REBOOT_PANEL_MAX_WIDTH: f32 = 760.0;

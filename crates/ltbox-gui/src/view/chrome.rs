@@ -438,20 +438,41 @@ impl App {
         // `column.height(Fill)` claim the bounded viewport directly.
         // Other views (Advanced, Settings, …) keep the scrollable wrapper
         // because their content can legitimately grow past the viewport.
-        let body: Element<'_, Message> =
-            if matches!(self.current_view, View::Dashboard | View::About) {
-                // About (like Dashboard) centers via `Length::Fill`; a scrollable
-                // would give its child unbounded height and collapse that to zero.
-                container(inner)
-                    .padding(24)
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .into()
-            } else {
-                scrollable(container(inner).padding(24).width(Length::Fill))
-                    .style(m3_scrollable_style)
-                    .into()
-            };
+        let body: Element<'_, Message> = if self.current_view == View::Dashboard {
+            let dashboard_body = container(inner)
+                .padding(24)
+                .width(Length::Fill)
+                .height(Length::Fill);
+            let dash_save_fab = wizard_surface_fab(
+                icon::fab_save_log(),
+                self.t("btn_save_log").to_string(),
+                Some(Message::SaveLog),
+            );
+            let dash_log_actions = container(wizard_fab_footer(
+                row![].height(Length::Fill),
+                row![dash_save_fab]
+                    .spacing(WIZARD_FAB_SPACING)
+                    .align_y(iced::Alignment::Center)
+                    .height(Length::Fill),
+            ))
+            .width(Length::Fill);
+            column![dashboard_body, dash_log_actions]
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        } else if self.current_view == View::About {
+            // About (like Dashboard) centers via `Length::Fill`; a scrollable
+            // would give its child unbounded height and collapse that to zero.
+            container(inner)
+                .padding(24)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        } else {
+            scrollable(container(inner).padding(24).width(Length::Fill))
+                .style(m3_scrollable_style)
+                .into()
+        };
         container(body)
             .width(Length::Fill)
             .height(Length::Fill)

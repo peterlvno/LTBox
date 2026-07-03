@@ -325,29 +325,10 @@ impl App {
             })
             .style(m3_log_text_editor_style)
             .into();
-        let dash_save_fab = wizard_surface_fab(
-            icon::fab_save_log(),
-            self.t("btn_save_log").to_string(),
-            Some(Message::SaveLog),
-        );
         content = content.push(m3_log_text_field(
             self.t("dash_log").to_string(),
             dash_log_editor,
         ));
-        let dash_log_actions = container(dash_save_fab)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(iced::Padding {
-                top: 0.0,
-                right: 18.0,
-                bottom: 14.0,
-                left: 0.0,
-            })
-            .align_x(iced::Alignment::End)
-            .align_y(iced::Alignment::End);
-        iced::widget::stack![content, dash_log_actions]
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        content.into()
     }
 }
