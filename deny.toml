@@ -17,6 +17,15 @@ ignore = [
     "RUSTSEC-2025-0052", # async-std discontinued
     "RUSTSEC-2025-0141", # bincode unmaintained
     "RUSTSEC-2026-0192", # ttf-parser unmaintained (deep via iced cosmic-text; no upgrade path)
+    # `quick-xml` <0.41 DoS/quadratic-parse advisories. Pulled ONLY by
+    # `wayland-scanner` (Linux Wayland-protocol codegen at BUILD time) via
+    # winit/iced; LTBox's own XML parsing uses `roxmltree`, so quick-xml never
+    # sees untrusted input — the codegen only reads the fixed, trusted protocol
+    # XML. No upgrade path yet: the latest `wayland-scanner` 0.31.10 pins
+    # `quick-xml = "^0.39"`, and the fix needs a wayland-scanner/winit release.
+    # Revisit when the winit/Wayland stack widens the requirement.
+    "RUSTSEC-2026-0194", # quick-xml quadratic duplicate-attr check (build-time wayland-scanner)
+    "RUSTSEC-2026-0195", # quick-xml unbounded namespace alloc DoS (build-time wayland-scanner)
 ]
 
 [bans]
